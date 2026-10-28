@@ -10064,14 +10064,14 @@ async fn prepare_mounted_session(
                 .ok_or_else(|| anyhow!("No saved sessions found for this workspace"))?
                 .id
         } else {
-            manager.resolve_session_id_prefix(&selector)?
+            manager.resolve_recoverable_session_id_prefix(&selector)?
         };
         // Under the existing inactive-session guard, promote any crash
         // checkpoint first: the mount below stamps a newer document, and the
         // later attach would then discard the checkpoint as stale. Then
         // capture the complete document and separate local goal.
         let _source_lease = manager.reserve_session_for_external_write(&id)?;
-        let stale_checkpoint = manager.promote_interrupted_checkpoint(&id);
+        let stale_checkpoint = manager.promote_interrupted_checkpoint(&id, Some(&selection_workspace))?;
         let saved = manager.load_session_snapshot_bounded(&id, MAX_CANONICAL_HISTORY_BYTES)?;
         if stale_checkpoint {
             let _ = manager.clear_session_checkpoint(&id);
@@ -12960,23 +12960,17 @@ fn default_mouse_capture_enabled(
     true
 }
 
-/// A loadable crash-recovery checkpoint candidate: session content, file
-/// age, and which slot it came from (per-session file or the legacy single
-/// slot).
+/// A crash-recovery checkpoint candidate: session metadata and file age.
 struct RecentCheckpoint {
-    session: session_manager::SavedSession,
+    metadata: session_manager::SessionMetadata,
     age: std::time::Duration,
-    source: session_manager::CheckpointSource,
 }
 
-const CHECKPOINT_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(24 * 3600);
-
-/// Load all recent crash-recovery checkpoints, pruning stale ones first.
+/// Load crash-recovery checkpoints.
 ///
 /// Candidates are the per-session checkpoint files plus the legacy
-/// single-slot `checkpoints/latest.json` (compatibility read). Files older
-/// than 24 hours are removed; unreadable files are skipped. The result is
-/// sorted most recent first.
+/// single-slot `checkpoints/latest.json` (compatibility read). Unreadable
+/// files are skipped. The result is sorted most recent first.
 fn load_recent_checkpoints(manager: &session_manager::SessionManager) -> Vec<RecentCheckpoint> {
     let refs = manager.list_checkpoints().unwrap_or_default();
     let mut recent = Vec::new();
@@ -12986,39 +12980,16 @@ fn load_recent_checkpoints(manager: &session_manager::SessionManager) -> Vec<Rec
         // take that session's only crash-recovery record while it runs. The
         // legacy slot is checked by the session it names, before anything
         // prunes, promotes or migrates it over that session's live state.
-        let owner = match &checkpoint_ref.source {
-            session_manager::CheckpointSource::Session(id) => Some(id.clone()),
-            session_manager::CheckpointSource::Legacy => {
-                manager.legacy_checkpoint_origin().ok().flatten()
-            }
+        let Ok(Some(metadata)) = manager.checkpoint_metadata(&checkpoint_ref) else {
+            continue;
         };
-        if owner.is_some_and(|id| manager.is_session_live_anywhere(&id)) {
+        if manager.is_session_live_anywhere(&metadata.id) {
             continue;
         }
         let Ok(age) = std::time::SystemTime::now().duration_since(checkpoint_ref.modified) else {
             continue;
         };
-        if age > CHECKPOINT_MAX_AGE {
-            let _ = match &checkpoint_ref.source {
-                session_manager::CheckpointSource::Session(id) => {
-                    manager.clear_session_checkpoint(id)
-                }
-                session_manager::CheckpointSource::Legacy => manager.clear_legacy_checkpoint(),
-            };
-            continue;
-        }
-        let loaded = match &checkpoint_ref.source {
-            session_manager::CheckpointSource::Session(id) => manager.load_session_checkpoint(id),
-            session_manager::CheckpointSource::Legacy => manager.load_legacy_checkpoint(),
-        };
-        let Ok(Some(session)) = loaded else {
-            continue;
-        };
-        recent.push(RecentCheckpoint {
-            session,
-            age,
-            source: checkpoint_ref.source,
-        });
+        recent.push(RecentCheckpoint { metadata, age });
     }
     // `list_checkpoints` sorts newest-first already; keep it explicit here so
     // selection does not silently depend on the manager's ordering.
@@ -13041,9 +13012,9 @@ fn checkpoint_age_label(age: std::time::Duration) -> String {
 /// workspace.
 ///
 /// Candidates are all per-session checkpoint files plus the legacy
-/// single-slot `checkpoints/latest.json`; each must be younger than 24 hours
-/// **and its workspace must match the resolved launch workspace after
-/// canonicalisation** — the newest matching candidate wins. If no candidate
+/// single-slot `checkpoints/latest.json`; its workspace must match the
+/// resolved launch workspace after canonicalisation — the newest matching
+/// candidate wins. If no candidate
 /// matches, a one-line notice points at `codewhale sessions`, and nothing is
 /// auto-loaded: another workspace's checkpoint file is never touched (it may
 /// belong to a live session there).
@@ -13081,10 +13052,7 @@ fn recover_interrupted_checkpoint_for_resume(launch_workspace: &Path) -> Option<
     // using `--workspace` cannot accidentally recover a checkpoint from the
     // directory their shell happened to be in.
     let (matching, mismatched): (Vec<_>, Vec<_>) = candidates.into_iter().partition(|candidate| {
-        session_manager::workspace_scope_matches(
-            &candidate.session.metadata.workspace,
-            launch_workspace,
-        )
+        session_manager::workspace_scope_matches(&candidate.metadata.workspace, launch_workspace)
     });
 
     let Some(best) = matching.into_iter().next() else {
@@ -13093,46 +13061,49 @@ fn recover_interrupted_checkpoint_for_resume(launch_workspace: &Path) -> Option<
                 "Note: an interrupted session from another workspace ({}) is \
                  available. Run `codewhale sessions` to list saved sessions. Starting \
                  fresh in {}.",
-                newest.session.metadata.workspace.display(),
+                newest.metadata.workspace.display(),
                 launch_workspace.display(),
             );
         }
         return None;
     };
 
-    let session_id = best.session.metadata.id.clone();
+    let session_id = best.metadata.id.clone();
 
     // Hold the session's live lease while promoting or clearing anything:
     // the liveness filter above is a check, and another terminal can attach
     // between it and these writes. Losing the race leaves every file alone.
     // The lease is released on return, as `--resume <id>` does, so the resume
     // capture that follows can take it.
-    let Ok(_lease) = manager.reserve_session_for_attach(&session_id) else {
-        return None;
+    let _lease = match manager.reserve_session_for_attach(&session_id) {
+        Ok(lease) => lease,
+        Err(error) => {
+            eprintln!("Interrupted session was preserved but could not be resumed: {error}");
+            return None;
+        }
     };
 
-    // Persist the checkpoint as a regular session so the TUI can load it by
-    // id — unless a newer regular session file for the same id already
-    // exists (e.g. `--continue` ran before and the session advanced since).
-    // A stale checkpoint must never overwrite newer durable session state.
-    if !saved_session_is_newer(&manager, &best.session)
-        && manager.save_session(&best.session).is_err()
-    {
+    let stale_checkpoint =
+        match manager.promote_interrupted_checkpoint(&session_id, Some(launch_workspace)) {
+            Ok(stale) => stale,
+            Err(error) => {
+                eprintln!("Interrupted session was preserved but could not be resumed: {error}");
+                return None;
+            }
+        };
+    let recovered = match manager.load_session(&session_id) {
+        Ok(recovered) => recovered,
+        Err(error) => {
+            eprintln!("Interrupted session was preserved but could not be resumed: {error}");
+            return None;
+        }
+    };
+    if !session_manager::workspace_scope_matches(&recovered.metadata.workspace, launch_workspace) {
+        eprintln!("Interrupted session was preserved but belongs to another workspace.");
         return None;
     }
-
-    match &best.source {
-        session_manager::CheckpointSource::Session(id) => {
-            // Consume the per-session checkpoint now that it is recovered.
-            let _ = manager.clear_session_checkpoint(id);
-        }
-        session_manager::CheckpointSource::Legacy => {
-            // Migrate the legacy slot to a per-session file (never
-            // overwriting an existing one) and leave `latest.json` in place
-            // so an older binary can still find it; its writer is already
-            // gone and the file ages out within 24 hours.
-            let _ = manager.write_session_checkpoint_if_absent(&best.session);
-        }
+    if stale_checkpoint {
+        let _ = manager.clear_session_checkpoint(&session_id);
     }
 
     let age_str = checkpoint_age_label(best.age);
@@ -13141,43 +13112,20 @@ fn recover_interrupted_checkpoint_for_resume(launch_workspace: &Path) -> Option<
     Some(session_id)
 }
 
-/// Whether a regular session file for the checkpoint's id already exists and
-/// is at least as recent as the checkpoint. When it is, persisting the
-/// checkpoint over it would replace newer durable state with older in-flight
-/// state.
-fn saved_session_is_newer(
-    manager: &session_manager::SessionManager,
-    checkpoint: &session_manager::SavedSession,
-) -> bool {
-    manager
-        .load_session(&checkpoint.metadata.id)
-        .is_ok_and(|existing| existing.metadata.updated_at >= checkpoint.metadata.updated_at)
-}
-
 /// Preserve an interrupted checkpoint on a normal fresh launch without
 /// attaching it to the new TUI instance. This keeps "open another codewhale in
 /// the same folder" from re-entering the previous in-flight session while still
 /// leaving an explicit resume path.
 ///
 /// Only the newest recent checkpoint drives the notice, which is returned for
-/// the TUI to show. The legacy single-slot file is migrated to a per-session
-/// checkpoint and consumed; per-session checkpoint files are left in place —
+/// the TUI to show. Checkpoint files are left in place —
 /// they may belong to a live session in another terminal, and `--continue`
 /// reads them directly.
 fn preserve_interrupted_checkpoint_for_explicit_resume(launch_workspace: &Path) -> Option<String> {
     let manager = session_manager::SessionManager::default_location().ok()?;
     let newest = load_recent_checkpoints(&manager).into_iter().next()?;
 
-    let session_workspace = newest.session.metadata.workspace.clone();
-    // #4479: removed save_session call — checkpoint should not be auto-promoted to session
-    if newest.source == session_manager::CheckpointSource::Legacy {
-        // Migrate legacy single-slot checkpoint to per-session format
-        // before clearing the legacy file, or the data is unrecoverable.
-        if manager.save_checkpoint(&newest.session).is_ok() {
-            let _ = manager.clear_legacy_checkpoint();
-        }
-    }
-
+    let session_workspace = newest.metadata.workspace.clone();
     let age_str = checkpoint_age_label(newest.age);
     Some(
         if session_manager::workspace_scope_matches(&session_workspace, launch_workspace) {
@@ -20078,7 +20026,7 @@ mod setup_helper_tests {
     }
 
     #[test]
-    fn plain_launch_consumes_legacy_checkpoint_after_preserving_it() {
+    fn plain_launch_preserves_legacy_checkpoint() {
         let _guard = crate::test_support::lock_test_env();
         let tmp = TempDir::new().unwrap();
         let workspace = tmp.path().join("workspace");
@@ -20108,16 +20056,16 @@ mod setup_helper_tests {
                 manager
                     .load_legacy_checkpoint()
                     .expect("load legacy checkpoint")
-                    .is_none(),
-                "normal launch should consume the legacy single-slot checkpoint"
+                    .is_some(),
+                "normal launch must preserve the legacy single-slot checkpoint"
             );
             // #4479: checkpoint is no longer promoted to session file.
             assert!(
                 manager
                     .load_session_checkpoint(&session_id)
                     .expect("load checkpoint")
-                    .is_some(),
-                "checkpoint stays in checkpoints/ for --continue"
+                    .is_none(),
+                "fresh launch need not copy the legacy checkpoint"
             );
         });
     }
@@ -20140,7 +20088,15 @@ mod setup_helper_tests {
             }];
             let session = create_saved_session(&messages, "test-model", &workspace, 0, None);
             let session_id = session.metadata.id.clone();
-            manager.save_checkpoint(&session).expect("save checkpoint");
+            let checkpoint = manager.save_checkpoint(&session).expect("save checkpoint");
+            std::fs::File::options()
+                .write(true)
+                .open(&checkpoint)
+                .expect("open checkpoint")
+                .set_times(std::fs::FileTimes::new().set_modified(
+                    std::time::SystemTime::now() - std::time::Duration::from_secs(48 * 3600),
+                ))
+                .expect("age checkpoint");
 
             let recovered = recover_interrupted_checkpoint_for_resume(&workspace);
 
@@ -20360,7 +20316,7 @@ mod setup_helper_tests {
     }
 
     #[test]
-    fn continue_recovers_legacy_checkpoint_and_migrates_it() {
+    fn continue_recovers_legacy_checkpoint_without_removing_it() {
         let _guard = crate::test_support::lock_test_env();
         let tmp = TempDir::new().unwrap();
         let workspace = tmp.path().join("workspace");
@@ -20385,13 +20341,6 @@ mod setup_helper_tests {
             assert!(
                 manager.load_session(&session_id).is_ok(),
                 "recovered legacy checkpoint must be loadable as a session"
-            );
-            assert!(
-                manager
-                    .load_session_checkpoint(&session_id)
-                    .expect("load per-session checkpoint")
-                    .is_some(),
-                "legacy recovery must migrate to a per-session checkpoint file"
             );
             assert!(
                 manager
