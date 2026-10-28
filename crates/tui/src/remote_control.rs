@@ -1089,6 +1089,25 @@ impl RemoteControlController {
     }
 
     pub fn start(&mut self, start: RemoteStart) -> Result<(), String> {
+        let result = self.start_inner(start);
+        if let Err(error) = &result {
+            self.record_start_failure(error);
+        }
+        result
+    }
+
+    pub(crate) fn record_start_failure(&mut self, error: &str) {
+        if matches!(self.status, Status::Off | Status::Failed)
+            && !self
+                .ownership_blocked_until
+                .is_some_and(|deadline| Instant::now() < deadline)
+        {
+            self.status = Status::Failed;
+            self.status_detail = codewhale_config::persistence::redact_secrets(error);
+        }
+    }
+
+    fn start_inner(&mut self, start: RemoteStart) -> Result<(), String> {
         if matches!(
             self.status,
             Status::Connecting | Status::Connected | Status::Stopping
@@ -5739,7 +5758,8 @@ mod tests {
         let error = reopened.start(start.clone()).unwrap_err();
         assert!(error.contains("active local turn"), "{error}");
         assert!(reopened.worker.is_none());
-        assert_eq!(reopened.status, Status::Off);
+        assert_eq!(reopened.status, Status::Failed);
+        assert!(reopened.status_line().contains(&error));
         drop(participant);
 
         reopened.start(start).unwrap();
@@ -7365,7 +7385,18 @@ mod tests {
     #[tokio::test]
     async fn pre_lease_failure_never_locks_and_allows_immediate_retry() {
         let (mut controller, _worker_rx, event_tx, _journal_root) = wired_controller();
+        let mut invalid_start = fixture_start();
+        invalid_start.runtime_commit.clear();
+        let error = controller.start(invalid_start).unwrap_err();
+        assert!(error.contains("enrollable identity"), "{error}");
+        assert_eq!(controller.status, Status::Failed);
+        assert!(controller.status_line().contains(&error));
+        assert!(controller.ownership_blocked_until.is_none());
         controller.status = Status::Connecting;
+        controller.status_detail = "connecting fixture".to_string();
+        assert!(controller.start(fixture_start()).is_err());
+        assert_eq!(controller.status, Status::Connecting);
+        assert_eq!(controller.status_detail, "connecting fixture");
         event_tx
             .send(RemoteEvent::FailedPreLease(
                 "Codewhale rejected remote-control enrollment (403): client version not accepted."
@@ -7514,6 +7545,8 @@ mod tests {
         let mut controller = RemoteControlController::default();
         controller.status = Status::Failed;
         controller.ownership_blocked_until = Some(Instant::now() + Duration::from_secs(90));
+        controller.status_detail = "fixture transport failure".to_string();
+        let deadline = controller.ownership_blocked_until;
         // Mirror semantics: local input is never locked, but reconnecting
         // while the server lease may still be live is refused — the web must
         // not see two runners for the same session.
@@ -7527,6 +7560,8 @@ mod tests {
             git_remote: None,
         };
         assert!(controller.start(start.clone()).is_err());
+        assert_eq!(controller.ownership_blocked_until, deadline);
+        assert_eq!(controller.status_detail, "fixture transport failure");
         // The web cannot answer shared approvals while the relay is failed.
         assert!(!controller.can_share_approval_with_web());
         controller.ownership_blocked_until = Some(Instant::now() - Duration::from_secs(1));
@@ -8642,7 +8677,9 @@ mod tests {
             })
             .expect_err("a corrupt journal must fail closed");
         assert_eq!(error, JOURNAL_UNTRUSTED_ERROR);
-        assert_eq!(controller.status, Status::Off, "no relay may start");
+        assert_eq!(controller.status, Status::Failed);
+        assert!(controller.status_line().contains(&error));
+        assert!(controller.worker.is_none(), "no relay may start");
         assert!(
             !corrupt_path.exists(),
             "the untrusted journal must not stay in place"
