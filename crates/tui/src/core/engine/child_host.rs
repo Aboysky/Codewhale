@@ -168,7 +168,10 @@ impl Engine {
             hook_executor: self.config.hook_executor.clone(),
             verbosity: None,
             provenance: UserInputProvenance::Runtime,
-            submission_id: None,
+            submission_id: state
+                .job
+                .as_ref()
+                .and_then(|job| job.take_initial_submission_id()),
             max_output_tokens: None,
         })
     }

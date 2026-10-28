@@ -1397,6 +1397,13 @@ pub(crate) fn registry_host_request<E: HostEvents + ?Sized>(
             message: "user-questions/ask is not served here".to_string(),
             data: None,
         }),
+        HostRequest::SubagentStart(_)
+        | HostRequest::SubagentResult(_)
+        | HostRequest::SubagentDispose(_) => Err(RpcErrorWire {
+            code: error_code::NOT_AVAILABLE,
+            message: "subagent requests are not served here".to_string(),
+            data: None,
+        }),
         HostRequest::SessionCheckpoint(_) => Err(RpcErrorWire {
             code: error_code::REFUSED,
             message: "session/checkpoint is not served here".to_string(),

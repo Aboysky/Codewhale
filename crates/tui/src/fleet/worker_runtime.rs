@@ -485,6 +485,7 @@ pub fn fleet_task_to_worker_spec_with_profiles(
     }
     let session_name = format!("fleet-{}-{}", worker_id, task_spec.id);
     let launch_manifest = ChildLaunchManifest {
+        activation: None,
         owner_session: run_id.to_string(),
         child_id: worker_id.to_string(),
         profile: runtime_profile.clone(),

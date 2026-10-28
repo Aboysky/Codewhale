@@ -7152,6 +7152,23 @@ impl Engine {
             self.session.add_message(user_msg);
             turn.unanswered_user_message = Some(self.mark_unanswered_user_message());
 
+            if let Some(job) = self.child_job()
+                && let Err(error) = job
+                    .record_initial_admission(
+                        submission_id.as_deref(),
+                        &turn.id,
+                        &self.session.messages,
+                    )
+                    .await
+            {
+                job.authority.runtime.cancel_token.cancel();
+                self.cancel_token.cancel();
+                tracing::error!(%error, "child initial input acknowledgement failed; turn stopped");
+                return SendMessageOutcome::Finished {
+                    status: TurnOutcomeStatus::Interrupted,
+                    error: Some("child initial input acknowledgement failed".to_owned()),
+                };
+            }
             self.emit_session_updated().await;
 
             // Build tool registry and tool list for the current mode
@@ -7288,6 +7305,10 @@ impl Engine {
                     "Request cancelled while settling turn-owned sub-agents",
                 ))
                 .await;
+        }
+
+        if let Some(job) = self.child_job() {
+            job.record_activation_terminal_stop(status, self.cancel_token.is_cancelled());
         }
 
         // Seal the mailbox before the terminal event and flush under its

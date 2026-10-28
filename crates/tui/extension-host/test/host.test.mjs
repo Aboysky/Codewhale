@@ -178,7 +178,7 @@ test('injecting a service the host does not provide fails with its name', async 
   t.after(() => provided.cleanup())
   const available = await activate(host, 'needs-shell-hooks', provided.entry)
   assert.equal(available.result.status, 'ok', available.result.diagnostic)
-  for (const service of ['llm', 'systemPrompt', 'agents', 'subagents']) {
+  for (const service of ['llm']) {
     const pure = tempPlugin(`import { createUserMessage } from '@deepseek-ai/dsh-llm'
 export const inject = [${JSON.stringify(service)}]
 export function apply() { createUserMessage({ content: [], source: { kind: 'fixture' } }) }

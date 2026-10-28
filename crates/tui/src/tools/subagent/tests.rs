@@ -230,6 +230,7 @@ fn make_write_worker_spec(worker_id: &str, workspace: PathBuf, root: &str) -> Ag
     spec.role = Some("implementer".to_string());
     spec.runtime_profile = WorkerRuntimeProfile::for_role(FleetRole::Builder);
     spec.launch_manifest = Some(ChildLaunchManifest {
+        activation: None,
         owner_session: "root".to_string(),
         child_id: worker_id.to_string(),
         profile: spec.runtime_profile.clone(),
@@ -1244,6 +1245,7 @@ fn headless_worker_registration_enforces_live_claims_and_projects_context() {
         spec.role = Some("worker".into());
         spec.runtime_profile = WorkerRuntimeProfile::for_role(FleetRole::Builder);
         spec.launch_manifest = Some(ChildLaunchManifest {
+            activation: None,
             owner_session: format!("owner-{id}"),
             child_id: id.into(),
             profile: spec.runtime_profile.clone(),
@@ -15692,6 +15694,7 @@ pub(crate) fn stub_runtime() -> SubAgentRuntime {
         // path treats `None` as "report nothing".
         governor: None,
         compaction: crate::compaction::CompactionConfig::default(),
+        activation: None,
     }
 }
 
@@ -16942,6 +16945,226 @@ async fn run_subagent_task_claims_before_delivery_and_then_finalizes() {
         !matches!(snapshot.status, SubAgentStatus::Running),
         "the child should publish one terminal result after the claim commits: {:?}",
         snapshot.status
+    );
+    let workspace = tempdir().expect("activation workspace");
+    let state_path = workspace.path().join(SUBAGENT_STATE_FILE);
+    let manager = Arc::new(RwLock::new(
+        SubAgentManager::new(workspace.path().to_path_buf(), 4).with_state_path(state_path.clone()),
+    ));
+    let (completion_tx, mut completion_rx) = mpsc::channel(16);
+    let (client, calls, _bodies, config) =
+        delayed_chat_client(Duration::ZERO, "activation done").await;
+    let mut runtime = runtime_with_depth(1, Some(completion_tx));
+    runtime.client = client;
+    runtime.api_config = Some(Arc::new(config));
+    runtime.context.workspace = workspace.path().to_path_buf();
+    runtime.context.state_namespace = "activation-session".to_string();
+    runtime.manager = manager.clone();
+    runtime.context.disallowed_tools.push("shell".to_string());
+    runtime
+        .worker_profile
+        .denied_tools
+        .push("shell".to_string());
+    let prepared = manager
+        .write()
+        .await
+        .prepare_background_with_assignment_options(
+            manager.clone(),
+            runtime.clone(),
+            FleetRole::Scout,
+            "uncommitted child".to_string(),
+            make_assignment(),
+            None,
+            SubAgentSpawnOptions::default(),
+            None,
+            Some("../public-only".to_string()),
+        )
+        .expect("reserve independent child");
+    let abandoned_id = prepared.identity().clone();
+    assert!(abandoned_id.child_id.starts_with("agent_"));
+    assert_ne!(abandoned_id.child_id, abandoned_id.public_child_id);
+    let abandoned = ChildActivationContext {
+        identity: abandoned_id.clone(),
+        configuration: FrozenChildConfiguration::default(),
+        state: prepared
+            .activation
+            .as_ref()
+            .expect("activation state")
+            .clone(),
+    };
+    assert_eq!(
+        manager.read().await.worker_records[&abandoned_id.child_id].status,
+        AgentWorkerStatus::Starting
+    );
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    drop(prepared);
+    let cancelled = tokio::time::timeout(Duration::from_secs(30), abandoned.settled())
+        .await
+        .expect("dropped preparation settles")
+        .expect("cancelled reservation persisted");
+    assert_eq!(cancelled.status, SubAgentStatus::Cancelled);
+    assert!(abandoned.accepted().await.is_err());
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert!(completion_rx.try_recv().is_err());
+
+    let prepared = manager
+        .write()
+        .await
+        .prepare_background_with_assignment_options(
+            manager.clone(),
+            runtime.clone(),
+            FleetRole::Scout,
+            "finish the local fixture".to_string(),
+            make_assignment(),
+            None,
+            SubAgentSpawnOptions::default(),
+            None,
+            Some("review-public-id".to_string()),
+        )
+        .expect("prepare caller-owned child");
+    let identity = prepared.identity().clone();
+    let configuration = FrozenChildConfiguration {
+        persona: Some("Exact persona\nincluding spacing  ".to_string()),
+        denied_tools: vec!["write".to_string()],
+        delivery: ChildActivationDelivery::Caller,
+    };
+    let (_, context) = manager
+        .write()
+        .await
+        .commit_prepared_child(prepared, configuration.clone())
+        .expect("commit frozen child configuration");
+    let context = context.expect("activation context");
+    let mut wrong = identity.clone();
+    wrong.generation += 1;
+    assert!(manager.write().await.stop_child_activation(&wrong).is_err());
+    let mut inherited = runtime.clone();
+    inherited.activation = Some(context.clone());
+    assert!(inherited.child_runtime().activation.is_none());
+    assert!(inherited.background_runtime().activation.is_none());
+    let admitted = tokio::time::timeout(Duration::from_secs(30), context.accepted())
+        .await
+        .expect("initial admission is acknowledged")
+        .expect("durable initial admission");
+    assert_eq!(admitted.submission_id, identity.initial_submission_id);
+    let terminal = tokio::time::timeout(Duration::from_secs(30), context.settled())
+        .await
+        .expect("child terminal writer settles")
+        .expect("child terminal receipt persisted");
+    let (output, stop_reason) = resolve_child_activation_output(&manager, &identity)
+        .await
+        .expect("resolve exact full output");
+    assert_eq!(stop_reason, ChildActivationStopReason::Completed);
+    assert!(output.iter().any(
+        |block| matches!(block, ContentBlock::Text { text, .. } if text == "activation done")
+    ));
+    assert_eq!(terminal.status, SubAgentStatus::Completed);
+    assert!(
+        terminal
+            .result
+            .as_deref()
+            .is_some_and(|result| result.contains("activation done"))
+    );
+    assert!(completion_rx.try_recv().is_err());
+    let mut held = manager.write().await;
+    assert!(
+        held.terminal_results_excluding_for_session("activation-session", &HashSet::new())
+            .is_empty()
+    );
+    let activation = held.worker_records[&identity.child_id]
+        .spec
+        .launch_manifest
+        .as_ref()
+        .and_then(|manifest| manifest.activation.as_ref())
+        .expect("activation manifest");
+    assert_eq!(activation.configuration.as_ref(), Some(&configuration));
+    assert_eq!(activation.admission.as_ref(), Some(&admitted));
+    assert!(
+        held.worker_records[&identity.child_id]
+            .spec
+            .runtime_profile
+            .denied_tools
+            .contains(&"shell".to_string())
+    );
+    assert!(
+        held.worker_records[&identity.child_id]
+            .spec
+            .runtime_profile
+            .denied_tools
+            .contains(&"write".to_string())
+    );
+    held.cleanup(Duration::ZERO);
+    assert!(held.worker_records.contains_key(&identity.child_id));
+    drop(held);
+    let persisted: PersistedSubAgentState =
+        serde_json::from_slice(&std::fs::read(&state_path).expect("persisted file"))
+            .expect("persisted worker state");
+    assert_eq!(
+        persisted
+            .workers
+            .iter()
+            .find(|record| record.spec.worker_id == identity.child_id)
+            .and_then(|record| record.spec.launch_manifest.as_ref())
+            .and_then(|manifest| manifest.activation.as_ref())
+            .and_then(|activation| activation.admission.as_ref()),
+        Some(&admitted)
+    );
+    let disposed = dispose_child_activation(&manager, &identity)
+        .await
+        .expect("exact settled dispose");
+    assert_eq!(disposed.status, terminal.status);
+    let prepared = manager
+        .write()
+        .await
+        .prepare_background_with_assignment_options(
+            manager.clone(),
+            runtime.clone(),
+            FleetRole::Scout,
+            "never commit".to_string(),
+            make_assignment(),
+            None,
+            SubAgentSpawnOptions::default(),
+            None,
+            Some("writer-failure".to_string()),
+        )
+        .expect("prepare before writer failure");
+    let identity = prepared.identity().clone();
+    let failed = ChildActivationContext {
+        identity: identity.clone(),
+        configuration: FrozenChildConfiguration::default(),
+        state: prepared
+            .activation
+            .as_ref()
+            .expect("activation state")
+            .clone(),
+    };
+    let blocked_path = workspace.path().join("blocked-worker-store");
+    std::fs::create_dir(&blocked_path).expect("block publication with a directory");
+    manager.write().await.state_path = Some(blocked_path);
+    drop(prepared);
+    let error = tokio::time::timeout(Duration::from_secs(30), failed.settled())
+        .await
+        .expect("writer failure wakes settlement")
+        .expect_err("no false persistence success");
+    assert!(error.to_string().contains("unacknowledged"));
+    assert!(failed.accepted().await.is_err());
+    {
+        let mut held = manager.write().await;
+        held.cleanup(Duration::ZERO);
+        assert!(held.agents.contains_key(&identity.child_id));
+        assert!(held.worker_records.contains_key(&identity.child_id));
+        held.state_path = Some(state_path);
+    }
+    let retried = persist_child_settlement(&manager, &identity)
+        .await
+        .expect("retry only receipt publication");
+    assert_eq!(retried.status, SubAgentStatus::Cancelled);
+    assert_eq!(
+        failed
+            .settled()
+            .await
+            .expect("settlement retry is observable")
+            .status,
+        SubAgentStatus::Cancelled
     );
 }
 

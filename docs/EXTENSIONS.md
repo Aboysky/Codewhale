@@ -237,6 +237,30 @@ superseded writes, storage failure, cancellation and unavailable consumers
 reject. Cancellation can race a disk write, so a rejected call does not prove
 nothing was written. Other `sessions` methods remain unsupported.
 
+An entry injecting `subagents` can start one independent child agent from its
+directly invoked root tool. `ctx.subagents.getProvider('spawn')` describes the
+only provider: a fresh child with no inherited conversation.
+`ctx.subagents.startActivation({ provider: 'spawn', childId, request: { parent:
+exec.agent, prompt, agentOptions: { model } }, signal, delivery })` runs the
+entry's own `agent/created` listeners first. There the child's
+`ctx.systemPrompt.section({ name: PERSONA_PREFIX_SECTION, ... })` sets a persona
+of at most 32 KiB, appended to that child's own system prompt and recorded in
+its launch manifest. `ctx.tools.restrict({ deny })` adds to the tools the child
+may not use. Then the Engine starts the child as an ordinary `agent` start
+through this turn's approval gate. The plugin's call needs its own approval and
+never reuses the model's grants. The child runs in Codewhale's existing
+sub-agent manager inside the parent's permission and budget limits. The
+returned activation resolves once the child accepted its first message.
+`result` waits for the child to finish and returns its text output and stop
+reason. `dispose()` stops that exact child and its own descendants.
+`delivery: 'caller'` hands the result only to the plugin, not to the parent
+model. A child the plugin never disposes is stopped when the invocation ends.
+`ctx.tools.get(name, exec.agent)` reports whether the calling agent has a tool.
+Prompts are text only. Only the `model` agent option is accepted. The service
+is unavailable inside a child agent's own tool calls. Non-text output and the
+other DSH agent APIs are not supported, and
+`agents` and root-level `systemPrompt` offer no methods.
+
 ## MCP definitions
 
 `ctx.mcp.registerServer({ serverName, server })` returns an idempotent disposer

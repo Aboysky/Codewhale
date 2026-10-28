@@ -12081,7 +12081,10 @@ var init_compatibility = __esm({
         "reflect",
         "registry",
         "sessions",
-        "userQuestions"
+        "userQuestions",
+        "subagents",
+        "agents",
+        "systemPrompt"
       ],
       refused_services: [
         "shellHooks",
@@ -12379,6 +12382,16 @@ var init_compatibility = __esm({
       },
       user_question_methods: {
         ask: "invocation-bound-root-agent-typed-answers-no-wait"
+      },
+      subagent_methods: {
+        getProvider: "spawn-only-independent-context",
+        startActivation: "invocation-bound-caller-or-parent-delivery-text-prompt-model-persona-deny",
+        result: "text-output-typed-stop-reason",
+        dispose: "exact-activation"
+      },
+      agents_methods: {},
+      system_prompt_methods: {
+        section: "child-persona-slot-in-agent-created-only"
       }
     };
   }

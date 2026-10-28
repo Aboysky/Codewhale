@@ -31,6 +31,7 @@ fn worker(root: &Path, write: bool, paths: &[&str], scope: &[&str]) -> (SubAgent
     let record = manager.worker_records.get_mut(&id).unwrap();
     record.spec.runtime_profile.permissions.write = write;
     record.spec.launch_manifest = Some(ChildLaunchManifest {
+        activation: None,
         owner_session: "workspace".into(),
         child_id: id.clone(),
         profile: record.spec.runtime_profile.clone(),

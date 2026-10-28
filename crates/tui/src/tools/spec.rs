@@ -722,6 +722,7 @@ pub struct ToolExecutionState {
     /// every agent call re-reads it (`None` keeps the posture above as is).
     pub(crate) live_posture: Option<crate::core::engine::LivePosture>,
     pub(crate) browser_tool: Option<String>,
+    pub(crate) child_activation: Option<Arc<crate::tools::subagent::ChildActivationRequest>>,
 }
 
 impl std::ops::Deref for ToolContext {
@@ -823,6 +824,7 @@ impl ToolContext {
                 nested_call_gate: None,
                 live_posture: None,
                 browser_tool: None,
+                child_activation: None,
             }),
         }
     }
