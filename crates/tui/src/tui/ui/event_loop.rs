@@ -7722,7 +7722,16 @@ pub(super) async fn adopt_live_local_ollama_catalog(
             return;
         }
     };
-    let switched = switch_provider(app, engine_handle, config, identity, Some(tag.clone())).await;
+    let switched = super::provider_routes::switch_provider_with_ollama_probe(
+        app,
+        engine_handle,
+        config,
+        identity,
+        tag.clone(),
+        &catalog.endpoint_v1,
+        &catalog.ticket,
+    )
+    .await;
     if !switched {
         return;
     }

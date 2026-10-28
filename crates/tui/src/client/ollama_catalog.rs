@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use futures_util::StreamExt;
+
 use codewhale_config::catalog::{
     CatalogOffering, CatalogSource, ProviderCatalogDelta, base_url_fingerprint, now_unix,
 };
@@ -11,8 +13,6 @@ use serde::Deserialize;
 )]
 pub(crate) const TAGS_PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 
-/// Upper bound on `/api/show` lookups per probe. A developer box can hold
-/// dozens of tags; ranking needs only the plausible chat candidates.
 pub(crate) const SHOW_PROBE_LIMIT: usize = 8;
 
 /// What `/api/show` reports about one tag. Both fields are optional because
@@ -277,7 +277,6 @@ pub(crate) async fn fetch_tag_profile(origin: &str, tag: &str) -> anyhow::Result
     parse_ollama_show_response(&body)
 }
 
-/// Ask `/api/show` about plausible tags whose capabilities are still unknown.
 /// An unprofiled tag cannot become an executable catalog default.
 pub(crate) async fn fetch_tag_profiles<F, Fut>(
     tags: &[String],
@@ -294,23 +293,24 @@ where
             profiles
                 .get(*tag)
                 .is_none_or(|profile| profile.capabilities.is_none())
-                && !looks_like_non_chat_tag(tag)
         })
-        .take(SHOW_PROBE_LIMIT)
         .collect();
-    let results =
-        futures_util::future::join_all(candidates.iter().map(|tag| fetch((*tag).clone()))).await;
-    candidates
+    futures_util::stream::iter(candidates
         .into_iter()
-        .zip(results)
-        .filter_map(|(tag, result)| match result {
+        .map(|tag| {
+            let future = fetch(tag.clone());
+            async move { (tag, future.await) }
+        }))
+        .buffer_unordered(SHOW_PROBE_LIMIT)
+        .filter_map(|(tag, result)| futures_util::future::ready(match result {
             Ok(profile) => Some((tag.clone(), profile)),
             Err(err) => {
                 tracing::debug!(target: "local_ollama", error = %err, tag = %tag, "POST /api/show probe failed");
                 None
             }
-        })
+        }))
         .collect()
+        .await
 }
 
 fn looks_like_coder_tag(tag: &str) -> bool {

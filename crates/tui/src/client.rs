@@ -3864,6 +3864,13 @@ impl CodewhaleClient {
             .await
             .map_err(|_| CatalogRefreshError::Network)?;
             profiles.extend(fetched);
+            if tags.iter().any(|tag| {
+                profiles
+                    .get(tag)
+                    .is_none_or(|profile| profile.capabilities.is_none())
+            }) {
+                return Err(CatalogRefreshError::InvalidResponse);
+            }
             let running_url = reqwest::Url::parse(&format!("{origin}/api/ps"))
                 .map_err(|_| CatalogRefreshError::InvalidResponse)?;
             let running_deadline =

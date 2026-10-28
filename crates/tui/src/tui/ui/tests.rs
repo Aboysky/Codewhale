@@ -11112,11 +11112,44 @@ async fn adopting_a_local_model_closes_the_connect_picker_and_names_it() {
     app.onboarding_needs_api_key = true;
     app.view_stack
         .push(ProviderPickerView::new(ProviderKind::Deepseek, &config));
+    let endpoint_v1 = crate::local_ollama::ollama_v1_base_url(&config);
     let catalog = crate::local_ollama::LiveLocalOllamaCatalog {
-        endpoint_v1: "http://localhost:11434/v1".to_string(),
+        ticket: crate::provider_catalog_live::begin_refresh_for_identity(
+            ProviderKind::Ollama,
+            "ollama",
+            &endpoint_v1,
+        ),
+        endpoint_v1,
         tags: vec!["fixture-local:tag".to_string()],
         chat_tag: Some("fixture-local:tag".to_string()),
     };
+
+    let mut changed_endpoint = catalog.clone();
+    changed_endpoint.endpoint_v1 = "http://127.0.0.1:9/v1".to_string();
+    super::event_loop::adopt_live_local_ollama_catalog(
+        &mut app,
+        &mut engine.handle,
+        &mut config,
+        changed_endpoint,
+    )
+    .await;
+    assert_ne!(app.api_provider, ProviderKind::Ollama);
+
+    let stale = catalog.clone();
+    let ticket = crate::provider_catalog_live::begin_refresh_for_identity(
+        ProviderKind::Ollama,
+        "ollama",
+        &catalog.endpoint_v1,
+    );
+    super::event_loop::adopt_live_local_ollama_catalog(
+        &mut app,
+        &mut engine.handle,
+        &mut config,
+        stale,
+    )
+    .await;
+    assert_ne!(app.api_provider, ProviderKind::Ollama);
+    let catalog = crate::local_ollama::LiveLocalOllamaCatalog { ticket, ..catalog };
 
     super::event_loop::adopt_live_local_ollama_catalog(
         &mut app,
@@ -11227,6 +11260,11 @@ async fn first_run_route_keeps_explicit_choice_when_credentials_are_missing() {
             &mut config,
             crate::local_ollama::LiveLocalOllamaCatalog {
                 endpoint_v1: "http://127.0.0.1:11434/v1".into(),
+                ticket: crate::provider_catalog_live::begin_refresh_for_identity(
+                    ProviderKind::Ollama,
+                    "ollama",
+                    "http://127.0.0.1:11434/v1",
+                ),
                 tags: vec!["qwen3:4b".into()],
                 chat_tag: Some("qwen3:4b".into()),
             },
@@ -11310,8 +11348,14 @@ fn first_run_route_env_guards() -> Vec<crate::test_support::EnvVarGuard> {
 }
 
 fn first_run_route_catalog() -> crate::local_ollama::LiveLocalOllamaCatalog {
+    let endpoint_v1 = crate::local_ollama::ollama_v1_base_url(&Config::default());
     crate::local_ollama::LiveLocalOllamaCatalog {
-        endpoint_v1: "http://127.0.0.1:11434/v1".into(),
+        ticket: crate::provider_catalog_live::begin_refresh_for_identity(
+            ProviderKind::Ollama,
+            "ollama",
+            &endpoint_v1,
+        ),
+        endpoint_v1,
         tags: vec!["qwen3:4b".into()],
         chat_tag: Some("qwen3:4b".into()),
     }
