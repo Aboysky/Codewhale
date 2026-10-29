@@ -127,9 +127,18 @@ pub(crate) fn run(yes: bool, purge_data: bool) -> Result<()> {
     let selected = std::env::current_exe().ok();
     let result = remove(yes);
     report_path_copies(selected.as_deref());
-    result?;
+    let removed = result?;
     if purge_data {
-        purge(yes)
+        if !yes {
+            return purge(false);
+        }
+        if removed {
+            return purge(true);
+        }
+        println!(
+            "Data was not purged: this run did not remove a receipted installation. Data is shared by every install and is kept."
+        );
+        Ok(())
     } else {
         println!(
             "User data was not touched. To also delete Codewhale's own data directory, add --purge-data."
@@ -138,12 +147,20 @@ pub(crate) fn run(yes: bool, purge_data: bool) -> Result<()> {
     }
 }
 
-fn remove(yes: bool) -> Result<()> {
+fn remove(yes: bool) -> Result<bool> {
     let identity = update_executable_identity()?;
+    #[cfg(not(windows))]
+    let identity = UpdateExecutableIdentity {
+        path: identity
+            .path
+            .canonicalize()
+            .context("failed to resolve the selected executable path")?,
+        ..identity
+    };
     let method = InstallMethod::detect(&identity.path);
     println!("Selected executable: {}", identity.path.display());
     println!(
-        "Program removal preserves user state, credentials, sessions, workspaces, shell profiles and services."
+        "Program removal preserves user state, credentials, sessions, workspaces and services. Uninstall never edits shell profiles; for a receipted release copy it reports recognizable Codewhale PATH blocks in accessible profiles for you to remove."
     );
     if !method.supports_self_update() {
         println!(
@@ -151,14 +168,14 @@ fn remove(yes: bool) -> Result<()> {
             method.label(),
             codewhale_release::installs::manager_command(method, &identity.path)
         );
-        return Ok(());
+        return Ok(false);
     }
     if let Some(uninstaller) = windows_installer_uninstaller(&identity.path) {
         println!(
             "This copy belongs to the Codewhale Windows installer. Remove it from Settings > Apps > CodeWhale, or run: \"{}\"",
             uninstaller.display()
         );
-        return Ok(());
+        return Ok(false);
     }
     if protected_update_path(&identity.path) {
         bail!(
@@ -180,7 +197,7 @@ fn remove(yes: bool) -> Result<()> {
     let ownership = match CommandReceipt::capture(&identity.path)? {
         Some(ownership) => ownership,
         None => {
-            let (directory, entries) = curl_install_entries(&identity).with_context(|| format!(
+            let (directory, entries) = curl_install_entries(&identity)?.with_context(|| format!(
                 "No command ownership receipt beside {}. This legacy/manual copy is preserved. Inspect its exact path and provenance before removing it manually; reinstalling into a fresh directory creates a receipted install.", identity.path.display()))?;
             println!(
                 "No ownership receipt yet: {} is a curl-installer location and these commands are byte-identical to this Codewhale {}.",
@@ -194,7 +211,7 @@ fn remove(yes: bool) -> Result<()> {
                 println!(
                     "No files were changed. Run this executable again with uninstall --yes to record a receipt for exactly these files and remove them."
                 );
-                return Ok(());
+                return Ok(false);
             }
             let text: String = entries
                 .iter()
@@ -255,12 +272,13 @@ fn remove(yes: bool) -> Result<()> {
             directory.join(file.name()).display()
         );
     }
+    report_path_blocks(&directory);
     validate_primary_update_identity(&identity)?;
     if !yes {
         println!(
             "No files were changed. Run this executable again with uninstall --yes to remove only this plan."
         );
-        return Ok(());
+        return Ok(false);
     }
     #[cfg(unix)]
     {
@@ -346,51 +364,156 @@ fn remove(yes: bool) -> Result<()> {
             "Run hash -r in your shell."
         }
     );
-    Ok(())
+    Ok(true)
+}
+
+const PATH_BLOCK_START: &str = "# >>> codewhale PATH >>>";
+const PATH_BLOCK_END: &str = "# <<< codewhale PATH <<<";
+const MAX_PROFILE: usize = 1024 * 1024;
+
+fn report_path_blocks(directory: &Path) {
+    let Some(home) = dirs::home_dir() else {
+        return;
+    };
+    let zdotdir = std::env::var_os("ZDOTDIR").map(PathBuf::from);
+    let mut profiles: Vec<PathBuf> = [
+        ".zshrc",
+        ".bashrc",
+        ".bash_profile",
+        ".bash_login",
+        ".profile",
+    ]
+    .iter()
+    .map(|name| home.join(name))
+    .chain(zdotdir.map(|dir| dir.join(".zshrc")))
+    .chain(std::iter::once(
+        home.join(".config")
+            .join("fish")
+            .join("conf.d")
+            .join("codewhale.fish"),
+    ))
+    .collect();
+    profiles.sort();
+    profiles.dedup();
+    let names_directory = |value: &str| {
+        let expanded = match value.strip_prefix("$HOME/") {
+            Some(rest) => home.join(rest),
+            None => PathBuf::from(value),
+        };
+        expanded.canonicalize().is_ok_and(|path| path == directory)
+    };
+    let ours = |line: &str| {
+        line.strip_prefix("export PATH=\"")
+            .and_then(|rest| rest.strip_suffix(":$PATH\""))
+            .is_some_and(|value| names_directory(value))
+            || line
+                .strip_prefix("contains -- \"")
+                .and_then(|rest| rest.split_once("\" $PATH; or set -gx PATH \""))
+                .is_some_and(|(value, rest)| {
+                    rest == format!("{value}\" $PATH") && names_directory(value)
+                })
+    };
+    for profile in profiles {
+        let (Some(parent), Some(name)) = (
+            profile.parent(),
+            profile.file_name().and_then(|name| name.to_str()),
+        ) else {
+            continue;
+        };
+        let mut file = match GuardedFile::open_bounded(parent, name, MAX_PROFILE) {
+            Ok(Some(file)) => file,
+            Ok(None) => continue,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                println!(
+                    "Not read: {} ({error}). If it holds a Codewhale PATH block, remove that block by hand.",
+                    profile.display()
+                );
+                continue;
+            }
+        };
+        let text = match file.read_bounded(MAX_PROFILE).map(String::from_utf8) {
+            Ok(Ok(text)) => text,
+            _ => {
+                println!(
+                    "Not read: {} is not a UTF-8 file within the size limit.",
+                    profile.display()
+                );
+                continue;
+            }
+        };
+        let lines: Vec<&str> = text.lines().map(str::trim_end).collect();
+        let mut index = 0;
+        while index < lines.len() {
+            if lines[index] == PATH_BLOCK_START {
+                if lines.get(index + 2) == Some(&PATH_BLOCK_END) && ours(lines[index + 1]) {
+                    println!(
+                        "Codewhale PATH block for this install: {} lines {}-{}. Uninstall does not edit shell profiles; delete those lines yourself to drop the PATH entry.",
+                        profile.display(),
+                        index + 1,
+                        index + 3
+                    );
+                    index += 3;
+                    continue;
+                }
+                println!(
+                    "Codewhale PATH marker at {} line {} does not form a block for this install; left unchanged.",
+                    profile.display(),
+                    index + 1
+                );
+            } else if lines[index] == PATH_BLOCK_END {
+                println!(
+                    "Codewhale PATH end marker at {} line {} has no start marker; left unchanged.",
+                    profile.display(),
+                    index + 1
+                );
+            }
+            index += 1;
+        }
+    }
 }
 
 fn curl_install_entries(
     identity: &UpdateExecutableIdentity,
-) -> Option<(PathBuf, Vec<(String, String)>)> {
-    let directory = identity.path.parent()?.canonicalize().ok()?;
-    let home = dirs::home_dir()?.canonicalize().ok()?;
+) -> Result<Option<(PathBuf, Vec<(String, String)>)>> {
+    let Some(directory) = identity
+        .path
+        .parent()
+        .and_then(|parent| parent.canonicalize().ok())
+    else {
+        return Ok(None);
+    };
+    let Some(home) = dirs::home_dir().and_then(|home| home.canonicalize().ok()) else {
+        return Ok(None);
+    };
     let local = home.join(".local");
     let known = directory == local.join("bin")
         || directory == local.join("codewhale").join("bin")
         || (cfg!(windows) && directory == home.join("bin"))
         || (directory.parent() == Some(local.as_path())
             && directory
-                .file_name()?
-                .to_str()?
-                .starts_with("codewhale-release."));
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("codewhale-release.")));
     if !known {
-        return None;
+        return Ok(None);
     }
-    let entries: Vec<(String, String)> = COMMANDS
-        .iter()
-        .filter(|name| {
-            let path = directory.join(name);
-            std::fs::symlink_metadata(&path)
-                .is_ok_and(|meta| meta.is_file() && owned_by_user(&meta))
-                && std::fs::read(&path).is_ok_and(|bytes| sha256_hex(&bytes) == identity.file_hash)
-        })
-        .map(|name| ((*name).to_string(), identity.file_hash.clone()))
-        .collect();
-    entries
-        .iter()
-        .any(|(name, _)| identity.path.file_name() == Some(std::ffi::OsStr::new(name)))
-        .then_some((directory, entries))
-}
-
-#[cfg(unix)]
-fn owned_by_user(meta: &std::fs::Metadata) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    meta.uid() == codewhale_config::private_directory::PrivateDirectory::current_user_id()
-}
-
-#[cfg(not(unix))]
-fn owned_by_user(_meta: &std::fs::Metadata) -> bool {
-    true
+    let mut entries = Vec::new();
+    for name in COMMANDS.iter().copied() {
+        let Some(mut file) = GuardedFile::open(&directory, name)? else {
+            continue;
+        };
+        file.verify_owned()?;
+        if file.sha256() == identity.file_hash.as_str() {
+            entries.push((name.to_string(), identity.file_hash.clone()));
+        }
+    }
+    let selected_listed = identity.path.file_name().is_some_and(|file_name| {
+        entries
+            .iter()
+            .any(|(name, _)| file_name == std::ffi::OsStr::new(name))
+    });
+    Ok(selected_listed.then_some((directory, entries)))
 }
 
 fn windows_installer_uninstaller(executable: &Path) -> Option<PathBuf> {
@@ -491,7 +614,9 @@ fn purge(yes: bool) -> Result<()> {
         "Not covered: OS keychain/keyring entries (run codewhale auth clear --provider <id> before removing the program), per-workspace .codewhale directories, shell profile lines and completion files."
     );
     if !yes {
-        println!("No data was changed. Add --yes to delete exactly these directories.");
+        println!(
+            "No data was changed. Adding --yes deletes these directories only after a receipted installation is removed in the same run."
+        );
         return Ok(());
     }
     for target in present {
