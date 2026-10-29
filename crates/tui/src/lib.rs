@@ -807,8 +807,9 @@ enum FleetAlertAdapterArg {
 }
 
 /// Spawn a tokio task that listens for terminating signals (SIGINT
-/// always; SIGTERM and SIGHUP on Unix) and, on receipt, restores the
-/// terminal modes and exits with the conventional 128 + signal code.
+/// always; SIGTERM and SIGHUP on Unix) and, on receipt, flushes already queued
+/// persistence, restores terminal modes and exits with the conventional
+/// 128 + signal code. State not yet queued by the TUI is not captured here.
 /// Multiple deliveries are tolerated: once the cleanup runs, a second
 /// signal short-circuits to plain exit so a stuck cleanup can never
 /// trap a frustrated user pressing Ctrl+C repeatedly.
@@ -826,11 +827,16 @@ fn spawn_signal_cleanup_task() {
     let mut signals = TerminatingSignals::register();
     tokio::spawn(async move {
         let exit_code = signals.wait().await;
-        // A serving Runtime API gets a bounded window to end its open event
-        // streams with a typed `stream.end`, so clients can tell a Runtime
-        // that stopped from a dropped connection. A second signal skips it.
+        // Persistence and a serving Runtime API share a bounded window to
+        // flush queued saves and end open streams with a typed `stream.end`.
+        // A second signal skips both waits.
         tokio::select! {
-            () = runtime_api::drain_for_signal_exit() => {}
+            _ = async {
+                tokio::join!(
+                    runtime_api::drain_for_signal_exit(),
+                    crate::tui::persistence_actor::flush_for_signal_exit(),
+                )
+            } => {}
             _ = signals.wait() => {}
         }
         // If we get here a fatal signal arrived. Restore the terminal
