@@ -1324,6 +1324,7 @@ fn default_runtime_capabilities() -> RuntimeCapabilities {
         turn_operation_idempotency: true,
         turn_operation_lookup: true,
         structured_review_turns: true,
+        structured_review_version: 2,
         automation_mutation_preconditions: true,
         turn_image_inputs: true,
         turn_output_token_limit: true,
@@ -11683,6 +11684,7 @@ pub(crate) fn runtime_chat_relay_catalog(
             "capabilities": {
                 "relay_chat_v1": true,
                 "structured_review_turns": true,
+                "structured_review_version": 2,
                 "isolated_chat_threads": true,
                 "turn_operation_idempotency": true,
                 "turn_image_inputs": true,
