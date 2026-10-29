@@ -1452,6 +1452,9 @@ impl App {
             return;
         }
         let pos = self.cursor_position;
+        if self.input[byte_index_at_char(&self.input, pos)..].starts_with('\n') {
+            return;
+        }
         // Grapheme-aware: `x` deletes the whole cluster under the cursor.
         let end = next_grapheme_boundary(&self.input, pos);
         remove_char_range(&mut self.input, pos, end);
@@ -1498,7 +1501,10 @@ impl App {
     /// Enter insert mode after the cursor (vim `a`).
     pub fn vim_enter_append(&mut self) {
         let total = char_count(&self.input);
-        if self.cursor_position < total {
+        if self.cursor_position < total
+            && !self.input[byte_index_at_char(&self.input, self.cursor_position)..]
+                .starts_with('\n')
+        {
             // After the whole cluster under the cursor, not one scalar in.
             self.cursor_position = next_grapheme_boundary(&self.input, self.cursor_position);
         }
