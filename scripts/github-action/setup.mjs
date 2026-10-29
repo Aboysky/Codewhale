@@ -45,6 +45,19 @@ export function workflow({ provider, model, version = 'v0.10.2', actionRef, trig
   const action = `codewhale-hq/Codewhale@${actionRef}`;
   const secret = KEYS[provider];
   const expression = value => '${{ ' + value + ' }}';
+  const eligible = `      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'pull_request' && !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository) ||
+      ((github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment') &&
+       (github.event.issue.pull_request || github.event.pull_request) &&
+       github.event.comment.user.type == 'User' && contains(github.event.comment.body, '${triggerPhrase}'))`;
+  const appToken = `      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
+        id: app-token
+        with:
+          app-id: ${expression('vars.CODEWHALE_APP_ID')}
+          private-key: ${expression('secrets.CODEWHALE_APP_PRIVATE_KEY')}
+          permission-contents: read
+          permission-pull-requests: write
+`;
   return `name: Codewhale PR Review
 on:
   pull_request:
@@ -64,13 +77,16 @@ concurrency:
   group: codewhale-review-${expression('github.event.pull_request.number || github.event.issue.number || inputs.pr-number')}
   cancel-in-progress: false
 jobs:
-  review:
+${appLogin ? `  installation:
     if: >-
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'pull_request' && !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository) ||
-      ((github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment') &&
-       (github.event.issue.pull_request || github.event.pull_request) &&
-       github.event.comment.user.type == 'User' && contains(github.event.comment.body, '${triggerPhrase}'))
+${eligible}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+${appToken}` : ''}  review:
+${appLogin ? '    needs: installation\n' : ''}    if: >-
+${eligible}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -126,14 +142,7 @@ jobs:
         with:
           name: codewhale-findings-${expression('github.run_id')}-${expression('github.run_attempt')}
           path: findings
-${appLogin ? `      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
-        id: app-token
-        with:
-          app-id: ${expression('vars.CODEWHALE_APP_ID')}
-          private-key: ${expression('secrets.CODEWHALE_APP_PRIVATE_KEY')}
-          permission-contents: read
-          permission-pull-requests: write
-` : ''}      - uses: codewhale-hq/Codewhale/scripts/github-action/publish@${actionRef}
+${appLogin ? appToken : ''}      - uses: codewhale-hq/Codewhale/scripts/github-action/publish@${actionRef}
         id: publish
         with:
           findings: findings/findings.json

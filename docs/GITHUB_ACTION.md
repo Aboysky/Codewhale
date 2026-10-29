@@ -69,7 +69,8 @@ Ubuntu runner provides the review tools. No server or GitHub App is required.
 The generated workflow uses `github-actions[bot]`. To use your own existing
 App, add `--app-login 'YOUR-APP[bot]'` when generating, set the
 `CODEWHALE_APP_ID` variable and `CODEWHALE_APP_PRIVATE_KEY` secret, and install
-the App on the repository. The publisher requests only contents read and pull
+the App on the repository. App workflows verify installation access in a
+separate job before making a model request. The publisher requests only contents read and pull
 requests write. A missing App configuration fails; it does not switch identity.
 See [GitHub App setup](GITHUB_APP.md) for creating a new App.
 
