@@ -41,6 +41,7 @@ jobs:
           version: 'v0.10.2'
           provider: 'deepseek'
           model: 'deepseek-flash'
+          max-output-tokens: '16384'
           pr-number: ${{ inputs.pr-number }}
           trigger-phrase: '@codewhale'
           allow-forks: 'true'

@@ -32,9 +32,12 @@ Ubuntu runner provides the review tools. No server or GitHub App is required.
 
    Select your own provider and exact model ID. The generator pins both
    Codewhale actions to the source checkout's full commit and the CLI to
-   `v0.10.2`. It refuses to overwrite an existing workflow. Use `--print` to
+   `v0.10.2`, with a 16384-token output allowance for the completed review.
+   It refuses to overwrite an existing workflow. Use `--print` to
    inspect the YAML, `--version vX.Y.Z` to choose another released CLI, or
    `--action-ref FULL_COMMIT_SHA` with a separately downloaded `setup.mjs`.
+   `--max-output-tokens N` changes the explicit output allowance. Reasoning
+   models can exhaust smaller automatic allowances before writing findings.
    The generated workflow is `.github/workflows/codewhale-review.yml`.
 
 2. Store only the selected provider's API key as a repository Actions secret:

@@ -21,6 +21,7 @@ const HELP = `Create a Codewhale review bot workflow in your repository.
   --action-ref SHA      Reviewed Action commit (default: this clean source checkout)
   --trigger-phrase NAME Mention to listen for (default: @codewhale)
   --app-login LOGIN     Optional existing GitHub App login, including [bot]
+  --max-output-tokens N Review output allowance (default: 16384; minimum: 8192)
   --print               Print YAML without writing files
   --help                Show this help
 
@@ -30,7 +31,7 @@ Automatic reviews cover same-repository PRs. Maintainers can review fork PRs
 with a manual run or an @codewhale review comment; PR code is never executed.
 `;
 
-export function workflow({ provider, model, version = 'v0.10.2', actionRef, triggerPhrase = '@codewhale', appLogin }) {
+export function workflow({ provider, model, version = 'v0.10.2', actionRef, triggerPhrase = '@codewhale', appLogin, maxOutputTokens = '16384' }) {
   if (!Object.hasOwn(KEYS, provider)) throw new Error('Choose a supported --provider.');
   if (!/^[A-Za-z0-9][A-Za-z0-9_./:@+-]{0,199}$/.test(model || '')
     || (provider === 'codewhale' && !/^[A-Za-z0-9_.-]+\/.+/.test(model))) throw new Error('Choose an exact --model ID.');
@@ -38,6 +39,7 @@ export function workflow({ provider, model, version = 'v0.10.2', actionRef, trig
   if (!/^[a-f0-9]{40}$/i.test(actionRef || '')) throw new Error('--action-ref must be a full reviewed commit SHA.');
   if (!/^@[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(triggerPhrase)) throw new Error('--trigger-phrase must be @ followed by a GitHub-style name.');
   if (appLogin && !/^[a-zA-Z0-9][a-zA-Z0-9-]{0,99}\[bot\]$/.test(appLogin)) throw new Error('--app-login must include [bot].');
+  if (!/^[1-9][0-9]*$/.test(String(maxOutputTokens)) || Number(maxOutputTokens) < 8192 || Number(maxOutputTokens) > 1000000) throw new Error('--max-output-tokens must be between 8192 and 1000000.');
   const action = `codewhale-hq/Codewhale@${actionRef}`;
   const secret = KEYS[provider];
   const expression = value => '${{ ' + value + ' }}';
@@ -84,6 +86,7 @@ jobs:
           version: '${version}'
           provider: '${provider}'
           model: '${model}'
+          max-output-tokens: '${maxOutputTokens}'
           pr-number: ${expression('inputs.pr-number')}
           trigger-phrase: '${triggerPhrase}'
           allow-forks: 'true'
@@ -151,6 +154,7 @@ export function setup(args = process.argv.slice(2)) {
     provider: { type: 'string' }, model: { type: 'string' }, directory: { type: 'string' },
     version: { type: 'string' }, 'action-ref': { type: 'string' }, 'trigger-phrase': { type: 'string' },
     'app-login': { type: 'string' }, print: { type: 'boolean' }, help: { type: 'boolean' },
+    'max-output-tokens': { type: 'string' },
   } });
   if (values.help) { console.log(HELP); return; }
   let actionRef = values['action-ref'];
@@ -164,7 +168,7 @@ export function setup(args = process.argv.slice(2)) {
     actionRef = head.stdout.trim();
   }
   const yaml = workflow({ provider: values.provider, model: values.model, version: values.version,
-    actionRef, triggerPhrase: values['trigger-phrase'], appLogin: values['app-login'] });
+    actionRef, triggerPhrase: values['trigger-phrase'], appLogin: values['app-login'], maxOutputTokens: values['max-output-tokens'] });
   if (values.print) { process.stdout.write(yaml); return; }
   const directory = realpathSync(values.directory || process.cwd());
   if (spawnSync('git', ['-C', directory, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' }).stdout.trim() !== directory) throw new Error('--directory must be a Git repository root.');

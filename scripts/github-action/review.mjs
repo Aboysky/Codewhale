@@ -133,7 +133,7 @@ export function classify(result, head, post, base) {
   const publication = ['not_requested', 'not_attempted', 'uncertain', 'posted'].includes(data?.publication)
     ? data.publication : 'unknown';
   const usage = {};
-  for (const key of ['input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens']) {
+  for (const key of ['input_tokens', 'output_tokens', 'reasoning_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens']) {
     if (Number.isSafeInteger(data?.usage?.[key]) && data.usage[key] >= 0) usage[key] = data.usage[key];
   }
   const evidence = { publication, usage };
@@ -143,6 +143,10 @@ export function classify(result, head, post, base) {
   }
   if (data?.success === true && data.complete === false) {
     return { ...evidence, outcome: 'incomplete', reason: 'coverage_incomplete' };
+  }
+  if (data?.mode === 'review' && data.success === false && data.complete === false
+    && data.outcome === 'infrastructure' && data.review_verdict === 'not_produced') {
+    return { ...evidence, outcome: 'incomplete', reason: 'review_not_produced' };
   }
   if (result.status !== 0 || data?.mode !== 'review' || data.success !== true || data.complete !== true
     || data.pr?.head_sha !== head || !Array.isArray(data.review?.issues)
