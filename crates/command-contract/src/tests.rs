@@ -1803,6 +1803,7 @@ impl FakeSkillGroup {
                 mode_label: "compatible".into(),
                 dirs: vec!["/ws/.codewhale/skills".into()],
                 entries: vec![SkillEntry {
+                    index_note: None,
                     name: "demo".into(),
                     description: "Demo skill".into(),
                     source: SkillSourceKind::Native,

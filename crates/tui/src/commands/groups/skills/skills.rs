@@ -28,8 +28,8 @@ use crate::tui::app::AppAction;
 /// Discover the enabled visible skills for the current App state. Shared by the
 /// dispatcher fallback (`run_skill_by_name`) and the host activation helper;
 /// kept co-located for FEAT-042.
-fn discover_visible_skills(app: &crate::tui::app::App) -> crate::skills::SkillRegistry {
-    crate::skills::discover_for_workspace_and_dir_with_mode_and_plugins(
+fn discover_visible_skills(app: &crate::tui::app::App) -> codewhale_skills::SkillRegistry {
+    codewhale_skills::discover_for_workspace_and_dir_with_mode_and_plugins(
         &app.workspace,
         &app.skills_dir,
         app.skills_discovery_mode,
@@ -483,14 +483,8 @@ fn inspect_skills(group: &mut dyn CommandSkillGroupContext) -> CommandResult {
             {
                 let _ = writeln!(output, "    path: {}", path);
             }
-            // The model index caps each description; say so here instead of
-            // cutting an imported skill mid-sentence with nobody told.
-            if crate::skills::description_exceeds_index_cap(&skill.description) {
-                let _ = writeln!(
-                    output,
-                    "    note: description is over the model index's {}-char limit — trim it, or end it with `Use when: <trigger>` so the trigger survives shortening",
-                    crate::skills::MAX_SKILL_DESCRIPTION_CHARS
-                );
+            if let Some(note) = &skill.index_note {
+                let _ = writeln!(output, "    {note}");
             }
         }
     }
@@ -1048,6 +1042,7 @@ mod tests {
 
     fn demo_entry() -> SkillEntry {
         SkillEntry {
+            index_note: None,
             name: "demo".to_string(),
             description: "Demo skill".to_string(),
             source: SkillSourceKind::Native,
@@ -1058,6 +1053,7 @@ mod tests {
 
     fn bundled_entry(name: &str, tier: SkillBundledTier) -> SkillEntry {
         SkillEntry {
+            index_note: None,
             name: name.to_string(),
             description: format!("{name} skill"),
             source: SkillSourceKind::Native,
@@ -1173,7 +1169,9 @@ mod tests {
 
     #[test]
     fn skills_inspect_reports_discovery_details() {
-        let mut group = FakeSkillGroup::new(vec![demo_entry()]);
+        let mut entry = demo_entry();
+        entry.index_note = Some("Indice limité à 80 caractères".to_string());
+        let mut group = FakeSkillGroup::new(vec![entry]);
         let result = list_skills(&mut group, Some("inspect"));
         let msg = result.message.expect("expected message");
         assert!(msg.starts_with("Skills Inspect\n"), "{msg}");
@@ -1184,6 +1182,7 @@ mod tests {
         assert!(msg.contains("Available skills (1):"));
         assert!(msg.contains("source: native"));
         assert!(msg.contains("path: /ws/.codewhale/skills/demo"));
+        assert!(msg.contains("Indice limité à 80 caractères"));
     }
 
     #[test]

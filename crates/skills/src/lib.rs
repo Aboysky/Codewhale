@@ -1,6 +1,8 @@
 //! Skill discovery and registry for local SKILL.md files.
 
 pub mod audit;
+mod host_port;
+pub use host_port::{NativeSkillRef, NativeSkillRoots, SkillHostPort, install_skill_host};
 /// Provider-free contract tests for the bundled starter pack (#4698).
 #[cfg(test)]
 mod catalog_matrix;
@@ -33,15 +35,15 @@ use std::sync::{OnceLock, RwLock};
 
 use codewhale_runtime::logging;
 
-/// Per-entry ceiling for a skill's one-line description in the ambient index.
+/// Default per-entry ceiling for a skill's one-line description in the ambient index.
 /// Split between the summary and its `Use when:` trigger when a description
 /// carries one, so the trigger phrase — the part the model actually routes on
 /// — survives shortening. When the index shortens any row it ends with a
 /// count footer that `/context report` repeats, and `/skills inspect` notes each
 /// description over this cap.
-pub(crate) const MAX_SKILL_DESCRIPTION_CHARS: usize = 400;
+pub const DEFAULT_SKILL_DESCRIPTION_CHARS: usize = 400;
 /// Floor for the model-facing skill index budget, in chars. The real budget
-/// scales with the route's context window ([`skills_prompt_budget_chars`]);
+/// scales with the route's context window ([`SkillListingConfig::budget_chars`]);
 /// this floor keeps tiny local windows from erasing the index altogether.
 const MIN_AVAILABLE_SKILLS_CHARS: usize = 2_400;
 /// Ceiling for the index budget: past this, `load_skill name="list"` is a
@@ -61,28 +63,63 @@ const SKILL_BUDGET_DEFAULT_WINDOW_TOKENS: u32 = 128_000;
 const MIN_SHORTENED_DESCRIPTION_CHARS: usize = 40;
 /// Compatibility name for tests and the catalog matrix: the budget at the
 /// default window.
-#[cfg(test)]
-pub(crate) const MAX_AVAILABLE_SKILLS_CHARS: usize =
-    skills_prompt_budget_chars(Some(SKILL_BUDGET_DEFAULT_WINDOW_TOKENS));
+#[cfg(any(test, feature = "test-support"))]
+pub const MAX_AVAILABLE_SKILLS_CHARS: usize =
+    SkillListingConfig::DEFAULT.budget_chars(Some(SKILL_BUDGET_DEFAULT_WINDOW_TOKENS));
 
-/// Chars of system prompt the ambient skill index may occupy for a route
-/// with `window_tokens` of context. Session-pinned: the window is fixed per
-/// route, so the rendered block is byte-stable across turns and never moves
-/// the KV-cache prefix on its own (docs/CACHE.md).
+/// Session-pinned description and route-window limits for the ambient skill
+/// index. Rebuild only when the session configuration or route changes, so
+/// unchanged turns retain the same prompt prefix (docs/CACHE.md).
 #[must_use]
-pub const fn skills_prompt_budget_chars(window_tokens: Option<u32>) -> usize {
-    let window = match window_tokens {
-        Some(tokens) if tokens > 0 => tokens as u64,
-        _ => SKILL_BUDGET_DEFAULT_WINDOW_TOKENS as u64,
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SkillListingConfig {
+    max_description_chars: usize,
+    budget_fraction: f64,
+}
+
+impl Default for SkillListingConfig {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+impl SkillListingConfig {
+    const DEFAULT: Self = Self {
+        max_description_chars: DEFAULT_SKILL_DESCRIPTION_CHARS,
+        budget_fraction: SKILL_BUDGET_CONTEXT_PERCENT as f64 / 100.0,
     };
-    let chars = window * SKILL_BUDGET_CHARS_PER_TOKEN * SKILL_BUDGET_CONTEXT_PERCENT / 100;
-    let chars = chars as usize;
-    if chars < MIN_AVAILABLE_SKILLS_CHARS {
-        MIN_AVAILABLE_SKILLS_CHARS
-    } else if chars > MAX_AVAILABLE_SKILLS_CHARS_CEILING {
-        MAX_AVAILABLE_SKILLS_CHARS_CEILING
-    } else {
-        chars
+
+    pub fn from_config(config: &codewhale_runtime::config::SkillsConfig) -> Self {
+        Self {
+            max_description_chars: config
+                .listing_max_description_chars
+                .filter(|value| (1..=40_000).contains(value))
+                .unwrap_or(Self::DEFAULT.max_description_chars),
+            budget_fraction: config
+                .listing_budget_fraction
+                .filter(|value| value.is_finite() && *value > 0.0 && *value <= 1.0)
+                .unwrap_or(Self::DEFAULT.budget_fraction),
+        }
+    }
+
+    pub const fn max_description_chars(self) -> usize {
+        self.max_description_chars
+    }
+
+    pub const fn budget_chars(self, window_tokens: Option<u32>) -> usize {
+        let window = match window_tokens {
+            Some(tokens) if tokens > 0 => tokens,
+            _ => SKILL_BUDGET_DEFAULT_WINDOW_TOKENS,
+        };
+        let chars =
+            (window as f64 * SKILL_BUDGET_CHARS_PER_TOKEN as f64 * self.budget_fraction) as usize;
+        if chars < MIN_AVAILABLE_SKILLS_CHARS {
+            MIN_AVAILABLE_SKILLS_CHARS
+        } else if chars > MAX_AVAILABLE_SKILLS_CHARS_CEILING {
+            MAX_AVAILABLE_SKILLS_CHARS_CEILING
+        } else {
+            chars
+        }
     }
 }
 
@@ -98,18 +135,18 @@ pub const fn skills_prompt_budget_chars(window_tokens: Option<u32>) -> usize {
 ///
 /// These counters do not cache or otherwise change discovery behavior. They are
 /// thread-local so unrelated parallel tests cannot contaminate a measurement.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(crate) struct SkillDiscoveryMetrics {
-    pub(crate) root_discovery_calls: usize,
-    pub(crate) directories_visited: usize,
-    pub(crate) skill_md_read_attempts: usize,
+pub struct SkillDiscoveryMetrics {
+    pub root_discovery_calls: usize,
+    pub directories_visited: usize,
+    pub skill_md_read_attempts: usize,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl SkillDiscoveryMetrics {
     #[must_use]
-    pub(crate) fn delta_since(self, earlier: Self) -> Self {
+    pub fn delta_since(self, earlier: Self) -> Self {
         Self {
             root_discovery_calls: self
                 .root_discovery_calls
@@ -124,7 +161,7 @@ impl SkillDiscoveryMetrics {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 thread_local! {
     static SKILL_DISCOVERY_METRICS: std::cell::Cell<SkillDiscoveryMetrics> =
         const { std::cell::Cell::new(SkillDiscoveryMetrics {
@@ -134,18 +171,18 @@ thread_local! {
         }) };
 }
 
-#[cfg(test)]
-pub(crate) fn reset_discovery_metrics() {
+#[cfg(any(test, feature = "test-support"))]
+pub fn reset_discovery_metrics() {
     SKILL_DISCOVERY_METRICS.set(SkillDiscoveryMetrics::default());
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[must_use]
-pub(crate) fn discovery_metrics_snapshot() -> SkillDiscoveryMetrics {
+pub fn discovery_metrics_snapshot() -> SkillDiscoveryMetrics {
     SKILL_DISCOVERY_METRICS.get()
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 fn record_root_discovery_call() {
     SKILL_DISCOVERY_METRICS.with(|cell| {
         let mut metrics = cell.get();
@@ -154,7 +191,7 @@ fn record_root_discovery_call() {
     });
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 fn record_directory_visit() {
     SKILL_DISCOVERY_METRICS.with(|cell| {
         let mut metrics = cell.get();
@@ -163,7 +200,7 @@ fn record_directory_visit() {
     });
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 fn record_skill_md_read_attempt() {
     SKILL_DISCOVERY_METRICS.with(|cell| {
         let mut metrics = cell.get();
@@ -176,10 +213,10 @@ fn record_skill_md_read_attempt() {
 
 #[must_use]
 pub fn default_skills_dir() -> PathBuf {
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     {
-        if !crate::test_support::guarded_environment_provides_state_paths() {
-            return crate::test_support::unsealed_test_state_root()
+        if !codewhale_runtime::test_support::guarded_environment_provides_state_paths() {
+            return codewhale_runtime::test_support::unsealed_test_state_root()
                 .join(".codewhale")
                 .join("skills");
         }
@@ -202,11 +239,11 @@ fn unavailable_home_root() -> PathBuf {
 /// Global agentskills.io-compatible skills directory (`~/.agents/skills`).
 #[must_use]
 pub fn agents_global_skills_dir() -> Option<PathBuf> {
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     {
-        if !crate::test_support::guarded_environment_provides_state_paths() {
+        if !codewhale_runtime::test_support::guarded_environment_provides_state_paths() {
             return Some(
-                crate::test_support::unsealed_test_state_root()
+                codewhale_runtime::test_support::unsealed_test_state_root()
                     .join(".agents")
                     .join("skills"),
             );
@@ -287,7 +324,7 @@ pub enum SkillSource {
         plugin_id: String,
         plugin_name: String,
         authority: Box<codewhale_config::PluginAuthority>,
-        native_registration: Option<crate::extension_host::skills::NativeSkillRef>,
+        native_registration: Option<NativeSkillRef>,
     },
 }
 
@@ -304,7 +341,7 @@ pub enum SkillProvenance {
 #[serde(deny_unknown_fields)]
 pub struct NativeSkillProvenance {
     pub authority: codewhale_config::PluginAuthority,
-    pub registration: crate::extension_host::skills::NativeSkillRef,
+    pub registration: NativeSkillRef,
 }
 
 impl From<codewhale_config::PluginAuthority> for SkillProvenance {
@@ -320,7 +357,7 @@ impl SkillProvenance {
             Self::NativeRoot(source) => &source.authority,
         }
     }
-    pub(crate) fn verify_for(
+    pub fn verify_for(
         &self,
         workspace: &Path,
         plugins: Option<&codewhale_plugins::PluginRegistry>,
@@ -341,7 +378,7 @@ impl SkillProvenance {
             self.authority().clone()
         };
         if let Self::NativeRoot(source) = self {
-            crate::extension_host::manager().shared.check_selection(
+            host_port::check_selection(
                 source.registration.selection,
                 plugins,
                 authority.plugin_id.as_str(),
@@ -355,18 +392,18 @@ impl SkillProvenance {
                 codewhale_plugins::activation::PluginActivationCapability::Skills,
             ),
             Self::NativeRoot(source) => {
-                crate::extension_host::skills::verify_native_skill(&authority, &source.registration)
+                host_port::verify_native_skill(&authority, &source.registration)
             }
         }
     }
-    #[cfg(test)]
-    pub(crate) fn verify(&self, workspace: &Path) -> Result<(), String> {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn verify(&self, workspace: &Path) -> Result<(), String> {
         self.verify_for(workspace, None)
     }
 }
 
 impl SkillSource {
-    pub(crate) fn provenance(&self) -> Option<SkillProvenance> {
+    pub fn provenance(&self) -> Option<SkillProvenance> {
         match self {
             Self::Native => None,
             Self::Plugin {
@@ -460,7 +497,7 @@ pub struct SkillRegistry {
 /// skill invalidates immediately on filesystems whose directory timestamp has
 /// not advanced yet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct WatchedPathStamp {
+pub struct WatchedPathStamp {
     modified: Option<std::time::SystemTime>,
     len: u64,
     directory_entries: Option<u64>,
@@ -470,7 +507,7 @@ pub(crate) struct WatchedPathStamp {
 /// stamp observed during the validating walk. `None` means the path was
 /// unreadable at walk time; any later readability or metadata change
 /// invalidates the entry.
-pub(crate) type WatchedPaths = Vec<(PathBuf, Option<WatchedPathStamp>)>;
+pub type WatchedPaths = Vec<(PathBuf, Option<WatchedPathStamp>)>;
 
 fn directory_entry_fingerprint(path: &Path) -> Option<u64> {
     let mut names = fs::read_dir(path)
@@ -484,7 +521,7 @@ fn directory_entry_fingerprint(path: &Path) -> Option<u64> {
     Some(hasher.finish())
 }
 
-pub(crate) fn watched_path_stamp(path: &Path) -> Option<WatchedPathStamp> {
+pub fn watched_path_stamp(path: &Path) -> Option<WatchedPathStamp> {
     fs::metadata(path).ok().map(|metadata| WatchedPathStamp {
         modified: metadata.modified().ok(),
         len: metadata.len(),
@@ -501,7 +538,7 @@ impl SkillRegistry {
     /// Defends against pathological configurations (e.g. a user pointing
     /// `skills_dir` at `~`) without artificially limiting realistic
     /// vendored layouts like `<root>/<org>/<repo>/<skill>/SKILL.md`.
-    pub(crate) const MAX_DISCOVERY_DEPTH: usize =
+    pub const MAX_DISCOVERY_DEPTH: usize =
         codewhale_skill_install::skill_parse::MAX_DISCOVERY_DEPTH;
 
     /// Discover skills from the given directory.
@@ -531,7 +568,7 @@ impl SkillRegistry {
     /// filesystem set (every visited directory and every parsed `SKILL.md`)
     /// with its metadata stamp. The discovery cache validates hits by
     /// re-stat()ing only this set instead of re-walking every root.
-    pub(crate) fn discover_watched(dir: &Path) -> (Self, WatchedPaths) {
+    pub fn discover_watched(dir: &Path) -> (Self, WatchedPaths) {
         Self::discover_watched_confined(dir, None)
     }
 
@@ -545,11 +582,11 @@ impl SkillRegistry {
     /// repository cannot make discovery read files outside itself.
     /// Operator-owned roots (`confine_to == None`) follow links freely,
     /// because users link skill libraries there on purpose.
-    pub(crate) fn discover_watched_confined(
+    pub fn discover_watched_confined(
         dir: &Path,
         confine_to: Option<&Path>,
     ) -> (Self, WatchedPaths) {
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-support"))]
         record_root_discovery_call();
         let mut registry = Self::default();
         let mut watched = WatchedPaths::default();
@@ -597,7 +634,7 @@ impl SkillRegistry {
             return;
         }
 
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-support"))]
         record_directory_visit();
         let entries = match fs::read_dir(dir) {
             Ok(e) => e,
@@ -665,7 +702,7 @@ impl SkillRegistry {
             }
 
             let skill_path = path.join("SKILL.md");
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             record_skill_md_read_attempt();
             let read_result = match confine_to {
                 Some(workspace) => {
@@ -786,8 +823,8 @@ impl SkillRegistry {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn parse_skill(path: &Path, content: &str) -> std::result::Result<Skill, String> {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn parse_skill(path: &Path, content: &str) -> std::result::Result<Skill, String> {
         Self::parse_skill_and_warnings(path, content).map(|(skill, _)| skill)
     }
 
@@ -818,7 +855,7 @@ impl SkillRegistry {
     /// normalization contract as filesystem discovery. Plugin discovery uses
     /// this after checking the exact byte digest against its reviewed bundle
     /// inventory, so parsing never has to reopen the mutable pathname.
-    pub(crate) fn parse_verified_content(
+    pub fn parse_verified_content(
         path: &Path,
         content: &str,
     ) -> std::result::Result<(Skill, Vec<String>), String> {
@@ -876,7 +913,7 @@ impl SkillRegistry {
     /// discovery. A qualified plugin Skill can be hidden independently, but
     /// this never changes the plugin bundle's trust or MCP lifecycle.
     #[must_use]
-    pub(crate) fn into_enabled(self) -> Self {
+    pub fn into_enabled(self) -> Self {
         self.into_enabled_with_state(
             codewhale_runtime::skill_state::SkillStateStore::load_default(),
         )
@@ -960,9 +997,9 @@ fn skills_directories_with_home_and_mode(
     roots::skills_directories_with_home_and_mode(workspace, home_dir, mode)
 }
 
-pub(crate) use roots::codewhale_workspace_skills_dir;
-#[cfg(test)]
-pub(crate) use roots::existing_skill_dirs;
+pub use roots::codewhale_workspace_skills_dir;
+#[cfg(any(test, feature = "test-support"))]
+pub use roots::existing_skill_dirs;
 
 /// Walk every candidate skills directory for a workspace and merge
 /// the discovered skills into a single registry. Name conflicts are
@@ -972,13 +1009,13 @@ pub(crate) use roots::existing_skill_dirs;
 /// Warnings from each scanned directory accumulate so the model
 /// (and the user via `/skill list`) can see why a skill didn't
 /// load.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[must_use]
 pub fn discover_in_workspace(workspace: &Path) -> SkillRegistry {
     discover_in_workspace_with_mode(workspace, SkillDiscoveryMode::Compatible)
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[must_use]
 pub fn discover_in_workspace_with_mode(
     workspace: &Path,
@@ -1016,7 +1053,7 @@ fn with_untrusted_project_skills_warning(
     registry
 }
 
-pub(crate) fn untrusted_project_skills_warning(
+pub fn untrusted_project_skills_warning(
     workspace: &Path,
     configured_skills_dir: Option<&Path>,
     mode: SkillDiscoveryMode,
@@ -1072,7 +1109,7 @@ pub fn skill_directories_for_workspace_and_dir(
 
 /// Whether a resolved or configured skills dir may load for `workspace`; see
 /// [`roots::skills_dir_allowed_by_workspace_trust`].
-pub(crate) fn skills_dir_allowed_by_workspace_trust(workspace: &Path, skills_dir: &Path) -> bool {
+pub fn skills_dir_allowed_by_workspace_trust(workspace: &Path, skills_dir: &Path) -> bool {
     let home = codewhale_paths::user_home();
     roots::skills_dir_allowed_by_workspace_trust(workspace, home.as_deref(), skills_dir)
 }
@@ -1103,8 +1140,8 @@ fn insert_configured_skills_dir(
     dirs.insert(insert_at, skills_dir.to_path_buf());
 }
 
-#[cfg(test)]
-pub(crate) fn discover_from_directories_with_plugins(
+#[cfg(any(test, feature = "test-support"))]
+pub fn discover_from_directories_with_plugins(
     dirs: impl IntoIterator<Item = PathBuf>,
     plugins: Option<&codewhale_plugins::PluginRegistry>,
 ) -> SkillRegistry {
@@ -1114,7 +1151,7 @@ pub(crate) fn discover_from_directories_with_plugins(
 /// Discover from `dirs`, confining every directory that lives under
 /// `workspace` to it (see [`SkillRegistry::discover_watched_confined`]).
 /// Directories elsewhere, such as the user's home roots, are read as before.
-pub(crate) fn discover_from_directories_in_workspace(
+pub fn discover_from_directories_in_workspace(
     dirs: impl IntoIterator<Item = PathBuf>,
     workspace: Option<&Path>,
     plugins: Option<&codewhale_plugins::PluginRegistry>,
@@ -1133,15 +1170,13 @@ fn merge_plugin_skills(
 ) -> SkillRegistry {
     if let Some(plugins) = plugins {
         merge_active_plugin_skills(&mut merged, plugins);
-        for (root, authority, reference) in
-            crate::extension_host::skills::roots_for_plugins(plugins)
-        {
+        for (snapshots, authority, reference) in host_port::native_roots(plugins) {
             merge_plugin_skill_snapshots(
                 &mut merged,
                 &authority.plugin_id.to_string(),
                 &authority.plugin_name.clone(),
                 &authority,
-                root.snapshots,
+                snapshots,
                 Some(reference),
             );
         }
@@ -1212,24 +1247,24 @@ pub fn clear_skill_discovery_cache() {
         .write()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .clear();
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     record_discovery_cache_drop();
 }
 
 /// How often the process-wide cache has been emptied. Tests that assert a
 /// cache hit share that cache with every other test in the process, so they
 /// use this to tell "the cache missed" from "another test emptied it".
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 static DISCOVERY_CACHE_DROPS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 fn record_discovery_cache_drop() {
     DISCOVERY_CACHE_DROPS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[must_use]
-pub(crate) fn discovery_cache_drops() -> u64 {
+pub fn discovery_cache_drops() -> u64 {
     DISCOVERY_CACHE_DROPS.load(std::sync::atomic::Ordering::SeqCst)
 }
 
@@ -1257,7 +1292,7 @@ fn cached_merged_discovery(dirs: Vec<PathBuf>, workspace: Option<PathBuf>) -> Sk
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     if write.len() >= MAX_DISCOVERY_CACHE_ENTRIES {
         write.clear();
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-support"))]
         record_discovery_cache_drop();
     }
     write.insert(
@@ -1328,7 +1363,7 @@ fn merge_plugin_skill_snapshots(
     plugin_name: &str,
     authority: &codewhale_config::PluginAuthority,
     snapshots: Vec<codewhale_plugins::types::PluginSkillSnapshot>,
-    native_registration: Option<crate::extension_host::skills::NativeSkillRef>,
+    native_registration: Option<NativeSkillRef>,
 ) {
     for snapshot in snapshots {
         let qualified_name = format!("{plugin_name}:{}", snapshot.name);
@@ -1366,8 +1401,8 @@ fn merge_plugin_skill_snapshots(
     }
 }
 
-#[cfg(test)]
-pub(crate) fn discover_for_workspace_and_dir_with_home(
+#[cfg(any(test, feature = "test-support"))]
+pub fn discover_for_workspace_and_dir_with_home(
     workspace: &Path,
     skills_dir: &Path,
     home_dir: Option<&Path>,
@@ -1380,8 +1415,8 @@ pub(crate) fn discover_for_workspace_and_dir_with_home(
     )
 }
 
-#[cfg(test)]
-pub(crate) fn discover_for_workspace_and_dir_with_home_and_mode(
+#[cfg(any(test, feature = "test-support"))]
+pub fn discover_for_workspace_and_dir_with_home_and_mode(
     workspace: &Path,
     skills_dir: &Path,
     home_dir: Option<&Path>,
@@ -1392,8 +1427,8 @@ pub(crate) fn discover_for_workspace_and_dir_with_home_and_mode(
     )
 }
 
-#[cfg(test)]
-pub(crate) fn discover_for_workspace_and_dir_with_home_and_mode_and_plugins(
+#[cfg(any(test, feature = "test-support"))]
+pub fn discover_for_workspace_and_dir_with_home_and_mode_and_plugins(
     workspace: &Path,
     skills_dir: &Path,
     home_dir: Option<&Path>,
@@ -1407,7 +1442,7 @@ pub(crate) fn discover_for_workspace_and_dir_with_home_and_mode_and_plugins(
 
 /// Test-only convenience wrapper for rendering the system-prompt skills block
 /// from every workspace candidate directory plus the global default (#432).
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[must_use]
 pub fn render_available_skills_context_for_workspace(workspace: &Path) -> Option<String> {
     let registry = discover_in_workspace(workspace);
@@ -1420,6 +1455,7 @@ pub fn render_available_skills_context_for_workspace_with_mode_and_plugins(
     mode: SkillDiscoveryMode,
     locale: &str,
     plugins: Option<&codewhale_plugins::PluginRegistry>,
+    listing_config: SkillListingConfig,
     budget_chars: usize,
 ) -> Option<String> {
     let registry = discover_from_directories_in_workspace(
@@ -1428,7 +1464,14 @@ pub fn render_available_skills_context_for_workspace_with_mode_and_plugins(
         plugins,
     )
     .into_enabled();
-    render_skills_block_with_configured_root(&registry, locale, workspace, None, budget_chars)
+    render_skills_block_with_configured_root(
+        &registry,
+        locale,
+        workspace,
+        None,
+        listing_config,
+        budget_chars,
+    )
 }
 
 /// Progressive-disclosure contract: the model sees a bounded page of skill
@@ -1437,8 +1480,8 @@ pub fn render_available_skills_context_for_workspace_with_mode_and_plugins(
 ///
 /// Test-only single-directory variant. Production callers scan the complete
 /// workspace/global registry through the mode-and-plugin variants above.
-#[cfg(test)]
 #[must_use]
+#[cfg(test)]
 fn render_available_skills_context(skills_dir: &Path) -> Option<String> {
     let registry = SkillRegistry::discover(skills_dir);
     render_skills_block(&registry, "en", skills_dir)
@@ -1451,6 +1494,7 @@ pub fn render_available_skills_context_for_workspace_and_dir_with_mode_and_plugi
     mode: SkillDiscoveryMode,
     locale: &str,
     plugins: Option<&codewhale_plugins::PluginRegistry>,
+    listing_config: SkillListingConfig,
     budget_chars: usize,
 ) -> Option<String> {
     let registry = discover_from_directories_in_workspace(
@@ -1470,6 +1514,7 @@ pub fn render_available_skills_context_for_workspace_and_dir_with_mode_and_plugi
         locale,
         workspace,
         configured_skills_root,
+        listing_config,
         budget_chars,
     )
 }
@@ -1624,14 +1669,15 @@ fn prompt_skill_path(
     Some(privacy_safe_skill_path(path, workspace))
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 fn render_skills_block(registry: &SkillRegistry, locale: &str, workspace: &Path) -> Option<String> {
     render_skills_block_with_configured_root(
         registry,
         locale,
         workspace,
         None,
-        skills_prompt_budget_chars(None),
+        SkillListingConfig::default(),
+        SkillListingConfig::default().budget_chars(None),
     )
 }
 
@@ -1686,8 +1732,8 @@ impl IndexRow<'_> {
         self.trigger.as_deref().map_or(0, |t| t.chars().count())
     }
 
-    fn exceeds_index_cap(&self) -> bool {
-        self.summary_len() + self.trigger_len() > MAX_SKILL_DESCRIPTION_CHARS
+    fn exceeds_index_cap(&self, cap: usize) -> bool {
+        self.summary_len() + self.trigger_len() > cap
     }
 }
 
@@ -1738,7 +1784,7 @@ fn description_split(row: &IndexRow<'_>, cap: usize) -> (usize, usize) {
     (cap.saturating_sub(trigger_share).min(s), trigger_share)
 }
 
-pub(crate) fn description_exceeds_index_cap(description: &str) -> bool {
+pub fn description_exceeds_index_cap(description: &str, cap: usize) -> bool {
     let (summary, trigger) = split_trigger(description);
     IndexRow {
         name: "",
@@ -1746,13 +1792,13 @@ pub(crate) fn description_exceeds_index_cap(description: &str) -> bool {
         trigger,
         source: None,
     }
-    .exceeds_index_cap()
+    .exceeds_index_cap(cap)
 }
 
 /// Render the ambient skill index in three tiers, never dropping a skill's
 /// name while the budget can hold it:
 ///
-/// 1. Full descriptions (each capped at [`MAX_SKILL_DESCRIPTION_CHARS`]).
+/// 1. Full descriptions, each capped by the configured description limit.
 /// 2. Proportionally shortened descriptions when descriptions are the
 ///    bottleneck.
 /// 3. Names only, with an omission line as the last resort.
@@ -1761,9 +1807,10 @@ fn render_skills_block_with_configured_root(
     locale: &str,
     workspace: &Path,
     configured_skills_root: Option<&Path>,
+    listing_config: SkillListingConfig,
     budget_chars: usize,
 ) -> Option<String> {
-    let warnings = ambient_warnings(registry.warnings());
+    let mut warnings = ambient_warnings(registry.warnings());
     if registry.is_empty() && warnings.is_empty() {
         return None;
     }
@@ -1817,6 +1864,17 @@ Skills are optional instruction packs. This index exposes routing metadata; bodi
         })
         .collect();
 
+    for row in rows.iter().filter(|row| {
+        row.exceeds_index_cap(listing_config.max_description_chars) && row.trigger.is_none()
+    }) {
+        let warning = format!(
+            "Skill `{}` description exceeds the {}-character index limit without a `Use when:` trigger; `load_skill` returns its full text.",
+            row.name, listing_config.max_description_chars
+        );
+        logging::warn(&warning);
+        warnings.push(warning);
+    }
+
     // Reserve using the model-selectable total: an actual omitted count can
     // never exceed it. This remains safe for catalogues above 9,999 entries.
     let skill_omission_reserve = omitted_skills_line(rows.len()).chars().count();
@@ -1834,7 +1892,7 @@ Skills are optional instruction packs. This index exposes routing metadata; bodi
     let warning_slice = if warnings.is_empty() {
         0
     } else {
-        (budget_chars / 5).min(8 * (MAX_SKILL_DESCRIPTION_CHARS + 4))
+        (budget_chars / 5).min(8 * (DEFAULT_SKILL_DESCRIPTION_CHARS + 4))
     };
     let index_budget = budget_chars.saturating_sub(fixed + warning_slice);
     let shortened_budget = index_budget.saturating_sub(shortened_reserve);
@@ -1847,12 +1905,15 @@ Skills are optional instruction packs. This index exposes routing metadata; bodi
     let full_lines: Vec<String> = rows
         .iter()
         .map(|row| {
-            let (s, t) = description_split(row, MAX_SKILL_DESCRIPTION_CHARS);
+            let (s, t) = description_split(row, listing_config.max_description_chars);
             row.render(s, t)
         })
         .collect();
     let full_total: usize = full_lines.iter().map(|l| l.chars().count()).sum();
-    let capped = rows.iter().filter(|row| row.exceeds_index_cap()).count();
+    let capped = rows
+        .iter()
+        .filter(|row| row.exceeds_index_cap(listing_config.max_description_chars))
+        .count();
     let full_budget = if capped > 0 {
         shortened_budget
     } else {
@@ -1874,7 +1935,7 @@ Skills are optional instruction packs. This index exposes routing metadata; bodi
         let desc_full: usize = rows
             .iter()
             .map(|row| {
-                let (s, t) = description_split(row, MAX_SKILL_DESCRIPTION_CHARS);
+                let (s, t) = description_split(row, listing_config.max_description_chars);
                 s + t + if t > 0 { TRIGGER_JOIN.len() } else { 0 }
             })
             .sum();
@@ -1884,7 +1945,7 @@ Skills are optional instruction packs. This index exposes routing metadata; bodi
             .then(|| {
                 rows.iter()
                     .map(|row| {
-                        let (s, t) = description_split(row, MAX_SKILL_DESCRIPTION_CHARS);
+                        let (s, t) = description_split(row, listing_config.max_description_chars);
                         let overhead = if t > 0 { TRIGGER_JOIN.len() } else { 0 };
                         let natural = s + t;
                         let cap = ((natural + overhead) * desc_avail / desc_full)
@@ -1951,7 +2012,7 @@ Skills are optional instruction packs. This index exposes routing metadata; bodi
                 "- {}\n",
                 truncate_for_prompt(
                     &sanitize_prompt_path_text(warning, workspace, configured_skills_root),
-                    MAX_SKILL_DESCRIPTION_CHARS,
+                    DEFAULT_SKILL_DESCRIPTION_CHARS,
                 )
             );
             let len = line.chars().count();
@@ -2010,7 +2071,7 @@ fn shortened_skills_line(shortened: usize, total: usize) -> String {
     )
 }
 
-pub(crate) fn shortened_skills_note(block: &str) -> Option<String> {
+pub fn shortened_skills_note(block: &str) -> Option<String> {
     block.lines().find_map(|line| {
         let rest = line.strip_prefix(SHORTENED_SKILLS_PREFIX)?;
         let (counts, _) = rest.split_once(';')?;

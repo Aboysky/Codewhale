@@ -1,4 +1,5 @@
 {
+  "SkillsIndexDescriptionLimit": "Catatan: deskripsi ini melebihi batas {limit} karakter pada indeks model. Teks lengkap tersedia lewat load_skill; kondisi Use when: membantu mempertahankan kriteria penggunaan saat dipersingkat.",
   "ReasoningOnlyRetryBody": "hanya penalaran {attempt}/{limit}; tanpa jawaban atau panggilan alat; {action}",
   "OutputLimitAnswerRetryBody": "batas keluaran {attempt}/{limit}; tanpa jawaban atau panggilan alat; {action}",
   "AnswerRetryActionBare": "meminta jawaban kembali",

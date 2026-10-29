@@ -475,11 +475,11 @@ owner = "crates/memory"
 [[feature]]
 id = "skills"
 name = "Skills"
-summary = "Installs and loads trusted instruction packages with owned-root precedence and separate user/model invocation controls."
+summary = "Trusted instruction packages with owned roots, invocation controls and shared, configurable index limits."
 status = "stable"
 surfaces = { tui = "stable", api = "stable" }
 docs = "docs/SKILLS.md"
-owner = "crates/tui/src/skills"
+owner = "crates/skills/src"
 
 [[feature]]
 id = "plugins"

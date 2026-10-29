@@ -1160,7 +1160,7 @@ pub enum ViewEvent {
     /// import / update / remove / trust action. The host runs the mutation
     /// controller and rebuilds the open manager view.
     SkillMutationRequested {
-        request: crate::skills::mutation::SkillMutationRequest,
+        request: codewhale_skills::mutation::SkillMutationRequest,
     },
     /// Toggle owned-only vs compatible audit scan inside the skills manager.
     SkillsManagerToggleCompatible,

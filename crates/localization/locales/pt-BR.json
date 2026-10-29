@@ -1,4 +1,5 @@
 {
+  "SkillsIndexDescriptionLimit": "Nota: esta descrição excede o limite de {limit} caracteres do índice do modelo. O texto completo está em load_skill; um gatilho Use when: ajuda a preservar o critério de uso ao encurtar.",
   "ReasoningOnlyRetryBody": "somente raciocínio {attempt}/{limit}; sem resposta nem chamada de ferramenta; {action}",
   "OutputLimitAnswerRetryBody": "limite de saída {attempt}/{limit}; sem resposta nem chamada de ferramenta; {action}",
   "AnswerRetryActionBare": "solicitando a resposta novamente",

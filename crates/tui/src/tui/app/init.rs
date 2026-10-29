@@ -646,7 +646,7 @@ impl App {
             crate::work_graph::new_shared_work_runtime(todos.clone(), plan_state.clone());
 
         let skills_discovery_mode =
-            crate::skills::SkillDiscoveryMode::from_config(&config.skills_config());
+            codewhale_skills::SkillDiscoveryMode::from_config(&config.skills_config());
         let skills_dir = resolve_skills_dir(&workspace, &global_skills_dir, config);
         let cached_skills = Self::discover_cached_skills(
             &workspace,
@@ -891,6 +891,9 @@ impl App {
             mcp_config_path: mcp_config_path.clone(),
             skills_dir,
             skills_discovery_mode,
+            skills_listing_config: codewhale_skills::SkillListingConfig::from_config(
+                &config.skills_config(),
+            ),
             project_context_pack_enabled: config.project_context_pack_enabled(),
             memory_path,
             use_memory,

@@ -1,4 +1,5 @@
 {
+  "SkillsIndexDescriptionLimit": "提示：此描述超過模型索引的 {limit} 字元上限。load_skill 可傳回完整文字；加入 Use when: 觸發條件有助於截短時保留路由資訊。",
   "ReasoningOnlyRetryBody": "僅有推理 {attempt}/{limit}；沒有回答或工具呼叫；{action}",
   "OutputLimitAnswerRetryBody": "達到輸出上限 {attempt}/{limit}；沒有回答或工具呼叫；{action}",
   "AnswerRetryActionBare": "重新請求回答",

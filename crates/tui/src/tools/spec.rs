@@ -613,7 +613,8 @@ pub struct ToolExecutionState {
     /// Explicit skills directory used for model-visible skill discovery.
     pub skills_dir: Option<PathBuf>,
     /// Restrict skill discovery to CodeWhale-owned roots plus `skills_dir`.
-    pub skills_discovery_mode: crate::skills::SkillDiscoveryMode,
+    pub skills_discovery_mode: codewhale_skills::SkillDiscoveryMode,
+    pub skills_listing_config: codewhale_skills::SkillListingConfig,
     /// Immutable registry snapshot for this workspace/engine context.
     pub plugin_registry: Option<Arc<codewhale_plugins::PluginRegistry>>,
     /// Elevated sandbox policy override (used when retrying after sandbox denial).
@@ -794,7 +795,8 @@ impl ToolContext {
                 trust_mode,
                 notes_path: notes_path.into(),
                 skills_dir: None,
-                skills_discovery_mode: crate::skills::SkillDiscoveryMode::Compatible,
+                skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
+                skills_listing_config: codewhale_skills::SkillListingConfig::default(),
                 plugin_registry: None,
                 elevated_sandbox_policy: None,
                 persist_services_enabled: false,
@@ -924,10 +926,12 @@ impl ToolContext {
     pub fn with_skills_config(
         mut self,
         skills_dir: impl Into<PathBuf>,
-        discovery_mode: crate::skills::SkillDiscoveryMode,
+        discovery_mode: codewhale_skills::SkillDiscoveryMode,
+        listing_config: codewhale_skills::SkillListingConfig,
     ) -> Self {
         self.skills_dir = Some(skills_dir.into());
         self.skills_discovery_mode = discovery_mode;
+        self.skills_listing_config = listing_config;
         self
     }
 

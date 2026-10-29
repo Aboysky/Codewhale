@@ -1,4 +1,5 @@
 {
+  "SkillsIndexDescriptionLimit": "Hinweis: Diese Beschreibung überschreitet die Grenze von {limit} Zeichen im Modellindex. load_skill liefert den vollständigen Text; eine Use when:-Bedingung hilft, den Einsatzzweck beim Kürzen zu erhalten.",
   "ReasoningOnlyRetryBody": "nur Überlegungen {attempt}/{limit}; keine Antwort oder Werkzeuganfrage; {action}",
   "OutputLimitAnswerRetryBody": "Ausgabelimit {attempt}/{limit}; keine Antwort oder Werkzeuganfrage; {action}",
   "AnswerRetryActionBare": "Antwort wird erneut angefordert",

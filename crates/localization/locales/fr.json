@@ -1,4 +1,5 @@
 {
+  "SkillsIndexDescriptionLimit": "Remarque : cette description dépasse la limite de {limit} caractères de l’index du modèle. load_skill donne le texte complet ; une condition Use when: aide à préserver le critère d’utilisation lors du raccourcissement.",
   "ReasoningOnlyRetryBody": "réflexion seule {attempt}/{limit} ; aucune réponse ni appel d’outil ; {action}",
   "OutputLimitAnswerRetryBody": "limite de sortie {attempt}/{limit} ; aucune réponse ni appel d’outil ; {action}",
   "AnswerRetryActionBare": "nouvelle demande de réponse",

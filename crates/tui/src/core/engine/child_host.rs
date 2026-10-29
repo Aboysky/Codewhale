@@ -73,6 +73,7 @@ impl Engine {
             config.skills_dir = skills_dir.clone();
         }
         config.skills_discovery_mode = authority.runtime.context.skills_discovery_mode;
+        config.skills_listing_config = authority.runtime.context.skills_listing_config;
         config.features = authority.runtime.context.features.clone();
         config.snapshots_enabled = false;
         config.memory_enabled = false;

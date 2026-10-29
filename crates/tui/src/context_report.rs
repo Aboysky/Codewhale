@@ -278,6 +278,7 @@ pub fn build_context_report(app: &App) -> PromptSourceMap {
         Some(&app.skills_dir),
         app.project_context_pack_enabled,
         app.skills_discovery_mode,
+        app.skills_listing_config,
         app.ui_locale.tag(),
         app.mode,
         Some(app.plugin_registry.as_ref()),
@@ -421,7 +422,8 @@ pub fn build_headless_context_report(config: &Config, workspace: &Path) -> Promp
         workspace,
         Some(&selected_skills_dir),
         config.project_context_pack_enabled(),
-        crate::skills::SkillDiscoveryMode::from_config(&config.skills_config()),
+        codewhale_skills::SkillDiscoveryMode::from_config(&config.skills_config()),
+        codewhale_skills::SkillListingConfig::from_config(&config.skills_config()),
         "en",
         AppMode::Agent,
         None,
@@ -498,7 +500,8 @@ fn base_source_entries(
     workspace: &Path,
     skills_dir: Option<&Path>,
     project_pack_enabled: bool,
-    skills_discovery_mode: crate::skills::SkillDiscoveryMode,
+    skills_discovery_mode: codewhale_skills::SkillDiscoveryMode,
+    skills_listing_config: codewhale_skills::SkillListingConfig,
     locale_tag: &str,
     mode: AppMode,
     plugin_registry: Option<&codewhale_plugins::PluginRegistry>,
@@ -662,21 +665,23 @@ fn base_source_entries(
     }
 
     let skill_discovery_mode = skills_discovery_mode;
-    let skills_budget = crate::skills::skills_prompt_budget_chars(context_window_tokens);
+    let skills_budget = skills_listing_config.budget_chars(context_window_tokens);
     let skills_block = match skills_dir {
-        Some(dir) => crate::skills::render_available_skills_context_for_workspace_and_dir_with_mode_and_plugins(
+        Some(dir) => codewhale_skills::render_available_skills_context_for_workspace_and_dir_with_mode_and_plugins(
             workspace,
             dir,
             skill_discovery_mode,
             locale_tag,
             plugin_registry,
+            skills_listing_config,
             skills_budget,
         ),
-        None => crate::skills::render_available_skills_context_for_workspace_with_mode_and_plugins(
+        None => codewhale_skills::render_available_skills_context_for_workspace_with_mode_and_plugins(
             workspace,
             skill_discovery_mode,
             locale_tag,
             plugin_registry,
+            skills_listing_config,
             skills_budget,
         ),
     };
@@ -690,7 +695,7 @@ fn base_source_entries(
             CountingConfidence::High,
             Some(5),
         );
-        entry.truncation_reason = crate::skills::shortened_skills_note(&block);
+        entry.truncation_reason = codewhale_skills::shortened_skills_note(&block);
         builder.push(entry);
     } else {
         builder.push(SourceEntry::omitted(

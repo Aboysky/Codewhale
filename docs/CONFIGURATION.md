@@ -2700,7 +2700,8 @@ reasoning contract, and all four membership ids omit generic sampling fields.
   broader Claude-ecosystem
   `~/.claude/skills`. First launch installs versioned bundled skills for common
   workflows including skill creation, delegation, MCP/plugin scaffolding,
-  documents, presentations, spreadsheets, PDFs, and Feishu/Lark. Only
+  documents, presentations, spreadsheets and PDFs. Feishu/Lark is outside the
+  default pack. Only
   Codewhale-owned roots (`<workspace>/.codewhale/skills` and
   `~/.codewhale/skills`) are writable install/import targets; compatible harness
   roots stay read-only. Bare `/skills` opens Extensions → Skills (owned-only,
@@ -2708,6 +2709,8 @@ reasoning contract, and all four membership ids omit generic sampling fields.
   for the manager, audit statuses, provenance markers, and mutation rules, and
   [CLAUDE_PLUGIN_COMPAT.md](CLAUDE_PLUGIN_COMPAT.md) for the supported boundary
   between portable `SKILL.md` bundles and Claude Code plugin runtimes.
+- `[skills].listing_max_description_chars` (integer, default `400`, range `1..=40000`): ambient-index description cap, shared by parent and child prompts and `/skills inspect`.
+- `[skills].listing_budget_fraction` (finite number, default `0.05`, greater than `0` and at most `1`): share of the route window for that same index, estimated at four characters per token and clamped to `2400..=40000` characters. Explicit profile fields override inherited values independently; `/context` uses the same resolution. Full skill loading is unaffected.
 - `[skills].scan_codewhale_only` (bool, default `false`): when `true`, session
   skill discovery ignores cross-tool roots such as `.claude/skills`,
   `.opencode/skills`, `.cursor/skills`, and `~/.agents/skills`. Codewhale still

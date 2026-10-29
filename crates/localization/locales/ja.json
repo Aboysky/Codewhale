@@ -1,4 +1,5 @@
 {
+  "SkillsIndexDescriptionLimit": "注：この説明はモデル索引の上限 {limit} 文字を超えています。全文は load_skill で取得できます。Use when: を付けると短縮時にも適用条件を残せます。",
   "ReasoningOnlyRetryBody": "推論のみ {attempt}/{limit}、回答もツール呼び出しもありません。{action}",
   "OutputLimitAnswerRetryBody": "出力上限 {attempt}/{limit}、回答もツール呼び出しもありません。{action}",
   "AnswerRetryActionBare": "回答を再要求します",

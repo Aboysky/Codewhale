@@ -3202,7 +3202,9 @@ pub(crate) fn apply_workspace_runtime_state(app: &mut App, config: &Config, work
     );
     app.skills_dir = crate::tui::app::resolve_skills_dir(&workspace, &config.skills_dir(), config);
     app.skills_discovery_mode =
-        crate::skills::SkillDiscoveryMode::from_config(&config.skills_config());
+        codewhale_skills::SkillDiscoveryMode::from_config(&config.skills_config());
+    app.skills_listing_config =
+        codewhale_skills::SkillListingConfig::from_config(&config.skills_config());
     app.project_context_pack_enabled = config.project_context_pack_enabled();
     app.refresh_skill_cache();
     app.workspace_context = None;

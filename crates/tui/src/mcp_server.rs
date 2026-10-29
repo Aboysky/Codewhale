@@ -23,10 +23,10 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
-use crate::skills::{SkillDiscoveryMode, SkillSource};
 use crate::tools::spec::{ToolError, ToolResult};
 use crate::tools::{ToolContext, ToolRegistryBuilder};
 use codewhale_skill_install::skill_parse::SkillInvocation;
+use codewhale_skills::{SkillDiscoveryMode, SkillSource};
 
 const SUPPORTED_PROTOCOL_VERSIONS: &[ProtocolVersion] = &[
     ProtocolVersion::V_2024_11_05,
@@ -238,7 +238,7 @@ impl McpServer {
         let skills_dir = self.skills_dir.clone();
         let mode = self.skills_mode;
         let discovery = tokio::task::spawn_blocking(move || {
-            let registry = crate::skills::discover_for_workspace_and_dir_with_mode_and_plugins(
+            let registry = codewhale_skills::discover_for_workspace_and_dir_with_mode_and_plugins(
                 &workspace,
                 &skills_dir,
                 mode,
@@ -256,7 +256,7 @@ impl McpServer {
                     let description: String = skill
                         .description
                         .chars()
-                        .take(crate::skills::MAX_SKILL_DESCRIPTION_CHARS)
+                        .take(codewhale_skills::DEFAULT_SKILL_DESCRIPTION_CHARS)
                         .collect();
                     SkillResource {
                         resource: Resource::new(uri, skill.name.clone())

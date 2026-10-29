@@ -34879,12 +34879,12 @@ fn background_skill_cache_refuses_stale_epoch_workspace_and_plugin_snapshot() {
     stale_dir.skills_dir = app.skills_dir.join("different");
     assert!(!app.install_skill_cache_if_current(&stale_dir, 7, result.clone()));
     let mut stale_mode = current.clone();
-    stale_mode.mode = if app.skills_discovery_mode == crate::skills::SkillDiscoveryMode::Compatible
-    {
-        crate::skills::SkillDiscoveryMode::CodeWhaleOnly
-    } else {
-        crate::skills::SkillDiscoveryMode::Compatible
-    };
+    stale_mode.mode =
+        if app.skills_discovery_mode == codewhale_skills::SkillDiscoveryMode::Compatible {
+            codewhale_skills::SkillDiscoveryMode::CodeWhaleOnly
+        } else {
+            codewhale_skills::SkillDiscoveryMode::Compatible
+        };
     assert!(!app.install_skill_cache_if_current(&stale_mode, 7, result.clone()));
     let mut stale_plugins = current.clone();
     stale_plugins.plugins = Arc::new(codewhale_plugins::PluginRegistry::empty(&app.workspace));
@@ -34911,9 +34911,9 @@ async fn persisted_queued_native_skill_is_denied_after_host_withdrawal() {
     let engine = manager.attach(Arc::clone(&plugins));
     engine.sync().await.unwrap();
     let plugins = engine.plugin_view();
-    let catalog = crate::skills::discover_in_workspace_with_mode_and_plugins(
+    let catalog = codewhale_skills::discover_in_workspace_with_mode_and_plugins(
         fixture.workspace(),
-        crate::skills::SkillDiscoveryMode::CodeWhaleOnly,
+        codewhale_skills::SkillDiscoveryMode::CodeWhaleOnly,
         Some(&plugins),
     );
     let skill = catalog.get("skills-root:quick-check").unwrap();

@@ -4915,7 +4915,7 @@ pub(crate) async fn run_event_loop(
                 #[cfg(test)]
                 let _manager = crate::extension_host::TestManagerGuard::install(manager);
                 let _policy = codewhale_plugins::activation::PolicyScope::propagate(policy);
-                crate::skills::clear_skill_discovery_cache();
+                codewhale_skills::clear_skill_discovery_cache();
                 App::discover_cached_skills(
                     &scan.workspace,
                     &scan.skills_dir,

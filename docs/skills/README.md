@@ -11,8 +11,8 @@ For end-user Skills Manager behavior (ownership, audit, import, trust), see
 To activate:
 - **Claude Code:** copy a skill dir into `.claude/skills/` (project) or your user skills dir.
 - **Codewhale:** copy into a Codewhale-owned root (e.g. `~/.codewhale/skills/`), import via
-  `/skills`, or bundle into `crates/tui/assets/skills/` + register in
-  `crates/tui/src/skills/system.rs` to ship it.
+  `/skills`, or bundle into `crates/skills/assets/skills/` + register in
+  `crates/skills/src/system.rs` to ship it.
 
 The maintainer loop, in order — each skill links the next:
 

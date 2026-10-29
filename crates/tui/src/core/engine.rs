@@ -324,7 +324,8 @@ pub struct EngineConfig {
     pub skills_dir: PathBuf,
     /// Restrict skill discovery to CodeWhale-owned roots plus explicit
     /// `skills_dir` configuration.
-    pub skills_discovery_mode: crate::skills::SkillDiscoveryMode,
+    pub skills_discovery_mode: codewhale_skills::SkillDiscoveryMode,
+    pub skills_listing_config: codewhale_skills::SkillListingConfig,
     /// Immutable plugin authority snapshot scoped to `workspace`. Normal App
     /// hosts provide this explicitly; headless/embed callers that leave it
     /// unset receive a fresh workspace-specific snapshot in [`Engine::new`].
@@ -600,8 +601,9 @@ impl Default for EngineConfig {
             mcp_config_path: PathBuf::from("mcp.json"),
             mcp_oauth_callback_port: None,
             mcp_oauth_callback_url: None,
-            skills_dir: crate::skills::default_skills_dir(),
-            skills_discovery_mode: crate::skills::SkillDiscoveryMode::Compatible,
+            skills_dir: codewhale_skills::default_skills_dir(),
+            skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
+            skills_listing_config: codewhale_skills::SkillListingConfig::default(),
             plugin_registry: None,
             instructions: Vec::new(),
             project_context_pack_enabled: false,
@@ -2363,6 +2365,7 @@ impl Engine {
                     verbosity: config.verbosity.as_deref(),
                     recovery_hint: recovery_hint.as_deref(),
                     skills_discovery_mode: config.skills_discovery_mode,
+                    skills_listing_config: config.skills_listing_config,
                     plugin_registry: Some(plugin_registry.as_ref()),
                     // Matches `current_mode`'s initial value below; a later
                     // `/mode` switch re-runs `refresh_system_prompt`.
@@ -8006,6 +8009,7 @@ impl Engine {
         .with_skills_config(
             self.config.skills_dir.clone(),
             self.config.skills_discovery_mode,
+            self.config.skills_listing_config,
         )
         .with_plugin_registry(Arc::clone(&self.plugin_registry))
         .with_session_objects(crate::rlm::session::SessionObjectSnapshot::new(
@@ -9205,7 +9209,7 @@ impl Engine {
     // KV-cache effect: append-only user history. SessionUpdated persists this
     // warning even when an explicit prompt rebuild replaces the system prefix.
     fn record_project_trust_warning(&mut self) {
-        let warning = crate::skills::untrusted_project_skills_warning(
+        let warning = codewhale_skills::untrusted_project_skills_warning(
             &self.session.workspace,
             Some(&self.config.skills_dir),
             self.config.skills_discovery_mode,
@@ -9719,6 +9723,7 @@ impl Engine {
                 verbosity: context.verbosity.as_deref(),
                 recovery_hint: recovery_hint.as_deref(),
                 skills_discovery_mode: self.config.skills_discovery_mode,
+                skills_listing_config: self.config.skills_listing_config,
                 plugin_registry: Some(self.plugin_registry.as_ref()),
                 mode: context.mode,
             },

@@ -12608,10 +12608,13 @@ fn fresh_forked_and_nested_subagents_share_authority_bound_skill_catalogs() {
     let system =
         build_subagent_system_prompt_with_skills(&FleetRole::Reviewer, &assignment, &context);
 
-    assert!(system.contains("`native-review`"), "{system}");
-    assert!(system.contains("`demo:review`"), "{system}");
-    assert!(system.contains("reviewed plugin demo id="), "{system}");
-    assert!(system.contains("generation="), "{system}");
+    assert!(system.contains("- native-review:"), "{system}");
+    assert!(system.contains("- demo:review:"), "{system}");
+    assert!(
+        system.contains("reviewed plugin snapshot: demo ("),
+        "{system}"
+    );
+    assert!(system.contains("use load_skill"), "{system}");
     assert!(
         !system.contains(&plugin_root.display().to_string()),
         "{system}"
@@ -12644,7 +12647,7 @@ fn fresh_forked_and_nested_subagents_share_authority_bound_skill_catalogs() {
         forked
             .iter()
             .filter(|message| message.role == "system")
-            .any(|message| message_text(message).contains("`demo:review`")),
+            .any(|message| message_text(message).contains("- demo:review:")),
         "forked children must receive the same resolved catalog"
     );
 
@@ -12664,7 +12667,7 @@ fn fresh_forked_and_nested_subagents_share_authority_bound_skill_catalogs() {
         &assignment,
         &nested_runtime.context,
     );
-    assert!(nested_system.contains("`demo:review`"), "{nested_system}");
+    assert!(nested_system.contains("- demo:review:"), "{nested_system}");
 
     let isolated_workspace = tmp.path().join("isolated-worktree");
     std::fs::create_dir_all(&isolated_workspace).expect("isolated worktree");
@@ -12677,7 +12680,7 @@ fn fresh_forked_and_nested_subagents_share_authority_bound_skill_catalogs() {
     let isolated_system =
         build_subagent_system_prompt_with_skills(&FleetRole::Reviewer, &assignment, &isolated);
     assert!(
-        !isolated_system.contains("`demo:review`"),
+        !isolated_system.contains("- demo:review:"),
         "workspace plugin authority must not leak into another worktree: {isolated_system}"
     );
 }

@@ -1,4 +1,5 @@
 {
+  "SkillsIndexDescriptionLimit": "Lưu ý: mô tả này vượt giới hạn {limit} ký tự của chỉ mục mô hình. load_skill trả về toàn văn; điều kiện Use when: giúp giữ tiêu chí sử dụng khi rút gọn.",
   "ReasoningOnlyRetryBody": "chỉ có suy luận {attempt}/{limit}; không có câu trả lời hay lệnh gọi công cụ; {action}",
   "OutputLimitAnswerRetryBody": "giới hạn đầu ra {attempt}/{limit}; không có câu trả lời hay lệnh gọi công cụ; {action}",
   "AnswerRetryActionBare": "đang yêu cầu trả lời lại",

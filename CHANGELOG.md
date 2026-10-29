@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Configurable skill routing index:** `[skills] listing_max_description_chars` and `listing_budget_fraction` control the shared parent/child catalogue. Defaults stay 400 characters and 5% of the route window, within the existing total bounds. Load warnings, localized inspect notes and `/context` explain shortening; full skill loading stays available. (#7073 / CW-7531)
+
 - **Compact approvals keep their authority visible:** cards show three choices and default to Deny. An exact saved rule requires its scope preview on screen. Shortcuts for additional actions require opening Details; a hidden saved-rule choice never falls back to granting the session.
 - **Quicker everyday navigation:** top-level help separates everyday and advanced commands, `doctor --all` expands path/backend details, and the launch screen labels how to resume recent work. Up selects the newest recent session. Whale cameos stay out of transcript text.
 - **Session-window diagnostics:** the audit log records when a saved window starts a new journal root while retaining the previous branch, helping distinguish window replacement from lost durable history.
@@ -51,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   height (#7049).
 
 ### Changed
+
+- **Skills ownership (internal):** skill discovery, provenance, mutation and bundled skill content move into `codewhale-skills`. Native roots still use the existing host manager's selection and lifetime checks. (S20, CW-6129)
 
 - **Model pricing ownership (internal):** hand-sourced price metadata and recorded-time rules move into `codewhale-models`; cost auditing and live catalog callers use the same owner. (S24p1, CW-6129)
 

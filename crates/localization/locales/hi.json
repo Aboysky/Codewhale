@@ -1,4 +1,5 @@
 {
+  "SkillsIndexDescriptionLimit": "ध्यान दें: यह विवरण मॉडल सूची की {limit} अक्षरों की सीमा से बड़ा है। पूरा पाठ load_skill से मिलता है; Use when: की शर्त जोड़ने से छोटा करने पर भी उपयोग का संकेत बना रहता है।",
   "ReasoningOnlyRetryBody": "केवल तर्क {attempt}/{limit}; कोई उत्तर या टूल कॉल नहीं; {action}",
   "OutputLimitAnswerRetryBody": "आउटपुट सीमा {attempt}/{limit}; कोई उत्तर या टूल कॉल नहीं; {action}",
   "AnswerRetryActionBare": "उत्तर दोबारा माँगा जा रहा है",

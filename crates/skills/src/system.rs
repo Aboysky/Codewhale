@@ -44,76 +44,76 @@ use sha2::{Digest, Sha256};
 const BUNDLED_SKILL_VERSION: &str = "19";
 
 // ── system & extension (meta) ───────────────────────────────────────────────
-const SKILL_CREATOR_BODY: &str = include_str!("../../assets/skills/skill-creator/SKILL.md");
-const DELEGATE_BODY: &str = include_str!("../../assets/skills/delegate/SKILL.md");
-const PLUGIN_CREATOR_BODY: &str = include_str!("../../assets/skills/plugin-creator/SKILL.md");
-const SKILL_INSTALLER_BODY: &str = include_str!("../../assets/skills/skill-installer/SKILL.md");
-const MCP_BUILDER_BODY: &str = include_str!("../../assets/skills/mcp-builder/SKILL.md");
-const FLEET_MANAGER_BODY: &str = include_str!("../../assets/skills/fleet-manager/SKILL.md");
-const HELP_BODY: &str = include_str!("../../assets/skills/help/SKILL.md");
+const SKILL_CREATOR_BODY: &str = include_str!("../assets/skills/skill-creator/SKILL.md");
+const DELEGATE_BODY: &str = include_str!("../assets/skills/delegate/SKILL.md");
+const PLUGIN_CREATOR_BODY: &str = include_str!("../assets/skills/plugin-creator/SKILL.md");
+const SKILL_INSTALLER_BODY: &str = include_str!("../assets/skills/skill-installer/SKILL.md");
+const MCP_BUILDER_BODY: &str = include_str!("../assets/skills/mcp-builder/SKILL.md");
+const FLEET_MANAGER_BODY: &str = include_str!("../assets/skills/fleet-manager/SKILL.md");
+const HELP_BODY: &str = include_str!("../assets/skills/help/SKILL.md");
 
 // ── end-user workflows ──────────────────────────────────────────────────────
-const HANDOFF_BODY: &str = include_str!("../../assets/skills/handoff/SKILL.md");
-const BEST_OF_N_BODY: &str = include_str!("../../assets/skills/best-of-n/SKILL.md");
-const INTERVIEW_BODY: &str = include_str!("../../assets/skills/interview/SKILL.md");
-const PLAN_BODY: &str = include_str!("../../assets/skills/plan/SKILL.md");
-const IMPLEMENT_BODY: &str = include_str!("../../assets/skills/implement/SKILL.md");
-const DEBUG_BODY: &str = include_str!("../../assets/skills/debug/SKILL.md");
-const TEST_BODY: &str = include_str!("../../assets/skills/test/SKILL.md");
-const REVIEW_BODY: &str = include_str!("../../assets/skills/review/SKILL.md");
-const SECURITY_REVIEW_BODY: &str = include_str!("../../assets/skills/security-review/SKILL.md");
-const SIMPLIFY_BODY: &str = include_str!("../../assets/skills/simplify/SKILL.md");
-const VERIFY_BODY: &str = include_str!("../../assets/skills/verify/SKILL.md");
-const RESEARCH_BODY: &str = include_str!("../../assets/skills/research/SKILL.md");
-const FRONTEND_DESIGN_BODY: &str = include_str!("../../assets/skills/frontend-design/SKILL.md");
-const WEBAPP_TESTING_BODY: &str = include_str!("../../assets/skills/webapp-testing/SKILL.md");
-const DOCUMENT_BODY: &str = include_str!("../../assets/skills/document/SKILL.md");
-const DATAVIZ_BODY: &str = include_str!("../../assets/skills/dataviz/SKILL.md");
-const DOCX_BODY: &str = include_str!("../../assets/skills/docx/SKILL.md");
-const PDF_BODY: &str = include_str!("../../assets/skills/pdf/SKILL.md");
-const PPTX_BODY: &str = include_str!("../../assets/skills/pptx/SKILL.md");
-const XLSX_BODY: &str = include_str!("../../assets/skills/xlsx/SKILL.md");
-const DOCUMENTS_ALIAS_BODY: &str = include_str!("../../assets/skills/documents/SKILL.md");
-const PRESENTATIONS_ALIAS_BODY: &str = include_str!("../../assets/skills/presentations/SKILL.md");
-const SPREADSHEETS_ALIAS_BODY: &str = include_str!("../../assets/skills/spreadsheets/SKILL.md");
+const HANDOFF_BODY: &str = include_str!("../assets/skills/handoff/SKILL.md");
+const BEST_OF_N_BODY: &str = include_str!("../assets/skills/best-of-n/SKILL.md");
+const INTERVIEW_BODY: &str = include_str!("../assets/skills/interview/SKILL.md");
+const PLAN_BODY: &str = include_str!("../assets/skills/plan/SKILL.md");
+const IMPLEMENT_BODY: &str = include_str!("../assets/skills/implement/SKILL.md");
+const DEBUG_BODY: &str = include_str!("../assets/skills/debug/SKILL.md");
+const TEST_BODY: &str = include_str!("../assets/skills/test/SKILL.md");
+const REVIEW_BODY: &str = include_str!("../assets/skills/review/SKILL.md");
+const SECURITY_REVIEW_BODY: &str = include_str!("../assets/skills/security-review/SKILL.md");
+const SIMPLIFY_BODY: &str = include_str!("../assets/skills/simplify/SKILL.md");
+const VERIFY_BODY: &str = include_str!("../assets/skills/verify/SKILL.md");
+const RESEARCH_BODY: &str = include_str!("../assets/skills/research/SKILL.md");
+const FRONTEND_DESIGN_BODY: &str = include_str!("../assets/skills/frontend-design/SKILL.md");
+const WEBAPP_TESTING_BODY: &str = include_str!("../assets/skills/webapp-testing/SKILL.md");
+const DOCUMENT_BODY: &str = include_str!("../assets/skills/document/SKILL.md");
+const DATAVIZ_BODY: &str = include_str!("../assets/skills/dataviz/SKILL.md");
+const DOCX_BODY: &str = include_str!("../assets/skills/docx/SKILL.md");
+const PDF_BODY: &str = include_str!("../assets/skills/pdf/SKILL.md");
+const PPTX_BODY: &str = include_str!("../assets/skills/pptx/SKILL.md");
+const XLSX_BODY: &str = include_str!("../assets/skills/xlsx/SKILL.md");
+const DOCUMENTS_ALIAS_BODY: &str = include_str!("../assets/skills/documents/SKILL.md");
+const PRESENTATIONS_ALIAS_BODY: &str = include_str!("../assets/skills/presentations/SKILL.md");
+const SPREADSHEETS_ALIAS_BODY: &str = include_str!("../assets/skills/spreadsheets/SKILL.md");
 
 // ── everyday ────────────────────────────────────────────────────────────────
-const GITHUB_BODY: &str = include_str!("../../assets/skills/github/SKILL.md");
-const GMAIL_BODY: &str = include_str!("../../assets/skills/gmail/SKILL.md");
-const GOOGLE_CALENDAR_BODY: &str = include_str!("../../assets/skills/google-calendar/SKILL.md");
-const MONEY_BODY: &str = include_str!("../../assets/skills/money/SKILL.md");
-const SPOTIFY_BODY: &str = include_str!("../../assets/skills/spotify/SKILL.md");
-const TTS_BODY: &str = include_str!("../../assets/skills/tts/SKILL.md");
-const PODCAST_BODY: &str = include_str!("../../assets/skills/podcast/SKILL.md");
-const SHOPPING_BODY: &str = include_str!("../../assets/skills/shopping/SKILL.md");
-const FLIGHTS_BODY: &str = include_str!("../../assets/skills/flights/SKILL.md");
-const PHOTOS_BODY: &str = include_str!("../../assets/skills/photos/SKILL.md");
-const IMAGE_SEARCH_BODY: &str = include_str!("../../assets/skills/image-search/SKILL.md");
-const GOALS_BODY: &str = include_str!("../../assets/skills/goals/SKILL.md");
-const FORGET_BODY: &str = include_str!("../../assets/skills/forget/SKILL.md");
-const FEEDBACK_BODY: &str = include_str!("../../assets/skills/feedback/SKILL.md");
+const GITHUB_BODY: &str = include_str!("../assets/skills/github/SKILL.md");
+const GMAIL_BODY: &str = include_str!("../assets/skills/gmail/SKILL.md");
+const GOOGLE_CALENDAR_BODY: &str = include_str!("../assets/skills/google-calendar/SKILL.md");
+const MONEY_BODY: &str = include_str!("../assets/skills/money/SKILL.md");
+const SPOTIFY_BODY: &str = include_str!("../assets/skills/spotify/SKILL.md");
+const TTS_BODY: &str = include_str!("../assets/skills/tts/SKILL.md");
+const PODCAST_BODY: &str = include_str!("../assets/skills/podcast/SKILL.md");
+const SHOPPING_BODY: &str = include_str!("../assets/skills/shopping/SKILL.md");
+const FLIGHTS_BODY: &str = include_str!("../assets/skills/flights/SKILL.md");
+const PHOTOS_BODY: &str = include_str!("../assets/skills/photos/SKILL.md");
+const IMAGE_SEARCH_BODY: &str = include_str!("../assets/skills/image-search/SKILL.md");
+const GOALS_BODY: &str = include_str!("../assets/skills/goals/SKILL.md");
+const FORGET_BODY: &str = include_str!("../assets/skills/forget/SKILL.md");
+const FEEDBACK_BODY: &str = include_str!("../assets/skills/feedback/SKILL.md");
 
 // ── power / explicit-only ───────────────────────────────────────────────────
-const BATCH_BODY: &str = include_str!("../../assets/skills/batch/SKILL.md");
-const DEPENDENCY_UPDATE_BODY: &str = include_str!("../../assets/skills/dependency-update/SKILL.md");
-const RELEASE_BODY: &str = include_str!("../../assets/skills/release/SKILL.md");
+const BATCH_BODY: &str = include_str!("../assets/skills/batch/SKILL.md");
+const DEPENDENCY_UPDATE_BODY: &str = include_str!("../assets/skills/dependency-update/SKILL.md");
+const RELEASE_BODY: &str = include_str!("../assets/skills/release/SKILL.md");
 const CONTRIBUTOR_ONBOARDING_BODY: &str =
-    include_str!("../../assets/skills/contributor-onboarding/SKILL.md");
+    include_str!("../assets/skills/contributor-onboarding/SKILL.md");
 
 // Optional integration (not auto-installed for every user): Feishu body kept for
 // digest/migration helpers only.
-const FEISHU_BODY: &str = include_str!("../../assets/skills/feishu/SKILL.md");
-const MCP_DISCOVERY_BODY: &str = include_str!("../../assets/skills/mcp-discovery/SKILL.md");
+const FEISHU_BODY: &str = include_str!("../assets/skills/feishu/SKILL.md");
+const MCP_DISCOVERY_BODY: &str = include_str!("../assets/skills/mcp-discovery/SKILL.md");
 
 // Legacy v4 body retained solely for digest-based safe retirement (#4691).
-const V4_BEST_PRACTICES_BODY: &str = include_str!("../../assets/skills/v4-best-practices/SKILL.md");
+const V4_BEST_PRACTICES_BODY: &str = include_str!("../assets/skills/v4-best-practices/SKILL.md");
 
 // Generation-10 `mcp-discovery` body, retained solely so an unmodified copy of
 // it can be recognized and refreshed on upgrade. Same digest discipline as the
 // v4 retirement above: an exact byte match proves CodeWhale still owns the
 // file, so replacing it loses no user work.
 const MCP_DISCOVERY_GENERATION_10_BODY: &str =
-    include_str!("../../assets/skills/mcp-discovery/SKILL.generation-10.md");
+    include_str!("../assets/skills/mcp-discovery/SKILL.generation-10.md");
 
 /// Exact bodies a bundled skill shipped in an earlier generation.
 ///
@@ -126,43 +126,43 @@ const SUPERSEDED_BODIES: &[(&str, &str)] = &[
     ("mcp-discovery", MCP_DISCOVERY_GENERATION_10_BODY),
     (
         "gmail",
-        include_str!("../../assets/skills/gmail/SKILL.generation-13.md"),
+        include_str!("../assets/skills/gmail/SKILL.generation-13.md"),
     ),
     (
         "google-calendar",
-        include_str!("../../assets/skills/google-calendar/SKILL.generation-13.md"),
+        include_str!("../assets/skills/google-calendar/SKILL.generation-13.md"),
     ),
     (
         "photos",
-        include_str!("../../assets/skills/photos/SKILL.generation-13.md"),
+        include_str!("../assets/skills/photos/SKILL.generation-13.md"),
     ),
     (
         "forget",
-        include_str!("../../assets/skills/forget/SKILL.generation-13.md"),
+        include_str!("../assets/skills/forget/SKILL.generation-13.md"),
     ),
     (
         "spotify",
-        include_str!("../../assets/skills/spotify/SKILL.generation-13.md"),
+        include_str!("../assets/skills/spotify/SKILL.generation-13.md"),
     ),
     (
         "plugin-creator",
-        include_str!("../../assets/skills/plugin-creator/SKILL.generation-13.md"),
+        include_str!("../assets/skills/plugin-creator/SKILL.generation-13.md"),
     ),
     (
         "plugin-creator",
-        include_str!("../../assets/skills/plugin-creator/SKILL.generation-15.md"),
+        include_str!("../assets/skills/plugin-creator/SKILL.generation-15.md"),
     ),
     (
         "plugin-creator",
-        include_str!("../../assets/skills/plugin-creator/SKILL.generation-16.md"),
+        include_str!("../assets/skills/plugin-creator/SKILL.generation-16.md"),
     ),
     (
         "help",
-        include_str!("../../assets/skills/help/SKILL.generation-14.md"),
+        include_str!("../assets/skills/help/SKILL.generation-14.md"),
     ),
     (
         "pdf",
-        include_str!("../../assets/skills/pdf/SKILL.generation-14.md"),
+        include_str!("../assets/skills/pdf/SKILL.generation-14.md"),
     ),
 ];
 

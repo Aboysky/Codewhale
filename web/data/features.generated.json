@@ -2,7 +2,7 @@
   "format": "codewhale.features.v1",
   "source": {
     "path": "docs/features.toml",
-    "sha256": "1b3d3e7f846d8d455596f6c39f0740b9f201ad223f965447a8f5ec57b77bf83b"
+    "sha256": "fbccb73908b32c14317379945a01db61849263856cb5b4c93fcb4410a217675d"
   },
   "features": [
     {
@@ -591,7 +591,7 @@
     {
       "id": "skills",
       "name": "Skills",
-      "summary": "Installs and loads trusted instruction packages with owned-root precedence and separate user/model invocation controls.",
+      "summary": "Trusted instruction packages with owned roots, invocation controls and shared, configurable index limits.",
       "status": "stable",
       "surfaces": {
         "tui": "stable",

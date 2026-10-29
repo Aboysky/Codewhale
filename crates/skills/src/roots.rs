@@ -446,7 +446,7 @@ pub fn codewhale_workspace_skills_dir(workspace: &Path) -> Option<PathBuf> {
 
 /// Filter candidate paths to existing directories, preserving order and
 /// de-duplicating by canonical path.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[must_use]
 pub fn existing_skill_dirs(candidates: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf> {
     let mut out = Vec::new();
@@ -745,7 +745,7 @@ fn insert_configured_root(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::skills::SkillDiscoveryMode;
+    use crate::SkillDiscoveryMode;
     use tempfile::TempDir;
 
     fn write_dir(path: &Path) {
@@ -773,7 +773,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
-        crate::test_support::trust_workspace(&workspace);
+        codewhale_runtime::test_support::trust_workspace(&workspace);
         write_dir(&workspace.join(".agents").join("skills"));
         write_dir(&workspace.join("skills"));
         write_dir(&workspace.join(".claude").join("skills"));
@@ -832,7 +832,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let workspace = tmp.path().join("ws");
         let home = tmp.path().join("home");
-        crate::test_support::trust_workspace(&workspace);
+        codewhale_runtime::test_support::trust_workspace(&workspace);
         write_dir(&workspace.join(".agents").join("skills"));
         write_dir(&workspace.join(".codewhale").join("skills"));
         write_dir(&home.join(".codewhale").join("skills"));
@@ -891,7 +891,7 @@ mod tests {
     fn flat_workspace_root_remains_audit_only_until_opted_in() {
         let tmp = TempDir::new().unwrap();
         let workspace = tmp.path().join("ws");
-        crate::test_support::trust_workspace(&workspace);
+        codewhale_runtime::test_support::trust_workspace(&workspace);
         let flat = workspace.join("skills");
         write_dir(&flat);
         let catalog = SkillRootCatalog::build(&workspace, None, None);

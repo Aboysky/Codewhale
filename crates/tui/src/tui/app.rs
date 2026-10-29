@@ -199,12 +199,13 @@ pub(crate) fn resolve_skills_dir(
     config: &Config,
 ) -> PathBuf {
     let admitted =
-        |dir: &Path| crate::skills::skills_dir_allowed_by_workspace_trust(workspace, dir);
+        |dir: &Path| codewhale_skills::skills_dir_allowed_by_workspace_trust(workspace, dir);
     if config.skills_config().scan_codewhale_only() {
         if config.skills_dir.is_some() {
             return global_skills_dir.to_path_buf();
         }
-        if let Some(codewhale_skills_dir) = crate::skills::codewhale_workspace_skills_dir(workspace)
+        if let Some(codewhale_skills_dir) =
+            codewhale_skills::codewhale_workspace_skills_dir(workspace)
             && admitted(&codewhale_skills_dir)
         {
             return codewhale_skills_dir;
@@ -232,7 +233,7 @@ pub(crate) fn resolve_skills_dir(
         return global_skills_dir.to_path_buf();
     }
     if config.skills_dir.is_none()
-        && let Some(global_agents) = crate::skills::agents_global_skills_dir()
+        && let Some(global_agents) = codewhale_skills::agents_global_skills_dir()
         && global_agents.exists()
     {
         return global_agents;
@@ -1550,7 +1551,7 @@ pub(crate) struct SkillCacheScope {
     pub(crate) epoch: u64,
     pub(crate) workspace: std::path::PathBuf,
     pub(crate) skills_dir: std::path::PathBuf,
-    pub(crate) mode: crate::skills::SkillDiscoveryMode,
+    pub(crate) mode: codewhale_skills::SkillDiscoveryMode,
     pub(crate) plugins: std::sync::Arc<codewhale_plugins::PluginRegistry>,
 }
 
@@ -1824,7 +1825,8 @@ pub struct App {
     pub legacy_plugin_tools_dir: Option<PathBuf>,
     pub mcp_config_path: PathBuf,
     pub skills_dir: PathBuf,
-    pub skills_discovery_mode: crate::skills::SkillDiscoveryMode,
+    pub skills_discovery_mode: codewhale_skills::SkillDiscoveryMode,
+    pub skills_listing_config: codewhale_skills::SkillListingConfig,
     /// Whether the optional project context pack was enabled when this
     /// session loaded its configuration. Context diagnostics consult this
     /// source of truth even before the first system prompt is assembled.
@@ -2316,7 +2318,7 @@ pub struct App {
     pub active_skill: Option<String>,
     /// Content-bound plugin authority carried with `active_skill`, when the
     /// selected skill came from a reviewed plugin bundle.
-    pub active_skill_provenance: Option<crate::skills::SkillProvenance>,
+    pub active_skill_provenance: Option<codewhale_skills::SkillProvenance>,
     /// Cached (name, description) pairs from the skill registry.
     /// Populated once at startup and refreshed on install/uninstall so
     /// the slash menu can show skills without filesystem I/O on every keystroke.
@@ -3254,10 +3256,10 @@ impl App {
     pub(crate) fn discover_cached_skills(
         workspace: &std::path::Path,
         skills_dir: &std::path::Path,
-        discovery_mode: crate::skills::SkillDiscoveryMode,
+        discovery_mode: codewhale_skills::SkillDiscoveryMode,
         plugins: &codewhale_plugins::PluginRegistry,
     ) -> Vec<(String, String)> {
-        crate::skills::discover_for_workspace_and_dir_with_mode_and_plugins(
+        codewhale_skills::discover_for_workspace_and_dir_with_mode_and_plugins(
             workspace,
             skills_dir,
             discovery_mode,
@@ -3285,7 +3287,7 @@ impl App {
     }
 
     pub fn refresh_skill_cache(&mut self) {
-        crate::skills::clear_skill_discovery_cache();
+        codewhale_skills::clear_skill_discovery_cache();
         let skills_dir = self.skills_dir.clone();
         let cached_skills = Self::discover_cached_skills(
             &self.workspace,

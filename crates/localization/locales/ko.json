@@ -1,4 +1,5 @@
 {
+  "SkillsIndexDescriptionLimit": "참고: 이 설명은 모델 색인의 {limit}자 제한을 초과합니다. load_skill로 전체 내용을 볼 수 있습니다. Use when: 조건을 넣으면 축약 시에도 적용 조건을 보존하기 쉽습니다.",
   "ReasoningOnlyRetryBody": "추론만 반환 {attempt}/{limit}; 답변이나 도구 호출 없음; {action}",
   "OutputLimitAnswerRetryBody": "출력 한도 {attempt}/{limit}; 답변이나 도구 호출 없음; {action}",
   "AnswerRetryActionBare": "답변을 다시 요청합니다",

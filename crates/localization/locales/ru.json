@@ -1,4 +1,5 @@
 {
+  "SkillsIndexDescriptionLimit": "Примечание: описание превышает лимит {limit} символов в индексе модели. Полный текст доступен через load_skill; условие Use when: помогает сохранить критерий применения при сокращении.",
   "ReasoningOnlyRetryBody": "только рассуждение {attempt}/{limit}; нет ответа или вызова инструмента; {action}",
   "OutputLimitAnswerRetryBody": "лимит вывода {attempt}/{limit}; нет ответа или вызова инструмента; {action}",
   "AnswerRetryActionBare": "повторно запрашивается ответ",

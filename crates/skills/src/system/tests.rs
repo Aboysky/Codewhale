@@ -170,7 +170,7 @@ fn fresh_install_skills_parse_for_discovery() {
     let tmp = TempDir::new().unwrap();
     install_system_skills(tmp.path()).unwrap();
 
-    let registry = crate::skills::SkillRegistry::discover(tmp.path());
+    let registry = crate::SkillRegistry::discover(tmp.path());
     assert!(
         registry.warnings().is_empty(),
         "bundled skills should parse cleanly: {:?}",
@@ -683,7 +683,7 @@ fn retained_generation_10_body_is_the_superseded_one() {
 fn end_user_pack_skills_parse_for_discovery() {
     let tmp = TempDir::new().unwrap();
     install_system_skills(tmp.path()).unwrap();
-    let registry = crate::skills::SkillRegistry::discover(tmp.path());
+    let registry = crate::SkillRegistry::discover(tmp.path());
     assert!(
         registry.warnings().is_empty(),
         "bundled skills should parse cleanly: {:?}",
@@ -798,11 +798,11 @@ fn generation_17_refreshes_previous_plugin_creator_bodies() {
     for (generation, old) in [
         (
             "15",
-            include_str!("../../../assets/skills/plugin-creator/SKILL.generation-15.md"),
+            include_str!("../../assets/skills/plugin-creator/SKILL.generation-15.md"),
         ),
         (
             "16",
-            include_str!("../../../assets/skills/plugin-creator/SKILL.generation-16.md"),
+            include_str!("../../assets/skills/plugin-creator/SKILL.generation-16.md"),
         ),
     ] {
         assert!(is_superseded_shipped_body("plugin-creator", old));

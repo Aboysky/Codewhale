@@ -1,4 +1,5 @@
 {
+  "SkillsIndexDescriptionLimit": "Note: this description exceeds the {limit}-character model index limit. Full text is available through load_skill; a Use when: trigger helps preserve routing when shortened.",
   "ReasoningOnlyRetryBody": "reasoning-only {attempt}/{limit}; no answer or tool call; {action}",
   "OutputLimitAnswerRetryBody": "output-limit {attempt}/{limit}; no answer or tool call; {action}",
   "AnswerRetryActionBare": "re-requesting the answer",

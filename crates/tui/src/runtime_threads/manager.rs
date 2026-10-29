@@ -12958,7 +12958,10 @@ impl RuntimeThreadManager {
                 mcp_oauth_callback_port: cfg.mcp_oauth_callback_port,
                 mcp_oauth_callback_url: cfg.mcp_oauth_callback_url.clone(),
                 skills_dir: cfg.skills_dir(),
-                skills_discovery_mode: crate::skills::SkillDiscoveryMode::from_config(
+                skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::from_config(
+                    &cfg.skills_config(),
+                ),
+                skills_listing_config: codewhale_skills::SkillListingConfig::from_config(
                     &cfg.skills_config(),
                 ),
                 instructions: if isolated_chat {

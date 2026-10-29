@@ -1476,6 +1476,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "codewhale-skills"
+version = "0.10.2"
+dependencies = [
+ "anyhow",
+ "codewhale-config",
+ "codewhale-localization",
+ "codewhale-net",
+ "codewhale-paths",
+ "codewhale-plugins",
+ "codewhale-runtime",
+ "codewhale-skill-install",
+ "codewhale-util",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "toml 1.1.4+spec-1.1.0",
+ "uuid",
+]
+
+[[package]]
 name = "codewhale-snapshot"
 version = "0.10.2"
 dependencies = [
@@ -1590,6 +1612,7 @@ dependencies = [
  "codewhale-sanitize",
  "codewhale-secrets",
  "codewhale-skill-install",
+ "codewhale-skills",
  "codewhale-snapshot",
  "codewhale-telemetry",
  "codewhale-tools",

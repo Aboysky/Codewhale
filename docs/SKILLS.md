@@ -220,7 +220,7 @@ reference text or advertise unsupported tools:
 
 Notes on the two non-alias decisions:
 
-- **`help`** ships as a bundled skill (generation 7) but is `explicit-only`, so
+- **`help`** ships as a bundled skill but is `explicit-only`, so
   it never appears in the model catalogue and costs zero ambient prompt budget.
   Its body is a routing card — which surface owns which fact — and explicitly
   forbids pasting a command list or settings table into context. A checked
@@ -241,7 +241,7 @@ still enters context only through `load_skill`.
 is an **authored** expectation table covering every bundled skill: canonical
 name, tier, invocation, aliases, whether it renders as an ambient catalogue
 entry, and which of its aliases are shadowed by another canonical name. The
-tests in `crates/tui/src/skills/catalog_matrix.rs` assert a bijection between
+tests in `crates/skills/src/catalog_matrix.rs` assert a bijection between
 that fixture and `BUNDLED_SKILLS`, so the shipped pack cannot change without an
 explicit fixture update.
 
@@ -262,7 +262,7 @@ Collision and prompt-budget invariants asserted today:
 | Single alias owner | No two bundled skills may claim the same alias. |
 | No duplicate entries | Each canonical name renders at most one catalogue line; aliases render zero. |
 | Budget headroom | The shipped pack alone renders under the window-scaled skills budget (25 600 chars at the default 128k window; 2 400-char floor) with **no** "additional skills omitted" line, so user skills are never silently displaced. |
-| No context poisoning | Descriptions stay single-line and are truncated to `MAX_SKILL_DESCRIPTION_CHARS` (400) before entering the prompt. |
+| No context poisoning | Descriptions stay single-line and respect `[skills] listing_max_description_chars` (default 400) before entering the prompt. |
 
 ### Locale-aware routing metadata
 
@@ -360,6 +360,10 @@ does not run readiness probes and does not block mutations on readiness.
 
 ## Config knobs
 
+Parents, fresh and nested children, and `/context` use the same ambient-index renderer. `[skills] listing_max_description_chars` controls the per-entry ceiling (1–40,000; default 400). `listing_budget_fraction` controls the share of the resolved route window (greater than 0 and at most 1; default 0.05), estimated at four characters per token. The total index retains a 2,400-character floor and 40,000-character ceiling. Explicit profile values override inherited values independently. Changing a route recomputes its budget; it does not silently change the description setting.
+
+The renderer favors `Use when:` triggers, shortens descriptions before falling back to names, and reports shortened/omitted entries. Descriptions exceeding the configured cap without a trigger also produce a load warning. `/skills inspect` shows a localized note with the same effective cap, and `/context` repeats the loss count. `load_skill name="list"` and exact-name loading retain full text. These limits govern ambient routing metadata, not skill bodies or external MCP resource descriptions.
+
 ```toml
 # Optional override for discovery preference (not automatically a write target
 # unless it is the Codewhale project/global owned path).
@@ -369,6 +373,8 @@ skills_dir = "/path/to/skills"
 # When true, runtime discovery skips cross-tool roots (.claude, .agents, …).
 # Owned Codewhale roots and an explicit skills_dir override still apply.
 scan_codewhale_only = false
+listing_max_description_chars = 400
+listing_budget_fraction = 0.05
 
 # Optional registry / install size overrides used by --remote, sync, and install.
 # registry_url = "https://…"

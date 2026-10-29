@@ -305,7 +305,7 @@ pub struct QueuedSessionMessage {
     #[serde(default)]
     pub skill_instruction: Option<String>,
     #[serde(default)]
-    pub skill_provenance: Option<crate::skills::SkillProvenance>,
+    pub skill_provenance: Option<codewhale_skills::SkillProvenance>,
 }
 
 /// Persisted queue state for recovery after restart/crash.

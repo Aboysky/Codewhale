@@ -6191,7 +6191,7 @@ context_window = 262144
                 },
             );
             assert_eq!(
-                crate::skills::discover_in_workspace(&workspace)
+                codewhale_skills::discover_in_workspace(&workspace)
                     .get("review-example")
                     .is_some(),
                 trusted

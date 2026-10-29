@@ -17,7 +17,7 @@
 use async_trait::async_trait;
 use serde_json::{Value, json};
 
-use crate::skills::{
+use codewhale_skills::{
     Skill, SkillDiscoveryMode, SkillSource, discover_for_workspace_and_dir_with_mode_and_plugins,
     discover_in_workspace_with_mode_and_plugins, skill_directories_for_workspace_and_dir,
     skills_directories_for_mode,
@@ -350,7 +350,7 @@ fn collect_companion_files(skill: &Skill) -> Vec<std::path::PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::skills::SkillRegistry;
+    use codewhale_skills::SkillRegistry;
     use std::fs;
     use tempfile::tempdir;
 
@@ -546,7 +546,7 @@ mod tests {
         std::sync::Arc::make_mut(&mut plugins)
             .enable("demo")
             .unwrap();
-        let registry = crate::skills::discover_in_workspace_with_mode_and_plugins(
+        let registry = codewhale_skills::discover_in_workspace_with_mode_and_plugins(
             tmp.path(),
             SkillDiscoveryMode::CodeWhaleOnly,
             Some(plugins.as_ref()),
@@ -745,7 +745,8 @@ mod tests {
 
         let context = ToolContext::new(workspace).with_skills_config(
             codewhale_dir,
-            crate::skills::SkillDiscoveryMode::CodeWhaleOnly,
+            codewhale_skills::SkillDiscoveryMode::CodeWhaleOnly,
+            codewhale_skills::SkillListingConfig::default(),
         );
         let tool = LoadSkillTool;
 
@@ -782,11 +783,12 @@ mod tests {
 
         // Keep this test independent of the process-native home directory:
         // `codewhale_paths::user_home()` cannot be redirected reliably after process start
-        // on Windows. The injected-home discovery test in `skills::tests`
+        // on Windows. The injected-home discovery test in `codewhale_skills::tests`
         // separately proves that ~/.codewhale/skills enters the default catalog.
         let context = ToolContext::new(&workspace).with_skills_config(
             global_skills.clone(),
-            crate::skills::SkillDiscoveryMode::Compatible,
+            codewhale_skills::SkillDiscoveryMode::Compatible,
+            codewhale_skills::SkillListingConfig::default(),
         );
         assert!(!context.trust_mode);
         assert!(
@@ -852,8 +854,11 @@ mod tests {
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(dir.join("SKILL.md"), format!("---\nname: {name}\ndescription: routing\n{policy}\n---\nsecret steps for {name}")).unwrap();
         }
-        let context = ToolContext::new(&workspace)
-            .with_skills_config(&root, SkillDiscoveryMode::CodeWhaleOnly);
+        let context = ToolContext::new(&workspace).with_skills_config(
+            &root,
+            SkillDiscoveryMode::CodeWhaleOnly,
+            codewhale_skills::SkillListingConfig::default(),
+        );
         let tool = LoadSkillTool;
         for name in ["explicit", "disabled"] {
             let error = tool
