@@ -480,14 +480,14 @@ pub fn classify_configured_skills_dir(
             SkillScope::Project,
         );
     }
-    if let Some(global_owned) = owned_global_skills_dir(home_dir) {
-        if paths_refer_to_same_dir(&global_owned, skills_dir) {
-            return (
-                SkillRootKind::CodeWhaleGlobal,
-                SkillRootAccess::WritableOwned,
-                SkillScope::Global,
-            );
-        }
+    if let Some(global_owned) = owned_global_skills_dir(home_dir)
+        && paths_refer_to_same_dir(&global_owned, skills_dir)
+    {
+        return (
+            SkillRootKind::CodeWhaleGlobal,
+            SkillRootAccess::WritableOwned,
+            SkillScope::Global,
+        );
     }
 
     if let Some(harness) = match_compatible_project(workspace, skills_dir) {
