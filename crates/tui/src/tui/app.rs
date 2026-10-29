@@ -6958,14 +6958,13 @@ impl App {
         if let Some(work) = self.runtime_services.work.as_ref() {
             let empty = SessionWorkState::default();
             let state = state.unwrap_or(&empty);
-            work.restore_with_workspace_owner_bindings(
+            let restored = work.restore_with_workspace_owner_bindings(
                 session_id,
                 workspace,
                 state.graph.as_ref(),
                 &state.todos,
                 &state.plan,
             )?;
-            let restored = work.capture(Some(session_id))?;
             let normalized_state = restored.map(|state| SessionWorkState {
                 graph: Some(state.graph),
                 todos: state.todos,

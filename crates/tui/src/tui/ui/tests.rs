@@ -24001,6 +24001,7 @@ fn session_snapshot_and_resume_round_trip_work_state() {
         .expect("load session");
     let mut restored = create_test_app();
     apply_loaded_session(&mut restored, &mut Config::default(), &loaded).expect("restore session");
+    assert_eq!(restored.last_known_work_state, Some(Some(expected.clone())));
     assert_eq!(
         restored.work_state_snapshot().expect("restored snapshot"),
         Some(expected)
