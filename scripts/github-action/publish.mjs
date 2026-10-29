@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { fingerprint, issueBody, parseArtifact, renderSummary, repositoryPath } from './findings.mjs';
-import { target, validateSnapshot } from './review.mjs';
+import { authorizeRequest, target, validateSnapshot } from './review.mjs';
 
 function stop(outcome, reason) {
   throw Object.assign(new Error(reason), { outcome, reason });
@@ -120,11 +120,12 @@ export function publish(env = process.env, execute = command) {
     };
     const snapshot = () => {
       const pr = api(`repos/${repo}/pulls/${number}`);
-      validateSnapshot(pr, repo, event);
+      validateSnapshot(pr, repo, event, env);
       if (pr.head.sha !== artifact.head_sha || pr.base.sha !== artifact.base_sha) stop('superseded', 'revision_changed');
       return pr;
     };
     const pr = snapshot();
+    authorizeRequest(env, event, repo, number, api);
     const files = api(`repos/${repo}/pulls/${number}/files?per_page=100`, true);
     if (!Number.isSafeInteger(pr.changed_files) || files.length !== pr.changed_files
       || new Set(files.map(item => item.filename)).size !== files.length
@@ -135,6 +136,7 @@ export function publish(env = process.env, execute = command) {
     const reviews = api(`repos/${repo}/pulls/${number}/reviews?per_page=100`, true);
     const plan = planPublication(artifact, files, reviews, reviewer);
     snapshot();
+    authorizeRequest(env, event, repo, number, api);
     if (!plan) receipt = { ...receipt, outcome: 'already_published', reason: '', publication: 'deduplicated' };
     else {
       const posted = api(`repos/${repo}/pulls/${number}/reviews`, false, plan);

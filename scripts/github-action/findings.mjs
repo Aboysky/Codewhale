@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { KEYS } from './setup.mjs';
 
 const SHA = /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/i;
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
@@ -86,8 +87,7 @@ export function parseArtifact(raw) {
 }
 
 export function findingsArtifact(data, receipt, env) {
-  const secrets = ['GH_TOKEN', 'CODEWHALE_API_KEY', 'DEEPSEEK_API_KEY', 'ANTHROPIC_API_KEY',
-    'OPENROUTER_API_KEY', 'ZAI_API_KEY', 'MODELSTUDIO_API_KEY'].map(key => env[key]).filter(Boolean);
+  const secrets = ['GH_TOKEN', ...Object.values(KEYS)].map(key => env[key]).filter(Boolean);
   const clean = value => typeof value === 'string'
     ? secrets.reduce((result, secret) => result.split(secret).join('[REDACTED]'), value)
     : Array.isArray(value) ? value.map(clean)

@@ -1,7 +1,7 @@
 // GitHub orchestration only: the released CLI owns diff coverage, prompts,
 // model routing, anchor validation and the final pre-publication head check.
 // No repository checkout, project configuration, hooks, or PR code is executed.
-// Known limits: review only (mentions use the hosted App); no dollar-budget
+// Known limits: review only, including explicit review mentions; no dollar-budget
 // guarantee or automatic retry. Legacy direct publication has no cross-run deduplication.
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -9,15 +9,11 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { findingsArtifact } from './findings.mjs';
+import { KEYS } from './setup.mjs';
 
 const SHA = /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/i;
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const MODEL = /^[A-Za-z0-9][A-Za-z0-9_./:@+-]{0,199}$/;
-const KEYS = {
-  deepseek: 'DEEPSEEK_API_KEY', anthropic: 'ANTHROPIC_API_KEY',
-  openrouter: 'OPENROUTER_API_KEY', orcarouter: 'ORCAROUTER_API_KEY', zai: 'ZAI_API_KEY',
-  'modelstudio-token-plan': 'MODELSTUDIO_API_KEY',
-};
 
 class Stop extends Error {
   constructor(outcome, reason) { super(reason); this.outcome = outcome; this.reason = reason; }
@@ -41,7 +37,7 @@ export function settings(env) {
   if (provider === 'codewhale') {
     if (!env.CODEWHALE_API_KEY) stop('configuration_missing', 'account_key_required');
     if (!/^[A-Za-z0-9_.-]+\/.+/.test(model)) stop('configuration_missing', 'account_catalog_model_required');
-  } else if (!KEYS[provider] || !env[KEYS[provider]]) {
+  } else if (!Object.hasOwn(KEYS, provider) || !env[KEYS[provider]]) {
     stop('configuration_missing', 'provider_key_required');
   }
   if (!env.GH_TOKEN) stop('configuration_missing', 'github_token_required');
@@ -68,6 +64,19 @@ export function target(env, event) {
     number = event.number;
   } else if (env.GITHUB_EVENT_NAME === 'workflow_dispatch') {
     number = env.CW_PR_NUMBER;
+  } else if (['issue_comment', 'pull_request_review_comment'].includes(env.GITHUB_EVENT_NAME)) {
+    if (event.action !== 'created') stop('not_eligible', 'unsupported_comment_action');
+    if (event.comment?.user?.type !== 'User' || event.sender?.type !== 'User'
+      || event.comment.user.login !== env.GITHUB_ACTOR || event.sender.login !== env.GITHUB_ACTOR
+      || !Number.isSafeInteger(event.comment.id) || event.comment.id < 1) stop('not_eligible', 'untrusted_actor');
+    const trigger = env.CW_TRIGGER_PHRASE || '@codewhale';
+    if (!/^@[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(trigger)) stop('configuration_missing', 'invalid_trigger_phrase');
+    if (typeof event.comment.body !== 'string'
+      || event.comment.body.trim().toLowerCase() !== `${trigger.toLowerCase()} review`) stop('not_eligible', 'review_mention_required');
+    if (env.GITHUB_EVENT_NAME === 'issue_comment') {
+      if (!event.issue?.pull_request) stop('not_eligible', 'pull_request_required');
+      number = event.issue.number;
+    } else number = event.pull_request?.number;
   } else {
     // In particular, pull_request_target must not gain an inference path.
     stop('not_eligible', 'unsupported_event');
@@ -76,13 +85,43 @@ export function target(env, event) {
   return { repo: env.GITHUB_REPOSITORY, number: Number(number) };
 }
 
-export function validateSnapshot(pr, repo, event) {
+export function validateSnapshot(pr, repo, event, env = {}) {
   if (pr?.base?.repo?.full_name !== repo) stop('configuration_missing', 'repository_mismatch');
-  if (pr?.head?.repo?.full_name !== repo) stop('not_eligible', 'fork');
+  if (pr?.head?.repo?.full_name !== repo && !(env.CW_ALLOW_FORKS === 'true'
+    && ['issue_comment', 'workflow_dispatch'].includes(env.GITHUB_EVENT_NAME))) stop('not_eligible', 'fork');
   if (pr.state !== 'open' || pr.draft) stop('not_eligible', 'closed_or_draft');
   if (!SHA.test(pr.head.sha) || !SHA.test(pr.base.sha)) stop('configuration_missing', 'invalid_revision');
   if (event.pull_request && (event.pull_request.head.sha !== pr.head.sha || event.pull_request.base.sha !== pr.base.sha)) {
     stop('superseded', 'revision_changed');
+  }
+}
+
+export function authorizeRequest(env, event, repo, number, api) {
+  if (!['true', 'false'].includes(env.CW_ALLOW_FORKS || 'false')) stop('configuration_missing', 'invalid_allow_forks');
+  const mention = ['issue_comment', 'pull_request_review_comment'].includes(env.GITHUB_EVENT_NAME);
+  if (!mention && !(env.GITHUB_EVENT_NAME === 'workflow_dispatch' && env.CW_ALLOW_FORKS === 'true')) return;
+  const actor = env.GITHUB_ACTOR;
+  const rerunner = env.GITHUB_TRIGGERING_ACTOR || actor;
+  if (event.sender?.type !== 'User' || event.sender.login !== actor
+    || ![actor, rerunner].every(login => /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(login || ''))) stop('not_eligible', 'untrusted_actor');
+  for (const login of new Set([actor, rerunner])) {
+    const permission = api(`repos/${repo}/collaborators/${login}/permission`);
+    if (permission.user?.login !== login || permission.user?.type !== 'User'
+      || !['admin', 'maintain', 'write'].includes(permission.permission)) stop('not_eligible', 'write_access_required');
+  }
+  if (env.CW_ALLOW_FORKS === 'true') {
+    const repository = api(`repos/${repo}`);
+    if (repository.full_name !== repo || !repository.default_branch
+      || env.GITHUB_REF !== `refs/heads/${repository.default_branch}`) stop('not_eligible', 'default_branch_required');
+  }
+  if (mention) {
+    const kind = env.GITHUB_EVENT_NAME === 'issue_comment' ? 'issues' : 'pulls';
+    const comment = api(`repos/${repo}/${kind}/comments/${event.comment.id}`);
+    const url = env.GITHUB_EVENT_NAME === 'issue_comment' ? comment.issue_url : comment.pull_request_url;
+    const expected = `https://api.github.com/repos/${repo}/${env.GITHUB_EVENT_NAME === 'issue_comment' ? 'issues' : 'pulls'}/${number}`;
+    if (comment.id !== event.comment.id || comment.user?.login !== actor || comment.user?.type !== 'User'
+      || comment.body !== event.comment.body || comment.updated_at !== event.comment.updated_at
+      || url !== expected) stop('not_eligible', 'comment_changed_or_mismatched');
   }
 }
 
@@ -133,6 +172,8 @@ export function run(env = process.env, execute = command) {
     const event = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, 'utf8'));
     const { repo, number } = target(env, event);
     const config = settings(env);
+    if (config.post && (['issue_comment', 'pull_request_review_comment'].includes(env.GITHUB_EVENT_NAME)
+      || env.CW_ALLOW_FORKS === 'true')) stop('configuration_missing', 'separate_publisher_required');
     receipt = { ...receipt, repository: repo, pr_number: number, version: config.version,
       provider: config.provider, model: config.model, limits: { max_chars: config.maxChars,
         max_passes: config.maxPasses, timeout_seconds: config.timeout / 1000, max_output_tokens: config.outputTokens } };
@@ -154,7 +195,11 @@ export function run(env = process.env, execute = command) {
     let pr;
     try { pr = JSON.parse(checked('gh', ['api', `repos/${repo}/pulls/${number}`], 'github_snapshot_unavailable')); }
     catch (error) { if (error instanceof Stop) throw error; stop('failed', 'invalid_github_response'); }
-    validateSnapshot(pr, repo, event);
+    validateSnapshot(pr, repo, event, env);
+    authorizeRequest(env, event, repo, number, path => {
+      try { return JSON.parse(checked('gh', ['api', path], 'github_authorization_unavailable')); }
+      catch (error) { if (error instanceof Stop) throw error; stop('failed', 'invalid_github_response'); }
+    });
     receipt.base_sha = pr.base.sha;
     receipt.head_sha = pr.head.sha;
     prUrl = `https://github.com/${repo}/pull/${number}`;
