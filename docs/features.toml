@@ -871,7 +871,7 @@ owner = "crates/tui/src/project_context/budget.rs"
 [[feature]]
 id = "github-action-review"
 name = "GitHub Action review"
-summary = "Generate a pinned GitHub review bot workflow for automatic and authorized mention reviews, with separate analysis and publication jobs."
+summary = "Generate pinned workflows for automatic or authorized mention reviews; publish findings with recorded evidence."
 status = "experimental"
 since = "unreleased"
 surfaces = { tui = "preview" }

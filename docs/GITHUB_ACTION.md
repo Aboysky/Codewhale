@@ -178,11 +178,23 @@ Store it only with the repository's intended artifact access and retention.
 
 The publisher reads the complete current PR file list and existing reviews,
 then rechecks the base/head. It anchors inline findings only where GitHub
-supplies a complete valid patch containing their line. Pre-existing,
-unanchorable and suspected findings remain in the summary. Suggestions are
-prose only, with no one-click replacement blocks. Up to 50 findings are also
-posted inline; every retained finding stays in the summary. Oversized review
-bodies fail before any write instead of silently dropping findings.
+supplies a complete valid patch containing their line and the Engine records
+introduced authorship. A finding needs a `reproduced` or `traced` evidence tier
+with nonempty detail to appear in the review. Missing, empty and suspected
+evidence stays in the analysis artifact; the review reports only the withheld
+count. This checks the evidence record, not the truth of the claim.
+Pre-existing findings appear in a collapsed section; unanchorable findings
+and findings without recorded authorship appear in the body. Up to 50
+eligible findings are also posted inline; every retained finding stays in the
+summary. Oversized review bodies fail before any write instead of silently
+dropping findings.
+
+Freeform model summaries, merge-risk assessments and unlinked suggestions
+stay in the analysis artifact so they cannot repeat a withheld allegation.
+The published summary links to analysis and coverage and never treats an
+empty finding list as approval. Publication receipts count evidence-eligible
+`findings` and report `withheld_findings` separately. These rules apply to the
+separate publisher; legacy `post:true` uses the pinned CLI's policy.
 
 The publisher recognizes its own review/finding fingerprints only on reviews
 by `reviewer-login`. Identical review reruns are skipped. Findings with matching
