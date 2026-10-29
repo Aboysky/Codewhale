@@ -7601,10 +7601,10 @@ pub(crate) async fn run_event_loop(
                 }
                 // Vim composer: Normal-mode motion / operator keys.
                 // Only fires when vim is enabled, the input is focused (no modal
-                // open on top), and the key has no modifier (pure char).
+                // open on top), and the key is a plain char (Shift allowed).
                 KeyCode::Char(c)
                     if app.vim_is_normal_mode()
-                        && key.modifiers.is_empty()
+                        && is_plain_char
                         && !slash_menu_open
                         && !mention_menu_open
                         && app.view_stack.is_empty() =>
@@ -7615,9 +7615,7 @@ pub(crate) async fn run_event_loop(
                 // Vim composer: in Visual mode plain chars are ignored
                 // (no text insertion until `i` / `a` enters Insert).
                 KeyCode::Char(_)
-                    if app.vim_is_visual_mode()
-                        && key.modifiers.is_empty()
-                        && app.view_stack.is_empty() =>
+                    if app.vim_is_visual_mode() && is_plain_char && app.view_stack.is_empty() =>
                 {
                     // absorb — Visual mode not yet fully implemented
                 }
