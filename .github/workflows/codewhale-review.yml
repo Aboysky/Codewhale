@@ -54,7 +54,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: '22'
-      - uses: codewhale-hq/Codewhale@17c45d34312a4b1bbb4a7633de58d7f85422fc9d
+      - uses: codewhale-hq/Codewhale@c2a48723285c48978279f6c10672bbade49cc0cb
         id: review
         with:
           version: 'v0.10.2'
@@ -105,7 +105,7 @@ jobs:
           private-key: ${{ secrets.CODEWHALE_APP_PRIVATE_KEY }}
           permission-contents: read
           permission-pull-requests: write
-      - uses: codewhale-hq/Codewhale/scripts/github-action/publish@17c45d34312a4b1bbb4a7633de58d7f85422fc9d
+      - uses: codewhale-hq/Codewhale/scripts/github-action/publish@c2a48723285c48978279f6c10672bbade49cc0cb
         id: publish
         with:
           findings: findings/findings.json
