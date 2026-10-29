@@ -110,6 +110,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **VS Code packaging security:** use patched MSAL Node in the extension packager, addressing [GHSA-xcx6-jx8p-x3h5](https://github.com/AzureAD/microsoft-authentication-library-for-js/security/advisories/GHSA-xcx6-jx8p-x3h5).
+
 - **Compaction preserves task state:** a summary that is empty, a placeholder or only leaked reasoning tags (as local models sometimes return) no longer replaces your history. The recent tail is chosen by token budget on whole tool exchanges, the older span and any earlier checkpoint are summarized, and the original history is saved before the swap. Context budgeting learns from provider-reported usage within a turn and reports repeated rapid refills instead of looping. (#7133)
 
 - **Vim Normal mode works on every terminal:** with `composer_vim_mode = "vim"`, Normal-mode keys no longer land in the draft as text on Windows terminals or on any terminal that does not report bracketed paste (everything except ghostty, iTerm, WezTerm and Apple Terminal, tmux and VS Code's terminal included). A held key now reaches Normal mode, shifted keys such as `G` move instead of typing, and `k` history recall repaints at once. Keys that arrive in one burst are still taken as a paste. (#7126, #7130) Thanks [@Lstarsky0](https://github.com/Lstarsky0).
