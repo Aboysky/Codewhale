@@ -753,17 +753,8 @@ impl Engine {
         // provider that refused the recovery request is the
         // cause, and a history with nothing to summarize is a
         // window problem, not a failed compaction.
-        if let Some(rejection) = turn.context_recovery_rejection.take() {
-            let display_message = self.decorate_auth_error_message(
-                initial_stream_error_user_message(&self.config.locale_tag, &rejection),
-            );
-            let mut envelope = crate::llm_error_envelope::envelope_for_llm_error(
-                rejection,
-                display_message.clone(),
-            );
-            envelope.message = display_message.clone();
-            let _ = self.send_event(Event::error(envelope)).await;
-            return PhaseResult::Return((TurnOutcomeStatus::Failed, Some(display_message)));
+        if let Some(message) = self.report_context_recovery_failure(turn).await {
+            return PhaseResult::Return((TurnOutcomeStatus::Failed, Some(message)));
         }
         let message = if crate::compaction::has_compactable_history(&self.session.messages) {
             "The request still exceeds this model's context budget and automatic recovery did not complete. The conversation is saved; retry or choose a larger context route.".to_string()
