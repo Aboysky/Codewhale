@@ -1886,11 +1886,23 @@ pub fn launch_empty_state(app: &App, area: Rect) -> LaunchEmptyState {
                 }
             }
             let label = semantic_truncate(&tr(locale, MessageId::LaunchRecentHeading), text_width);
-            let remaining = text_width.saturating_sub(text_display_width(&label) + 2);
+            let mut remaining = text_width.saturating_sub(text_display_width(&label) + 2);
             let mut spans = vec![Span::styled(
                 label,
                 Style::default().fg(theme.text_soft).bold(),
             )];
+            let resume = tr(locale, MessageId::LaunchRecentResumeHint);
+            if card_rows
+                .iter()
+                .any(|row| matches!(row.id, crate::tui::app::LaunchRowId::Recent(_)))
+                && remaining >= text_display_width(&resume) + 6
+            {
+                remaining = remaining.saturating_sub(text_display_width(&resume) + 2);
+                spans.push(Span::styled(
+                    format!("  {resume}"),
+                    Style::default().fg(theme.text_hint),
+                ));
+            }
             if remaining >= 4 {
                 let rule = if crate::tui::color_compat::ascii_safe_enabled() {
                     "-"

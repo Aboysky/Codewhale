@@ -1218,6 +1218,26 @@ pub(crate) fn build_app_system_prompt_with_goal(
     .0
 }
 
+fn record_window_reroot(
+    session_id: Option<&str>,
+    previous_window: usize,
+    window: usize,
+    journal_entries: usize,
+) {
+    let details = serde_json::json!({
+        "session_id": session_id,
+        "reason": "first_message_changed",
+        "previous_window": previous_window,
+        "window": window,
+        "journal_entries": journal_entries,
+    });
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        handle.spawn_blocking(move || {
+            codewhale_runtime::audit::log_sensitive_event("session.window.rerooted", details);
+        });
+    }
+}
+
 /// Build the session snapshot every product caller queues into the
 /// persistence actor. Journal-only (#6214 T3): the `messages` projection is
 /// left empty because the queue drops it anyway, and serialization rehydrates
@@ -1242,8 +1262,17 @@ pub(crate) fn build_session_snapshot(
             tracing::warn!(%error, "kept archived journal entries in memory");
         }
     }
-    app.session_journal
+    let rebranch = app
+        .session_journal
         .rebranch_active_messages_stamped(&app.api_messages, &app.api_message_stamps);
+    if rebranch.replaced_from_root() && !app.api_messages.is_empty() {
+        record_window_reroot(
+            app.current_session_id.as_deref(),
+            rebranch.previous_active,
+            app.api_messages.len(),
+            app.session_journal.entries.len(),
+        );
+    }
     let mut session = crate::session_manager::create_saved_session_journal_only(
         app.current_session_id
             .clone()

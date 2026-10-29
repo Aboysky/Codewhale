@@ -726,6 +726,9 @@ this VM: only 0.10.0 was built)**.
 ### Clean up old copies
 
 `codewhale doctor` has an **Installations** section, and
+keeps routine path and secret-backend details brief. Use `codewhale doctor --all`
+to show every resolved path and structural secret-backend detail.
+
 `codewhale doctor --installs` prints only that (`--json` for machines,
 `--brief` for nothing on a tidy machine). It lists every `codewhale`, `codew`,
 `codewhale-tui`, `deepseek` and `deepseek-tui` in your `PATH`, `~/.local/bin`,

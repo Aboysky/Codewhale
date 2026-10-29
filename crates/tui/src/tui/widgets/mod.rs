@@ -1533,28 +1533,25 @@ impl<'a> ApprovalWidget<'a> {
         let saves = if self.view.collapsed {
             Vec::new()
         } else {
-            [
-                self.request.ask_rule_save_preview(),
-                self.request.allow_rule_save_preview(),
-            ]
-            .into_iter()
-            .flatten()
-            .map(|preview| DecisionBandSave {
-                summary: preview.summary(),
-                entries: preview.entries,
-                omitted: preview.omitted,
-                label: "Save:   ".into(),
-                separator: " · ".into(),
-                compact_more: " +{count} more".into(),
-                full_more: "... {count} more".into(),
-                label_style: Style::default()
-                    .fg(colors.shortcut)
-                    .add_modifier(Modifier::BOLD),
-                summary_style: Style::default().fg(palette::TEXT_BODY),
-                entries_style: Style::default().fg(palette::TEXT_SECONDARY),
-                more_style: Style::default().fg(palette::TEXT_HINT),
-            })
-            .collect()
+            self.request
+                .allow_rule_save_preview()
+                .into_iter()
+                .map(|preview| DecisionBandSave {
+                    summary: preview.summary(),
+                    entries: preview.entries,
+                    omitted: preview.omitted,
+                    label: "Save:   ".into(),
+                    separator: " · ".into(),
+                    compact_more: " +{count} more".into(),
+                    full_more: "... {count} more".into(),
+                    label_style: Style::default()
+                        .fg(colors.shortcut)
+                        .add_modifier(Modifier::BOLD),
+                    summary_style: Style::default().fg(palette::TEXT_BODY),
+                    entries_style: Style::default().fg(palette::TEXT_SECONDARY),
+                    more_style: Style::default().fg(palette::TEXT_HINT),
+                })
+                .collect()
         };
         DecisionBand {
             body: if self.view.collapsed {
@@ -1934,10 +1931,7 @@ fn approval_control_facts(
             Style::default().fg(palette::TEXT_MUTED),
         ),
     ]);
-    let save_hint = request
-        .can_save_ask_rule()
-        .then(|| Span::styled(save_ask_rule_hint(locale), Style::default().fg(shortcut)));
-    (question, actions, footer, save_hint)
+    (question, actions, footer, None)
 }
 /// Key name appended to the highlighted option row, like `Esc` on its own row.
 const APPROVAL_ENTER_TAG: &str = " (Enter)";
@@ -2364,10 +2358,6 @@ fn approval_owner_header(owner: &crate::tui::approval::ApprovalOwner, locale: Lo
     }
 }
 
-fn save_ask_rule_hint(locale: Locale) -> Cow<'static, str> {
-    tr(locale, MessageId::ApprovalSaveAskRuleHint)
-}
-
 #[derive(Clone)]
 struct ApprovalOptionRow {
     label: Cow<'static, str>,
@@ -2377,7 +2367,7 @@ struct ApprovalOptionRow {
     persistent: bool,
 }
 
-fn approval_options_for(risk: RiskLevel, locale: Locale) -> [ApprovalOptionRow; 4] {
+fn approval_options_for(risk: RiskLevel, locale: Locale) -> [ApprovalOptionRow; 3] {
     let dangerous = matches!(risk, RiskLevel::Destructive);
     [
         ApprovalOptionRow {
@@ -2395,12 +2385,6 @@ fn approval_options_for(risk: RiskLevel, locale: Locale) -> [ApprovalOptionRow; 
         ApprovalOptionRow {
             label: option_deny(locale),
             key_hint: "3 / d / n",
-            dangerous: false,
-            persistent: false,
-        },
-        ApprovalOptionRow {
-            label: option_abort(locale),
-            key_hint: "Esc",
             dangerous: false,
             persistent: false,
         },
@@ -2441,21 +2425,13 @@ fn approval_options_for_request(
         workflow_approval_options(risk, locale).to_vec()
     } else {
         let mut options = approval_options_for(risk, locale).to_vec();
-        if request.owner.is_some() {
-            // Must match `ApprovalOption::CHILD_ORDER`: no "Stop this turn".
-            options.pop();
-            return options;
-        }
-        if request.can_save_allow_rule() {
-            options.insert(
-                2,
-                ApprovalOptionRow {
-                    label: tr(locale, MessageId::ApprovalOptionAllowExactRepo),
-                    key_hint: "p",
-                    dangerous: false,
-                    persistent: true,
-                },
-            );
+        if request.owner.is_none() && request.can_save_allow_rule() {
+            options[1] = ApprovalOptionRow {
+                label: tr(locale, MessageId::ApprovalOptionAllowExactRepo),
+                key_hint: "2 / p",
+                dangerous: false,
+                persistent: true,
+            };
         }
         options
     }
@@ -2492,10 +2468,6 @@ fn option_approve_always(locale: Locale) -> Cow<'static, str> {
 
 fn option_deny(locale: Locale) -> Cow<'static, str> {
     tr(locale, MessageId::ApprovalOptionDeny)
-}
-
-fn option_abort(locale: Locale) -> Cow<'static, str> {
-    tr(locale, MessageId::ApprovalOptionAbortTurn)
 }
 
 pub struct ElevationWidget<'a> {
@@ -8132,7 +8104,7 @@ mod tests {
         widget.render(area, &mut buf);
         let rendered = buffer_text(&buf, area);
         assert!(rendered.contains("[1 / y]"), "{rendered}");
-        assert!(rendered.contains("[Esc]"), "{rendered}");
+        assert!(rendered.contains("[3 / d / n]"), "{rendered}");
         assert!(rendered.contains("truncated"), "{rendered}");
     }
 
@@ -8161,7 +8133,7 @@ mod tests {
                 assert!(rendered.contains(marker), "{area:?}: {rendered}");
             }
             assert!(rendered.contains("[1 / y]"), "{area:?}: {rendered}");
-            assert!(rendered.contains("[Esc]"), "{area:?}: {rendered}");
+            assert!(rendered.contains("[3 / d / n]"), "{area:?}: {rendered}");
         }
 
         let tiny = Rect::new(0, 0, 40, 12);
@@ -8169,7 +8141,7 @@ mod tests {
         widget.render(tiny, &mut buf);
         let rendered = buffer_text(&buf, tiny);
         assert!(rendered.contains("[1 / y]"), "{rendered}");
-        assert!(rendered.contains("[Esc]"), "{rendered}");
+        assert!(rendered.contains("[3 / d / n]"), "{rendered}");
         assert!(
             rendered.contains(crate::tui::shell_key_routing::tool_details_chord().as_ref()),
             "{rendered}"
@@ -8344,14 +8316,16 @@ mod tests {
         // #3766: option 2 / `a` maps to ReviewDecision::ApprovedForSession, so
         // neither the full option rows nor the compact controls may tell the
         // user that particular option is "always"/permanent. The distinct
-        // `[p]` row may use that word for an exact repo-scoped grant.
-        let request = crate::tui::approval::ApprovalRequest::new(
+        // `[2 / p]` row offered with a persistent rule may use that word for
+        // an exact repo-scoped grant.
+        let mut request = crate::tui::approval::ApprovalRequest::new(
             "approval-1",
             "exec_shell",
             "Run git commit",
             &serde_json::json!({ "command": "git commit -m fix" }),
             "exec_shell:git commit",
         );
+        request.persistent_allow_rules.clear();
 
         // Full card (tall): full option rows render the session-scoped label.
         let full = render_approval_request(&request, Rect::new(0, 0, 100, 30));
@@ -8427,20 +8401,39 @@ mod tests {
         let rendered = render_approval_request(&request, Rect::new(0, 0, 120, 40));
 
         assert!(
-            rendered.contains("s allow now, and always ask before this again"),
+            !rendered.contains("s allow now, and always ask before this again"),
             "{rendered}"
         );
-        assert!(rendered.contains("Always allow in this repo"), "{rendered}");
+        assert!(rendered.contains("Always for this command"), "{rendered}");
         assert!(rendered.contains("Save:"), "{rendered}");
-        assert!(rendered.contains("always ask first"), "{rendered}");
+        assert!(!rendered.contains("always ask first"), "{rendered}");
         assert!(rendered.contains("always allow"), "{rendered}");
-        assert!(
-            rendered.contains("run cargo test --workspace"),
-            "{rendered}"
-        );
         assert!(rendered.contains("run exactly cargo test"), "{rendered}");
         assert!(rendered.contains("in /workspace"), "{rendered}");
         assert!(!rendered.contains("tool="), "{rendered}");
+
+        let mut view = crate::tui::approval::ApprovalView::new(request);
+        let crate::tui::views::ViewAction::Emit(crate::tui::views::ViewEvent::OpenTextPager {
+            content,
+            ..
+        }) = crate::tui::views::ModalView::handle_key(
+            &mut view,
+            crossterm::event::KeyEvent::new(
+                crossterm::event::KeyCode::Char('v'),
+                crossterm::event::KeyModifiers::ALT,
+            ),
+        )
+        else {
+            panic!("the details chord opens the pager");
+        };
+        assert!(
+            content.contains("[s] allow now, and always ask before this again"),
+            "{content}"
+        );
+        assert!(
+            content.contains("always ask first · run cargo test --workspace"),
+            "{content}"
+        );
     }
 
     #[test]
@@ -8478,7 +8471,7 @@ mod tests {
 
             assert!(rendered.contains("Save:"), "{tool_name}:\n{rendered}");
             assert!(
-                rendered.contains("always ask first"),
+                !rendered.contains("always ask first"),
                 "{tool_name}:\n{rendered}"
             );
             assert!(
@@ -8517,7 +8510,7 @@ diff --git a/src/b.rs b/src/b.rs\n\
         let rendered = render_approval_request(&request, Rect::new(0, 0, 120, 40));
 
         assert!(rendered.contains("Save:"), "{rendered}");
-        assert!(rendered.contains("always ask first"), "{rendered}");
+        assert!(!rendered.contains("always ask first"), "{rendered}");
         assert!(rendered.contains("always allow"), "{rendered}");
         assert!(rendered.contains("change src/a.rs"), "{rendered}");
         assert!(rendered.contains("change src/b.rs"), "{rendered}");
@@ -8589,7 +8582,7 @@ diff --git a/src/b.rs b/src/b.rs\n\
         // it drops the preview rather than calling the request truncated.
         let rendered = render_approval_request(&request, Rect::new(0, 0, 120, 80));
 
-        assert!(rendered.contains("always ask first"), "{rendered}");
+        assert!(rendered.contains("always allow"), "{rendered}");
         assert!(rendered.contains("change src/a.rs"), "{rendered}");
         assert!(rendered.contains("... 1 more"), "{rendered}");
         assert!(
@@ -8622,21 +8615,14 @@ diff --git a/src/b.rs b/src/b.rs\n\
         let rendered = render_approval_request(&request, Rect::new(0, 0, 120, 40));
 
         assert!(rendered.contains("src/a.rs"), "{rendered}");
-        assert!(
-            rendered.contains("always ask first · change src/a.rs"),
-            "{rendered}"
-        );
-        assert!(rendered.contains("+1 more"), "{rendered}");
+        assert!(rendered.contains("always allow"), "{rendered}");
+        assert!(rendered.contains("1 more"), "{rendered}");
         assert!(!rendered.contains("truncated"), "{rendered}");
 
         // Short bands cut the request detail, never the preview: what a
         // saved rule covers stays pinned above the controls that save it.
         for height in [10, 11, 12, 14, 16, 20] {
             let rendered = render_approval_request(&request, Rect::new(0, 0, 120, height));
-            assert!(
-                rendered.contains("always ask first · change src/a.rs"),
-                "height {height}: {rendered}"
-            );
             assert!(
                 rendered.contains("always allow · change src/a.rs"),
                 "height {height}: {rendered}"
@@ -8648,9 +8634,8 @@ diff --git a/src/b.rs b/src/b.rs\n\
         for width in [40, 60, 120] {
             for height in 6..=20 {
                 let rendered = render_approval_request(&request, Rect::new(0, 0, width, height));
-                let offers = rendered.contains("[p]") || rendered.contains("s allow now");
-                let previews =
-                    rendered.contains("always ask first") && rendered.contains("always allow");
+                let offers = rendered.contains("[2 / p]");
+                let previews = rendered.contains("always allow");
                 assert!(
                     !offers || previews,
                     "{width}x{height} offers a save it does not preview:\n{rendered}"

@@ -1311,6 +1311,9 @@ struct DoctorArgs {
         conflicts_with_all = ["json", "context_json", "fix", "installs", "repair_sessions"]
     )]
     restore: Option<String>,
+    /// Show every resolved path, the search provider and secret-backend details
+    #[arg(long, default_value_t = false, conflicts_with_all = ["json", "context_json"])]
+    all: bool,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -2611,6 +2614,7 @@ async fn run_async_main_dispatch(
                         effective_config_profile(&cli).as_deref(),
                         probes,
                         plugin_registry.as_ref(),
+                        args.all,
                     )
                     .await;
                     if args.fix {
@@ -5018,6 +5022,7 @@ async fn run_doctor(
     profile: Option<&str>,
     probes: crate::doctor::DoctorProbeRequest,
     plugins: &codewhale_plugins::PluginRegistry,
+    all: bool,
 ) {
     use codewhale_palette as palette;
     use colored::Colorize;
@@ -5184,19 +5189,29 @@ async fn run_doctor(
         "  workspace: {}",
         codewhale_util::utils::display_path(workspace)
     );
-    println!("  {}", doctor_search_provider_line(config));
+    let search_provider_line = doctor_search_provider_line(config);
+    if all || search_provider_line.contains("missing TAVILY_API_KEY") {
+        println!("  {search_provider_line}");
+    }
 
     println!();
     println!("{}", "Resolved User Paths (read-only):".bold());
-    for (label, path) in doctor_paths.entries() {
+    let entries = doctor_paths.entries();
+    let shown = if all { entries.len() } else { 5 };
+    for (label, path) in entries.iter().take(shown) {
         println!("  · {label}: {}", codewhale_util::utils::display_path(path));
     }
 
     let secret_backend = codewhale_secrets::diagnose_secret_backend();
     println!();
     println!("{}", "Secret Backend (structural only):".bold());
-    for line in crate::doctor::secret_backend_human_lines(&secret_backend) {
+    let backend_lines = crate::doctor::secret_backend_human_lines(&secret_backend);
+    let shown = if all { backend_lines.len() } else { 1 };
+    for line in backend_lines.iter().take(shown) {
         println!("  · {line}");
+    }
+    if !all {
+        println!("  · `codewhale doctor --all` shows every path and backend detail");
     }
 
     println!();

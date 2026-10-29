@@ -6242,10 +6242,15 @@ pub(crate) async fn run_event_loop(
                             // the plan shed on a tiny stage).
                             let rows = crate::tui::underwater::launch_rows_for_app(app);
                             let entries = rows.len().max(1) as i32;
-                            // First arrow lands on the first (Up: last)
-                            // row; from there it moves.
+                            // First arrow lands on the first row; Up lands on
+                            // the newest recent session, else the last row.
                             app.launch.menu_selected = Some(match app.launch.menu_selected {
-                                None if delta < 0 => (entries - 1) as usize,
+                                None if delta < 0 => rows
+                                    .iter()
+                                    .position(|row| {
+                                        matches!(row.id, crate::tui::app::LaunchRowId::Recent(_))
+                                    })
+                                    .unwrap_or((entries - 1) as usize),
                                 None => 0,
                                 Some(current) => {
                                     (current as i32 + delta).rem_euclid(entries) as usize

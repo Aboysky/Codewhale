@@ -8686,7 +8686,7 @@ fn child_approval_card_hides_always_allow_in_repo() {
         assert_eq!(
             matches!(action, ViewAction::EmitAndClose(_)),
             expect_repo_rule,
-            "only the parent card offers Always allow in this repo"
+            "only the parent card offers Always for this command"
         );
     }
 }

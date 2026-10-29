@@ -548,7 +548,7 @@ pub(crate) fn push_approval_request_view(
         request.approval_grouping_key = approval_grouping_key.to_string();
     }
     // A child's gate never consults saved repo allow rules, so a child card
-    // must not offer "Always allow in this repo" — it would do nothing. The
+    // must not offer "Always for this command" — it would do nothing. The
     // card names its agent (approvals C1).
     if crate::tools::subagent::SubAgentManager::is_child_approval_id(id) {
         request.persistent_allow_rules.clear();

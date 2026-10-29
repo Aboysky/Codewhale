@@ -49,7 +49,7 @@ owner = "crates/cli/src/update/uninstall.rs"
 [[feature]]
 id = "install-cleanup"
 name = "Installation cleanup"
-summary = "doctor --installs lists every copy and owner; doctor --fix moves old backups to recovery; doctor --restore undoes it."
+summary = "doctor --all expands diagnostics; --installs lists owners, --fix recovers old copies and --restore reverses it."
 status = "stable"
 surfaces = { tui = "stable" }
 since = "unreleased"
@@ -308,7 +308,7 @@ owner = "crates/config/src/app_mode.rs"
 [[feature]]
 id = "permission-postures"
 name = "Permission postures"
-summary = "Ask, Auto-Review and Full Access postures decide when a tool call needs approval."
+summary = "Ask, Auto-Review and Full Access govern approvals; cards default to Deny and preview saved grants."
 status = "stable"
 surfaces = { tui = "stable", api = "stable" }
 docs = "docs/MODES.md#permission-posture"
