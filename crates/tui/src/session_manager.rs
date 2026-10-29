@@ -5469,21 +5469,26 @@ pub(crate) fn extract_title(raw: &str) -> &str {
 /// Strip common inline thinking/reasoning XML sections from saved assistant
 /// text before it is shown in session previews.
 pub(crate) fn strip_thinking_tags(text: &str) -> String {
-    if !text.contains("<think") && !text.contains("<thinking") && !text.contains("<reasoning") {
-        return text.to_string();
-    }
-
-    let tags = ["think", "thinking", "reasoning"];
+    let tags = ["think", "thinking", "reasoning", "analysis"];
     let mut result = text.to_string();
     for tag in tags {
         let open = format!("<{tag}>");
         let close = format!("</{tag}>");
-        while let Some(start) = result.find(&open) {
-            let Some(end) = result[start..].find(&close) else {
-                break;
-            };
-            let end_abs = start + end + close.len();
-            result.replace_range(start..end_abs, "");
+        loop {
+            let lower = result.to_ascii_lowercase();
+            match (lower.find(&open), lower.find(&close)) {
+                (Some(start), Some(end)) if start < end => {
+                    result.replace_range(start..end + close.len(), "");
+                }
+                (_, Some(end)) => {
+                    result.replace_range(..end + close.len(), "");
+                }
+                (Some(start), None) => {
+                    result.truncate(start);
+                    break;
+                }
+                (None, None) => break,
+            }
         }
     }
     result

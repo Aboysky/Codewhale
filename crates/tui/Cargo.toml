@@ -29,7 +29,6 @@ exclude = [
   "src/skills/catalog_matrix.rs",
   "src/compaction/survival_contract.rs",
   "src/compaction/SURVIVAL_CONTRACT.md",
-  "src/compaction/validate_survival_contract.mjs",
   "src/compaction/fixtures/**",
   "src/commands/contract/config_policy_baseline.rs",
   "src/commands/contract/fixtures/**",

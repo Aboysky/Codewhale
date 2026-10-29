@@ -404,7 +404,7 @@ fn replacement_history_honours_the_configured_retention_budget() {
 
     let checkpoint = format!("{COMPACTION_SUMMARY_MARKER} and produced this handoff.");
     let count_verbatim = |budget: usize| {
-        last_round::build_replacement_history(&messages, &checkpoint, None, budget)
+        last_round::build_replacement_history(&messages, &checkpoint, None, budget, 128)
             .expect("replacement history")
             .len()
     };
@@ -582,6 +582,7 @@ fn legacy_v2_checkpoint_with_provenance_is_recognised_and_replaced() {
         &build_compaction_summary_block_text("second handoff", ""),
         None,
         COMPACT_RETAINED_USER_MESSAGE_MAX_TOKENS,
+        20_000,
     )
     .expect("replacement");
     let checkpoints = replaced
