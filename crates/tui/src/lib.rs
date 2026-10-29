@@ -2850,7 +2850,8 @@ async fn run_async_main_dispatch(
                     if !explicit_route_override
                         && !fleet_route_applied
                         && let Some(tag) =
-                            crate::local_ollama::adopt_live_local_ollama_for_run(&mut config).await
+                            crate::local_ollama::adopt_live_local_ollama_for_run(&mut config, false)
+                                .await
                     {
                         eprintln!(
                             "codewhale exec: no cloud API key, so this run uses local Ollama {tag}; nothing was saved."
@@ -5039,7 +5040,7 @@ async fn run_doctor(
     println!("{}", "==================".truecolor(sky_r, sky_g, sky_b));
     let local_route = if probes.probe_local {
         let mut local = config.clone();
-        crate::local_ollama::adopt_live_local_ollama_for_run(&mut local)
+        crate::local_ollama::adopt_live_local_ollama_for_run(&mut local, true)
             .await
             .map(|tag| (local, tag))
     } else {
