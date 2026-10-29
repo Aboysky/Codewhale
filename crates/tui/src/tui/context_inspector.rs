@@ -806,7 +806,7 @@ impl ContextInspectorView {
         self.model = app.model_display_label();
         self.workspace = codewhale_util::utils::display_path(&app.workspace);
         self.auto_compact = app.auto_compact;
-        self.threshold = if app.auto_compact && max > 0 && app.compact_threshold > 0 {
+        self.threshold = if app.auto_compact && max > 0 {
             (app.compact_threshold as f64 * 100.0 / f64::from(max)).clamp(0.0, 100.0)
         } else {
             app.auto_compact_threshold_percent
@@ -1532,6 +1532,10 @@ mod tests {
         view.render(area, &mut buffer);
         let rendered: String = buffer.content().iter().map(|cell| cell.symbol()).collect();
         assert!(rendered.contains("makes room at 50%"), "{rendered}");
+        app.compact_threshold = 0;
+        view.refresh_from_app(&app);
+        assert_eq!(view.threshold, 0.0);
+        assert!(view.rows[2].detail.contains("Makes room at 0%"));
         app.auto_compact = false;
         view.refresh_from_app(&app);
         assert!(view.rows[2].detail.contains("Auto compact: off"));
