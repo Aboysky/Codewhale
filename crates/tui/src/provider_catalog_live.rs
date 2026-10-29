@@ -66,7 +66,7 @@ static CACHE: LazyLock<RwLock<ProviderCatalogCache>> =
 static REFRESH_GENERATIONS: LazyLock<RwLock<BTreeMap<String, u64>>> =
     LazyLock::new(|| RwLock::new(BTreeMap::new()));
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderCatalogRefreshTicket {
     provider: String,
     provider_kind: ProviderKind,
@@ -698,7 +698,7 @@ pub(crate) fn cached_roster_is_authoritative(
 /// endpoint fingerprint — never by table name. The Codewhale API's own rows
 /// are fenced the same way.
 fn is_account_scoped_scope(provider: &str, fingerprint: &str) -> bool {
-    crate::plugins::providers::is_account_catalog_scope(provider, fingerprint)
+    codewhale_plugins::providers::is_account_catalog_scope(provider, fingerprint)
         || provider.starts_with("codewhale:")
         || fingerprint == base_url_fingerprint(codewhale_config::catalog::BASETEN_BASE_URL)
         || fingerprint
@@ -1454,6 +1454,21 @@ fn with_current_ticket<T>(
     let result = operation();
     drop(generations);
     Some(result)
+}
+
+pub(crate) fn with_current_route_ticket<T>(
+    ticket: &ProviderCatalogRefreshTicket,
+    provider_kind: ProviderKind,
+    provider: &str,
+    base_url: &str,
+    operation: impl FnOnce() -> T,
+) -> Option<T> {
+    if ticket.provider_kind != provider_kind
+        || ticket.fingerprint.as_deref() != Some(base_url_fingerprint(base_url).as_str())
+    {
+        return None;
+    }
+    with_current_ticket(ticket, provider, operation)
 }
 
 /// Record a successful refresh only if no newer refresh superseded it.

@@ -51,6 +51,8 @@ fn params_schema(method: &str, generator: &mut SchemaGenerator) -> Schema {
         "core/call" => generator.subschema_for::<CoreCallParams>(),
         "session/checkpoint" => generator.subschema_for::<SessionCheckpointParams>(),
         "user-questions/ask" => generator.subschema_for::<UserQuestionParams>(),
+        "subagent/start" => generator.subschema_for::<SubagentStartParams>(),
+        "subagent/result" | "subagent/dispose" => generator.subschema_for::<SubagentHandleParams>(),
         "ext/faulted" => generator.subschema_for::<FaultedParams>(),
         "log" => generator.subschema_for::<LogParams>(),
         other => panic!("method `{other}` has no params type in the TypeScript generator"),
@@ -503,6 +505,21 @@ const CORE_ONLY: &[&str] = &[
 /// Every method, with why it gives the host no core authority. Adding a
 /// method means adding its row here, in review, with that reason.
 const REVIEWED: &[(&str, &str, &str)] = &[
+    (
+        "host_to_core",
+        "subagent/start",
+        "opaque live root-invocation subagent ticket and bounded prompt, persona and tool narrowing; the existing nested-call gate plans and approves the typed agent start and SharedSubAgentManager owns the child, its loop, limits and receipts; no host-selected model route, widened tools or second executor",
+    ),
+    (
+        "host_to_core",
+        "subagent/result",
+        "opaque live ticket and a child id this invocation started; reads the manager's settled output only; no session, transcript or other child",
+    ),
+    (
+        "host_to_core",
+        "subagent/dispose",
+        "opaque live ticket and a child id this invocation started; asks the manager to cancel and dispose its own child; no other child, session or turn",
+    ),
     (
         "host_to_core",
         "user-questions/ask",

@@ -1328,7 +1328,7 @@ pub fn report_compaction_failure(
 
 /// Check if an error is transient and worth retrying. Categories that map to
 /// transient retry: Network, RateLimit, Timeout. Context overflow is *not*
-/// transient — it needs a smaller input (ladder), not the same payload.
+/// transient — it needs a larger route window, not the same payload.
 fn is_transient_error(e: &anyhow::Error) -> bool {
     classify_compaction_failure(e).is_transient()
 }
@@ -1821,44 +1821,6 @@ fn validate_compaction_summary(summary: &str) -> Result<()> {
     Ok(())
 }
 
-/// Drop the oldest history message before retrying an over-window summary
-/// request, plus any tool results the removal orphans (strict providers
-/// reject unpaired results). `messages` ends with the handoff instruction.
-///
-/// The newest checkpoint is never dropped: it carries the previous handoff
-/// note, and without it the fold-in has nothing to carry forward, so user
-/// corrections and limits would vanish without notice. Returns `false`, having
-/// changed nothing, when no other history message can go and at least one
-/// would remain; the caller then fails the pass instead of summarizing
-/// without the note.
-fn drop_oldest_history_messages(messages: &mut Vec<Message>) -> bool {
-    let instruction = messages.len().saturating_sub(1);
-    let history = &messages[..instruction];
-    let mut keep = history
-        .iter()
-        .rposition(is_wire_compaction_checkpoint_message);
-    let Some(index) = (0..instruction).find(|&index| Some(index) != keep) else {
-        return false;
-    };
-    if history.len() <= 1 {
-        return false;
-    }
-    messages.remove(index);
-    if keep.is_some_and(|keep_at| keep_at > index) {
-        keep = keep.map(|keep_at| keep_at - 1);
-    }
-    while index + 1 < messages.len()
-        && Some(index) != keep
-        && messages[index].content.iter().any(is_orphaned_result_block)
-    {
-        messages.remove(index);
-        if keep.is_some_and(|keep_at| keep_at > index) {
-            keep = keep.map(|keep_at| keep_at - 1);
-        }
-    }
-    true
-}
-
 /// The summary request for one compaction pass: the parent turn's exact
 /// request inputs — model, system prompt, tools, reasoning tier, and stored
 /// history in order — plus one trailing user instruction. Only per-request
@@ -1990,16 +1952,9 @@ async fn create_summary(
         ) {
             Some(cap) if cap >= summary_floor => cap,
             _ => {
-                if !drop_oldest_history_messages(&mut request_messages) {
-                    anyhow::bail!(
-                        "The summary request for making room leaves too little output room in this route's context window, and no older history is left to drop."
-                    );
-                }
-                logging::warn(
-                    "Compaction summary input leaves too little output room in the context \
-                     window; dropped the oldest history item and retrying",
+                anyhow::bail!(
+                    "The complete conversation leaves too little output room in this route's context window. The conversation was preserved; switch to a model with a larger context window and retry."
                 );
-                continue;
             }
         };
         let request = compaction_summary_request(
@@ -2021,21 +1976,11 @@ async fn create_summary(
             Ok(response) => response,
             // A byte-side size rejection can also read like a length problem
             // (gateway HTML pages carry their own wording); the size ladder
-            // owns it, not the drop-oldest ladder.
+            // owns it, rather than the context-window failure path.
             Err(err) if !is_request_too_large_error(&err) && is_context_window_error(&err) => {
-                if !drop_oldest_history_messages(&mut request_messages) {
-                    logging::warn(
-                        "Compaction summary input is over the context window with nothing \
-                         left to drop but the previous handoff note; the pass fails instead \
-                         of losing that note",
-                    );
-                    return Err(err);
-                }
-                logging::warn(format!(
-                    "Compaction summary input over the context window ({err}); \
-                     dropped the oldest history item and retrying"
+                return Err(err.context(
+                    "The provider could not summarize the complete conversation within its context window. The conversation was preserved; switch to a model with a larger context window and retry."
                 ));
-                continue;
             }
             Err(err) if is_request_too_large_error(&err) => match size_ladder {
                 RequestSizeLadder::Start => {
@@ -2311,10 +2256,6 @@ fn is_context_window_error(e: &anyhow::Error) -> bool {
         return false;
     }
 
-    // Only genuine overflow wording drops history. The category alone is far
-    // too wide: it now covers every rejected request (#6843), so a bare
-    // `token` or `maximum` ("max_tokens must be <= 8192", "temperature exceeds
-    // maximum 2") must not peel the summary input away on each retry.
     let lower = text.to_lowercase();
     is_context_window_error_message(&text)
         || (lower.contains("requested") && lower.contains("tokens") && lower.contains("maximum"))
@@ -2682,8 +2623,11 @@ mod tests {
         assert_eq!(latest, &second);
     }
 
-    #[test]
-    fn context_window_errors_are_detected_for_summary_fallback() {
+    #[tokio::test]
+    async fn context_window_errors_are_detected_for_summary_fallback() {
+        let _environment = crate::test_support::lock_test_env();
+        let _canonical = crate::test_support::EnvVarGuard::remove("CODEWHALE_MAX_OUTPUT_TOKENS");
+        let _legacy = crate::test_support::EnvVarGuard::remove("DEEPSEEK_MAX_OUTPUT_TOKENS");
         for msg in [
             "HTTP 400 Bad Request: maximum context length is 1000000 tokens",
             "invalid_request_error: prompt is too long for the current model",
@@ -2710,9 +2654,60 @@ mod tests {
         ] {
             assert!(
                 !is_context_window_error(&anyhow::anyhow!(msg)),
-                "a non-length rejection must not trigger the drop-oldest ladder: `{msg}`",
+                "a non-length rejection must not be classified as overflow: `{msg}`",
             );
         }
+
+        let original = vec![
+            msg("user", "Keep the original requirement."),
+            msg("assistant", "I will preserve the requirement."),
+            msg("user", "Continue with the last request."),
+        ];
+        let before = original.clone();
+        let client = ScriptedSummaryClient::with_outcomes(vec![
+            Err(anyhow::anyhow!(
+                "prompt is too long for this model's context window"
+            )),
+            Ok(summary_content()),
+        ]);
+        let mut usage = Usage::default();
+        let error = compact_messages_safe(
+            &client,
+            &original,
+            None,
+            &prepared(&CompactionConfig::default()),
+            &mut usage,
+        )
+        .await
+        .expect_err("a partial-input summary must not replace the conversation");
+        assert!(error.to_string().contains("conversation was preserved"));
+        let requests = client.requests.lock().expect("requests");
+        assert_eq!(requests.len(), 1);
+        assert_eq!(&requests[0].messages[..original.len()], original.as_slice());
+        assert_eq!(original, before);
+        drop(requests);
+
+        let mut limited = ScriptedSummaryClient::new(vec![summary_content()]);
+        limited.limits = Some(codewhale_config::route::RouteLimits {
+            context_tokens: Some(4_096),
+            output_tokens: Some(8_192),
+            output_declared: true,
+            ..Default::default()
+        });
+        let large = vec![msg("user", &"a".repeat(100_000))];
+        let before = large.clone();
+        let error = compact_messages_safe(
+            &limited,
+            &large,
+            None,
+            &prepared(&CompactionConfig::default()),
+            &mut usage,
+        )
+        .await
+        .expect_err("an overfull summary must not omit the oldest history");
+        assert!(error.to_string().contains("too little output room"));
+        assert!(limited.requests.lock().expect("requests").is_empty());
+        assert_eq!(large, before);
     }
 
     #[test]
@@ -3147,6 +3142,7 @@ mod tests {
         responses: std::sync::Mutex<std::collections::VecDeque<anyhow::Result<Vec<ContentBlock>>>>,
         requests: std::sync::Mutex<Vec<MessageRequest>>,
         retry_started: Option<std::sync::Arc<tokio::sync::Notify>>,
+        limits: Option<codewhale_config::route::RouteLimits>,
     }
 
     impl ScriptedSummaryClient {
@@ -3159,6 +3155,7 @@ mod tests {
                 responses: std::sync::Mutex::new(responses.into()),
                 requests: std::sync::Mutex::new(Vec::new()),
                 retry_started: None,
+                limits: None,
             }
         }
     }
@@ -3171,6 +3168,10 @@ mod tests {
 
         fn model(&self) -> &str {
             "test-model"
+        }
+
+        fn route_limits(&self) -> Option<codewhale_config::route::RouteLimits> {
+            self.limits
         }
 
         async fn create_message(

@@ -615,7 +615,7 @@ pub struct ToolExecutionState {
     /// Restrict skill discovery to CodeWhale-owned roots plus `skills_dir`.
     pub skills_discovery_mode: crate::skills::SkillDiscoveryMode,
     /// Immutable registry snapshot for this workspace/engine context.
-    pub plugin_registry: Option<Arc<crate::plugins::PluginRegistry>>,
+    pub plugin_registry: Option<Arc<codewhale_plugins::PluginRegistry>>,
     /// Elevated sandbox policy override (used when retrying after sandbox denial).
     /// This overrides the default sandbox behavior for shell commands.
     pub elevated_sandbox_policy: Option<codewhale_sandbox::SandboxPolicy>,
@@ -722,6 +722,7 @@ pub struct ToolExecutionState {
     /// every agent call re-reads it (`None` keeps the posture above as is).
     pub(crate) live_posture: Option<crate::core::engine::LivePosture>,
     pub(crate) browser_tool: Option<String>,
+    pub(crate) child_activation: Option<Arc<crate::tools::subagent::ChildActivationRequest>>,
 }
 
 impl std::ops::Deref for ToolContext {
@@ -823,6 +824,7 @@ impl ToolContext {
                 nested_call_gate: None,
                 live_posture: None,
                 browser_tool: None,
+                child_activation: None,
             }),
         }
     }
@@ -930,7 +932,10 @@ impl ToolContext {
     }
 
     #[must_use]
-    pub fn with_plugin_registry(mut self, registry: Arc<crate::plugins::PluginRegistry>) -> Self {
+    pub fn with_plugin_registry(
+        mut self,
+        registry: Arc<codewhale_plugins::PluginRegistry>,
+    ) -> Self {
         self.plugin_registry = Some(registry);
         self
     }

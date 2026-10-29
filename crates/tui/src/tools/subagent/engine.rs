@@ -995,9 +995,14 @@ pub(crate) struct ChildJob {
     scheduler: tokio::runtime::Handle,
     pub(crate) requests: std::sync::atomic::AtomicU32,
     logical_steps: std::sync::atomic::AtomicU32,
+    initial_submission_assigned: std::sync::atomic::AtomicBool,
     response_received: std::sync::atomic::AtomicBool,
     selected_model: std::sync::Mutex<String>,
     stop_reason: std::sync::Mutex<Option<String>>,
+    activation_provider_stop: std::sync::Mutex<Option<String>>,
+    activation_admission_index: std::sync::Mutex<Option<usize>>,
+    activation_terminal_stop:
+        std::sync::Mutex<codewhale_agent_contract::worker_profile::ChildActivationStopReason>,
 }
 impl ChildJob {
     pub(crate) async fn admitted(
@@ -1028,11 +1033,80 @@ impl ChildJob {
                 .map_err(|_| anyhow!("child admission requires the existing Engine scheduler"))?,
             requests: std::sync::atomic::AtomicU32::new(0),
             logical_steps: std::sync::atomic::AtomicU32::new(0),
+            initial_submission_assigned: std::sync::atomic::AtomicBool::new(false),
             response_received: std::sync::atomic::AtomicBool::new(false),
             selected_model: std::sync::Mutex::new(selected_model),
             stop_reason: std::sync::Mutex::new(None),
+            activation_provider_stop: std::sync::Mutex::new(None),
+            activation_admission_index: std::sync::Mutex::new(None),
+            activation_terminal_stop: std::sync::Mutex::new(
+                codewhale_agent_contract::worker_profile::ChildActivationStopReason::Error,
+            ),
         }))
     }
+    pub(crate) fn take_initial_submission_id(&self) -> Option<String> {
+        let activation = self.authority.runtime.activation.as_ref()?;
+        (!self
+            .initial_submission_assigned
+            .swap(true, std::sync::atomic::Ordering::AcqRel))
+        .then(|| activation.identity.initial_submission_id.clone())
+    }
+
+    pub(crate) async fn record_initial_admission(
+        &self,
+        submission_id: Option<&str>,
+        turn_id: &str,
+        messages: &[Message],
+    ) -> Result<()> {
+        let Some(activation) = self.authority.runtime.activation.as_ref() else {
+            return Ok(());
+        };
+        let Some(submission_id) = submission_id else {
+            return Ok(());
+        };
+        anyhow::ensure!(
+            submission_id == activation.identity.initial_submission_id,
+            "child initial submission identity changed"
+        );
+        let message_index = messages
+            .len()
+            .checked_sub(1)
+            .ok_or_else(|| anyhow!("child initial input was not appended"))?;
+        anyhow::ensure!(
+            messages[message_index].role == codewhale_models::Role::User,
+            "child initial input is not a user message"
+        );
+        self.project(messages, self.steps()).await?;
+        let message_index = self
+            .artifact
+            .lock()
+            .await
+            .as_ref()
+            .and_then(|writer| writer.persisted_messages.checked_sub(1))
+            .ok_or_else(|| anyhow!("child initial input has no durable transcript index"))?;
+        use sha2::Digest as _;
+        let prefix_sha256 = sha2::Sha256::digest(serde_json::to_vec(messages)?)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        super::record_child_admission(
+            &self.authority.runtime.manager,
+            &activation.identity,
+            codewhale_agent_contract::worker_profile::ChildInitialAdmission {
+                submission_id: submission_id.to_owned(),
+                turn_id: turn_id.to_owned(),
+                message_index,
+                prefix_sha256,
+            },
+        )
+        .await?;
+        *self
+            .activation_admission_index
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = Some(message_index);
+        Ok(())
+    }
+
     pub(crate) async fn record_route_replacement(
         &self,
         current: &SubAgentRuntime,
@@ -1197,6 +1271,124 @@ impl ChildJob {
             projected: false,
         }
     }
+    pub(crate) fn record_activation_provider_stop(&self, reason: Option<&str>, failed: bool) {
+        if self.authority.runtime.activation.is_none() {
+            return;
+        }
+        *self
+            .activation_provider_stop
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) =
+            (!failed).then(|| reason.map(str::to_owned)).flatten();
+    }
+
+    pub(crate) fn record_activation_terminal_stop(
+        &self,
+        status: crate::core::events::TurnOutcomeStatus,
+        cancelled: bool,
+    ) {
+        use codewhale_agent_contract::worker_profile::ChildActivationStopReason as Stop;
+        let provider = self
+            .activation_provider_stop
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let stop = if cancelled {
+            Stop::Aborted
+        } else if self.budget_reason().is_some() {
+            Stop::Error
+        } else if matches!(provider.as_deref(), Some("refusal")) {
+            Stop::Refusal
+        } else if status == crate::core::events::TurnOutcomeStatus::Completed {
+            Stop::Completed
+        } else if codewhale_models::is_output_limit_stop_reason(provider.as_deref()) {
+            Stop::MaxTokens
+        } else {
+            Stop::Error
+        };
+        *self
+            .activation_terminal_stop
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = stop;
+    }
+
+    async fn capture_activation_output(&self, streamed_text: String) -> Result<()> {
+        let Some(activation) = self.authority.runtime.activation.as_ref() else {
+            return Ok(());
+        };
+        let admission = *self
+            .activation_admission_index
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let Some(admission) = admission else {
+            return Ok(());
+        };
+        let output = {
+            let mut artifact = self.artifact.lock().await;
+            let writer = artifact
+                .as_mut()
+                .ok_or_else(|| anyhow!("child transcript writer is unavailable"))?;
+            writer.append_messages(&[], true)?;
+            let messages = super::load_subagent_transcript_artifact(
+                &writer.state_root,
+                &self.authority.owner_agent_id,
+            )?;
+            let selected =
+                messages
+                    .iter()
+                    .enumerate()
+                    .skip(admission + 1)
+                    .rev()
+                    .find(|(_, message)| {
+                        matches!(
+                            message.role,
+                            codewhale_models::Role::Assistant
+                                | codewhale_models::Role::InterruptedAssistant
+                        ) && !message.content.is_empty()
+                    });
+            let selected = if let Some((index, message)) = selected {
+                Some((index, message.content.clone()))
+            } else if !streamed_text.is_empty() {
+                let message = Message {
+                    role: codewhale_models::Role::InterruptedAssistant,
+                    content: vec![ContentBlock::Text {
+                        text: streamed_text,
+                        cache_control: None,
+                    }],
+                };
+                let index = writer.persisted_messages;
+                writer.append_messages(std::slice::from_ref(&message), true)?;
+                Some((index, message.content))
+            } else {
+                None
+            };
+            selected
+                .map(|(index, content)| -> Result<codewhale_agent_contract::worker_profile::ChildActivationOutput> {
+                    use sha2::Digest as _;
+                    Ok(
+                        codewhale_agent_contract::worker_profile::ChildActivationOutput {
+                            transcript_message_index: index,
+                            content_sha256: sha2::Sha256::digest(serde_json::to_vec(&content)?)
+                                .iter()
+                                .map(|byte| format!("{byte:02x}"))
+                                .collect(),
+                        },
+                    )
+                })
+                .transpose()?
+        };
+        let stop_reason = *self
+            .activation_terminal_stop
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        super::record_child_output(
+            &self.authority.runtime.manager,
+            &activation.identity,
+            output,
+            stop_reason,
+        )
+        .await
+    }
+
     pub(crate) fn provider_responded(&self) {
         // Even an incomplete/failed decoder means the provider accepted this
         // request. It is never eligible for first-request route replacement.
@@ -1539,6 +1731,18 @@ pub(super) async fn run_child_agent(
     );
     let mut system =
         build_subagent_system_prompt_with_skills(&agent_type, &assignment, &runtime.context);
+    if let Some(persona) = runtime
+        .activation
+        .as_ref()
+        .and_then(|activation| activation.configuration.persona.as_deref())
+    {
+        anyhow::ensure!(
+            persona.len() <= 32 * 1024,
+            "child persona exceeds the reviewed limit"
+        );
+        system.push_str("\n\n");
+        system.push_str(persona);
+    }
     if let Some(schema) = runtime.workflow_response_schema.as_ref() {
         system = system
             .replace(SUBAGENT_OUTPUT_FORMAT, "")
@@ -1767,7 +1971,13 @@ pub(crate) async fn drive_child_actor(
     // The launch permit alone is not a started turn. Project only Core's
     // admitted lifecycle event, once across work, report and route retries.
     let mut started = false;
+    let mut streamed_text = String::new();
     let mut observe_start = |event: &Event| {
+        if runtime.activation.is_some()
+            && let Event::MessageDelta { content, .. } = event
+        {
+            streamed_text.push_str(content);
+        }
         if !started && matches!(event, Event::TurnStarted { .. }) {
             started = true;
             if let Some(mailbox) = runtime.mailbox.as_ref() {
@@ -1995,6 +2205,14 @@ pub(crate) async fn drive_child_actor(
             }
         }
     }
+    if !result
+        .as_ref()
+        .err()
+        .is_some_and(|error| error.downcast_ref::<UnsettledChildCancellation>().is_some())
+        && let Err(error) = job.capture_activation_output(streamed_text).await
+    {
+        result = Err(error.context("child activation output capture failed"));
+    }
     result
 }
 
@@ -2007,18 +2225,18 @@ async fn prepare_child_membership(
     Option<crate::extension_host::HostAttachment>,
 )> {
     let mut scoped_runtime = runtime.clone();
-    let extension_host = if crate::plugins::activation::extension_host_policy_enabled() {
+    let extension_host = if codewhale_plugins::activation::extension_host_policy_enabled() {
         if let Some(plugins) = runtime.context.plugin_registry.as_ref() {
             let selected = if let Some(preset) = assignment.native_preset.as_ref() {
                 let plugins = Arc::clone(plugins);
                 let preset = preset.clone();
-                let policy = crate::plugins::activation::extension_host_policy_enabled();
+                let policy = codewhale_plugins::activation::extension_host_policy_enabled();
                 #[cfg(test)]
                 let env_scope = crate::test_support::env_scope_ticket();
                 tokio::task::spawn_blocking(move || {
                     #[cfg(test)]
                     let _env_scope = crate::test_support::join_env_scope(env_scope);
-                    let _policy = crate::plugins::activation::PolicyScope::propagate(policy);
+                    let _policy = codewhale_plugins::activation::PolicyScope::propagate(policy);
                     plugins.with_native_preset(preset)
                 })
                 .await

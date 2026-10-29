@@ -19,11 +19,11 @@ use super::registry::{OwnerRegistry, OwnerState};
 use super::tier::HostTier;
 use super::{ExtensionHostManager, ExtensionHostOptions, HostAttachment, HostStatus};
 use crate::command_catalog::{BuiltinCommand, CatalogGuard, CommandCatalog, UserCommand};
-use crate::plugins::PluginRegistry;
-use crate::plugins::activation::TestPolicyGuard;
-use crate::plugins::discovery::{DiscoveryConfig, discover_with_config};
 use crate::tools::spec::{ApprovalRequirement, ToolContext, ToolError, ToolSpec};
 use codewhale_config::OwnerRef;
+use codewhale_plugins::PluginRegistry;
+use codewhale_plugins::activation::TestPolicyGuard;
+use codewhale_plugins::discovery::{DiscoveryConfig, discover_with_config};
 
 /// The integration tests below run the host on Node unless they say
 /// otherwise; the Bun ones pin Bun (`bun_for_tests`).
@@ -710,7 +710,7 @@ pub(crate) struct FixturePlugins {
 
 impl FixturePlugins {
     pub(crate) async fn new(names: &[&str]) -> Self {
-        use crate::plugins::install::{
+        use codewhale_plugins::install::{
             DEFAULT_MAX_SIZE_BYTES, PluginInstallOutcome, PluginInstallSource, install,
         };
         let temp = tempfile::tempdir().unwrap();
@@ -2122,7 +2122,7 @@ fn native_entry_rule_fails_validation_when_the_host_is_enabled() {
             .map(|diagnostic| {
                 assert_eq!(
                     diagnostic.level,
-                    crate::plugins::types::PluginDiagnosticLevel::Error
+                    codewhale_plugins::types::PluginDiagnosticLevel::Error
                 );
                 diagnostic.message.clone()
             })
@@ -2247,7 +2247,7 @@ fn owner_reports_keep_bounded_attributed_logs_and_ignore_stale_hosts() {
 
 #[tokio::test]
 async fn typed_author_example_is_reviewed_before_its_tool_can_execute() {
-    use crate::plugins::install::{DEFAULT_MAX_SIZE_BYTES, PluginInstallSource, install};
+    use codewhale_plugins::install::{DEFAULT_MAX_SIZE_BYTES, PluginInstallSource, install};
 
     let Some(node) = node_for_tests("typed author example") else {
         return;
@@ -2698,6 +2698,8 @@ async fn ordinary_exit_rejects_requests_from_a_drained_calls_waker() {
                 ticket: None,
                 checkpoint_ticket: None,
                 question_ticket: None,
+                subagent_ticket: None,
+                caller_tools: None,
                 session_id: None,
                 agent_id: None,
                 origin_turn_id: None,
@@ -2760,6 +2762,8 @@ async fn idle_retirement_seals_admission_and_does_not_wait_for_heartbeat() {
                 ticket: None,
                 checkpoint_ticket: None,
                 question_ticket: None,
+                subagent_ticket: None,
+                caller_tools: None,
                 session_id: None,
                 agent_id: None,
                 origin_turn_id: None,
@@ -2858,6 +2862,8 @@ async fn two_dirty_teardowns_wait_for_a_live_call_then_replay_without_spending_c
                 ticket: None,
                 checkpoint_ticket: None,
                 question_ticket: None,
+                subagent_ticket: None,
+                caller_tools: None,
                 session_id: None,
                 agent_id: None,
                 origin_turn_id: None,
@@ -4221,13 +4227,48 @@ fn command_registry_refuses_shadowing_and_undoes_exactly_one_entry() {
         )
         .unwrap();
 
-    // Built-in names, their aliases, and the fixed mode aliases, as the
-    // catalog says (the real table: `commands::extension_host_tests`).
+    // Built-in spellings remain protected while plugins receive distinct names.
     for name in ["help", "trust", "model", "jihua", "zidong", "stub-alias"] {
-        let refused = register_command(&mut registry, &a, name, None)
-            .expect_err(&format!("/{name} must be refused"));
-        assert!(refused.contains("built-in command"), "{name}: {refused}");
+        let handle = register_command(&mut registry, &a, name, None).unwrap();
+        let _ = registry.mark_active(&a);
+        let registered = registry.live_command(handle, "a", a.generation).unwrap();
+        assert_eq!(registered.name, format!("plugin-a-{name}"));
+        assert_eq!(registered.declared_name, name);
+        registry.unregister(&a, handle);
     }
+    let mut long_registry = OwnerRegistry::new();
+    let long_name = "name".repeat(40);
+    let long_owner = long_registry
+        .begin_owner(
+            HostTier::Plugin,
+            "long-id",
+            &long_name,
+            Some(fake_authority("long-id")),
+            "hash-long",
+        )
+        .unwrap();
+    let long_help = register_command(&mut long_registry, &long_owner, "help", None).unwrap();
+    let long_model = register_command(&mut long_registry, &long_owner, "model", None).unwrap();
+    let _ = long_registry.mark_active(&long_owner);
+    let help_name = long_registry
+        .live_command(long_help, "long-id", long_owner.generation)
+        .unwrap()
+        .name;
+    let model_name = long_registry
+        .live_command(long_model, "long-id", long_owner.generation)
+        .unwrap()
+        .name;
+    assert!(help_name.len() <= 64 && model_name.len() <= 64);
+    assert_ne!(help_name, model_name);
+    let aliased = register_command(&mut registry, &a, "help", None).unwrap();
+    let clash = register_command(&mut registry, &a, "plugin-a-help", None).unwrap_err();
+    assert!(clash.contains("namespaced alias"), "{clash}");
+    assert!(registry.live_command(aliased, "a", a.generation).is_some());
+    registry.unregister(&a, aliased);
+    let explicit = register_command(&mut registry, &a, "plugin-a-help", None).unwrap();
+    let clash = register_command(&mut registry, &a, "help", None).unwrap_err();
+    assert!(clash.contains("namespaced alias"), "{clash}");
+    registry.unregister(&a, explicit);
     // Names outside DSH's grammar (upper case, a leading digit or slash,
     // spaces), and over-long ones.
     for name in [
@@ -4444,10 +4485,10 @@ export function apply(ctx) {{
     .unwrap();
     let _policy = TestPolicyGuard::extension_host(true);
     let fixture = FixturePlugins::new(&[]).await;
-    crate::plugins::install::install(
-        crate::plugins::install::PluginInstallSource::LocalPath(plugin),
+    codewhale_plugins::install::install(
+        codewhale_plugins::install::PluginInstallSource::LocalPath(plugin),
         &fixture.config.user_plugins_dir,
-        crate::plugins::install::DEFAULT_MAX_SIZE_BYTES,
+        codewhale_plugins::install::DEFAULT_MAX_SIZE_BYTES,
         &codewhale_net::network_policy::NetworkPolicy::default(),
         false,
         &|_| None,
@@ -4540,10 +4581,14 @@ fn a_command_registration_is_refused_when_no_built_in_catalog_is_installed() {
 
     let _stub = stub_builtin_commands();
     register_command(&mut registry, &a, "fine-name", None).unwrap();
-    let clash = register_command(&mut registry, &a, "help", None).unwrap_err();
-    assert!(
-        clash.contains("collides with a built-in command"),
-        "{clash}"
+    let handle = register_command(&mut registry, &a, "help", None).unwrap();
+    let _ = registry.mark_active(&a);
+    assert_eq!(
+        registry
+            .live_command(handle, "a", a.generation)
+            .unwrap()
+            .name,
+        "plugin-a-help"
     );
 }
 
@@ -5062,7 +5107,7 @@ fn launch_plans_carry_their_tier_and_use_a_data_directory_each() {
                 );
                 assert!(matches!(
                     super::supervisor::planned_sandbox(tier, &runtime, home.path()),
-                    Ok(super::supervisor::HostSandbox::Unsandboxed(_))
+                    Err(reason) if reason.contains("would create")
                 ));
                 let data = super::supervisor::tier_data_dir(home.path(), tier);
                 assert!(data.is_dir());
@@ -5766,7 +5811,7 @@ async fn all_fifteen_project_hook_events_use_the_pinned_runner_and_reject_change
     let env_scope = crate::test_support::env_scope_ticket();
     tokio::task::spawn_blocking(move || {
         let _env = crate::test_support::join_env_scope(env_scope);
-        let _policy = crate::plugins::activation::PolicyScope::propagate(true);
+        let _policy = codewhale_plugins::activation::PolicyScope::propagate(true);
         for event in codewhale_config::hooks::ALL_HOOK_EVENTS {
             let results = executor.execute(event, &context);
             assert_eq!(results.len(), 1, "{event:?}");

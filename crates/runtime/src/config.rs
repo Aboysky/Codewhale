@@ -1683,6 +1683,8 @@ pub struct UpdateConfig {
     pub update_uri: Option<String>,
     #[serde(default = "default_update_show_whats_new")]
     pub show_whats_new: bool,
+    #[serde(default)]
+    pub mode: Option<String>,
 }
 
 fn default_update_show_whats_new() -> bool {
@@ -1696,6 +1698,7 @@ impl Default for UpdateConfig {
             check_interval_hours: default_update_check_interval_hours(),
             update_uri: None,
             show_whats_new: true,
+            mode: None,
         }
     }
 }
@@ -10913,7 +10916,8 @@ pub fn credential_secret_store() -> Option<codewhale_secrets::Secrets> {
     let explicit_backend = std::env::var_os("CODEWHALE_SECRET_BACKEND")
         .or_else(|| std::env::var_os("DEEPSEEK_SECRET_BACKEND"))
         .is_some_and(|value| !value.is_empty());
-    (isolated_home && explicit_backend).then(codewhale_secrets::Secrets::auto_detect)
+    (crate::test_support::state_from_environment() || (isolated_home && explicit_backend))
+        .then(codewhale_secrets::Secrets::auto_detect)
 }
 
 fn save_root_api_key_metadata_without_plaintext(config_path: &Path, table: &str) -> Result<()> {
@@ -11949,8 +11953,9 @@ fn provider_secret_store_api_key_with_mode(
     // Secret-store regressions opt in with an isolated CODEWHALE_HOME and an
     // explicit backend, matching the secrets crate's own test discipline.
     #[cfg(any(test, all(feature = "test-thread-scoped-state", debug_assertions)))]
-    if !codewhale_paths::codewhale_home_is_explicit()
-        || std::env::var_os("CODEWHALE_SECRET_BACKEND").is_none()
+    if !crate::test_support::state_from_environment()
+        && (!codewhale_paths::codewhale_home_is_explicit()
+            || std::env::var_os("CODEWHALE_SECRET_BACKEND").is_none())
     {
         return None;
     }

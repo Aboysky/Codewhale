@@ -469,6 +469,7 @@ pub enum MetricKind {
     Goal,
     Workspace,
     GitBranch,
+    Update,
 }
 
 impl MetricKind {
@@ -482,7 +483,7 @@ impl MetricKind {
             Self::Rate | Self::Ttft | Self::Cost => 5,
             Self::OutputTokens | Self::BillingTier => 7,
             Self::Balance | Self::Workspace | Self::GitBranch => 4,
-            Self::Goal => 3,
+            Self::Goal | Self::Update => 3,
             Self::Model | Self::Context => 0,
         }
     }

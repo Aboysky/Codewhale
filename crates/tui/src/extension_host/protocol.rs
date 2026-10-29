@@ -173,6 +173,9 @@ pub const METHODS: &[MethodSpec] = &[
     row(Direction::HostToCore, "core/call", true),
     row(Direction::HostToCore, "session/checkpoint", true),
     row(Direction::HostToCore, "user-questions/ask", true),
+    row(Direction::HostToCore, "subagent/start", true),
+    row(Direction::HostToCore, "subagent/result", true),
+    row(Direction::HostToCore, "subagent/dispose", true),
     MethodSpec {
         tiers: &[HostTier::Builtin],
         ..row(Direction::HostToCore, "proc/launch", true)
@@ -547,6 +550,32 @@ pub struct UserQuestionParams {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
+pub struct SubagentStartParams {
+    pub owner: OwnerRef,
+    pub ticket: String,
+    pub child_id: String,
+    pub prompt: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub persona: Option<String>,
+    #[serde(default)]
+    pub denied_tools: Vec<String>,
+    pub delivery: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct SubagentHandleParams {
+    pub owner: OwnerRef,
+    pub ticket: String,
+    pub child_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
 pub struct FaultedParams {
     pub owner: OwnerRef,
     pub error: String,
@@ -732,6 +761,9 @@ pub enum HostRequest {
     CoreCall(CoreCallParams),
     SessionCheckpoint(SessionCheckpointParams),
     UserQuestion(UserQuestionParams),
+    SubagentStart(SubagentStartParams),
+    SubagentResult(SubagentHandleParams),
+    SubagentDispose(SubagentHandleParams),
     ExecutionRedeem(ExecutionRedeemParams),
     ProcClose(ProcSessionParams),
     NetStart(ProcLaunchParams),
@@ -754,6 +786,8 @@ impl HostRequest {
             Self::CoreCall(params) => &params.owner.plugin_id,
             Self::SessionCheckpoint(params) => &params.owner.plugin_id,
             Self::UserQuestion(params) => &params.owner.plugin_id,
+            Self::SubagentStart(params) => &params.owner.plugin_id,
+            Self::SubagentResult(params) | Self::SubagentDispose(params) => &params.owner.plugin_id,
             Self::ExecutionRedeem(params) => &params.owner.plugin_id,
             Self::ProcClose(params) => &params.owner.plugin_id,
             Self::NetClose(params) => &params.owner.plugin_id,
@@ -875,6 +909,18 @@ pub fn parse_host_message(value: Value, tier: HostTier) -> Result<HostMessage, P
             id,
             request: Box::new(HostRequest::UserQuestion(params(&method, p)?)),
         },
+        ("subagent/start", Some(id)) => HostMessage::Request {
+            id,
+            request: Box::new(HostRequest::SubagentStart(params(&method, p)?)),
+        },
+        ("subagent/result", Some(id)) => HostMessage::Request {
+            id,
+            request: Box::new(HostRequest::SubagentResult(params(&method, p)?)),
+        },
+        ("subagent/dispose", Some(id)) => HostMessage::Request {
+            id,
+            request: Box::new(HostRequest::SubagentDispose(params(&method, p)?)),
+        },
         ("session/checkpoint", Some(id)) => HostMessage::Request {
             id,
             request: Box::new(HostRequest::SessionCheckpoint(params(&method, p)?)),
@@ -984,6 +1030,13 @@ impl HostMessage {
                 HostRequest::UserQuestion(p) => {
                     request_value(*id, "user-questions/ask", to_value(p))
                 }
+                HostRequest::SubagentStart(p) => request_value(*id, "subagent/start", to_value(p)),
+                HostRequest::SubagentResult(p) => {
+                    request_value(*id, "subagent/result", to_value(p))
+                }
+                HostRequest::SubagentDispose(p) => {
+                    request_value(*id, "subagent/dispose", to_value(p))
+                }
                 HostRequest::SessionCheckpoint(p) => {
                     request_value(*id, "session/checkpoint", to_value(p))
                 }
@@ -1089,6 +1142,10 @@ pub struct ToolCallParams {
     pub checkpoint_ticket: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub question_ticket: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subagent_ticket: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caller_tools: Option<Vec<String>>,
     /// Per-invocation identity; never cached at activation or by the host root.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
@@ -1335,7 +1392,7 @@ pub enum CommandResultWire {
 pub enum CoreMessage {
     Request {
         id: u64,
-        request: CoreRequest,
+        request: Box<CoreRequest>,
     },
     Cancel(CancelParams),
     Response {
@@ -1381,7 +1438,10 @@ pub fn parse_core_message(value: Value, tier: HostTier) -> Result<CoreMessage, P
         "mcp/open" => CoreRequest::McpOpen(params(&method, p)?),
         _ => return Err(undecoded(&method)),
     };
-    Ok(CoreMessage::Request { id, request })
+    Ok(CoreMessage::Request {
+        id,
+        request: Box::new(request),
+    })
 }
 
 #[cfg(test)]

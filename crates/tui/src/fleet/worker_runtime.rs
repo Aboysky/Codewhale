@@ -64,7 +64,7 @@ struct FrozenFleetMember {
     max_spawn_depth: Option<u32>,
     origin: ProfileOrigin,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    native_preset: Option<crate::extension_host::composition_scope::NativePresetRef>,
+    native_preset: Option<codewhale_plugins::composition_scope::NativePresetRef>,
 }
 
 impl FrozenFleetMember {
@@ -485,6 +485,7 @@ pub fn fleet_task_to_worker_spec_with_profiles(
     }
     let session_name = format!("fleet-{}-{}", worker_id, task_spec.id);
     let launch_manifest = ChildLaunchManifest {
+        activation: None,
         owner_session: run_id.to_string(),
         child_id: worker_id.to_string(),
         profile: runtime_profile.clone(),

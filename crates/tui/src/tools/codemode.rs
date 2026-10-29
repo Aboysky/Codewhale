@@ -240,6 +240,7 @@ pub(crate) struct NestedToolCallRequest {
     /// token has fired ([`Self::is_stale`]) and must stop waiting on a person
     /// when it fires: an approval is withdrawn, never silently decided.
     pub(crate) withdraw: Option<CancellationToken>,
+    pub(crate) child_activation: bool,
 }
 
 impl NestedToolCallRequest {
@@ -401,6 +402,16 @@ impl NestedCallGate {
         input: Value,
         withdraw: Option<CancellationToken>,
     ) -> NestedCallVerdict {
+        self.ask_request(name, input, withdraw, false).await
+    }
+
+    async fn ask_request(
+        &self,
+        name: String,
+        input: Value,
+        withdraw: Option<CancellationToken>,
+        child_activation: bool,
+    ) -> NestedCallVerdict {
         let unavailable = || NestedCallVerdict::Refused {
             error: ToolError::not_available(
                 "the turn that launched this program is no longer serving its permission gate",
@@ -417,6 +428,7 @@ impl NestedCallGate {
             input,
             reply,
             withdraw: withdraw.clone(),
+            child_activation,
         });
         let wait = async {
             if self.requests.send(request).await.is_err() {
@@ -865,6 +877,15 @@ impl CodemodeInvoker {
     /// sub-agent's call is first admitted against its grant, as its direct
     /// call is.
     async fn execute(&self, name: &str, input: Value) -> Result<RichToolResult, ToolError> {
+        self.execute_in(name, input, self.context.clone()).await
+    }
+
+    async fn execute_in(
+        &self,
+        name: &str,
+        input: Value,
+        context: ToolContext,
+    ) -> Result<RichToolResult, ToolError> {
         use crate::core::engine::tool_execution::OperationSpanGuard;
         let action_id = super::activity::action_id(name, &input);
         let mcp = if McpPool::is_mcp_tool(name) {
@@ -892,7 +913,6 @@ impl CodemodeInvoker {
             None => super::activity::registry_activity_kind(name, &input),
         };
         let registry = Arc::clone(&self.registry);
-        let context = self.context.clone();
         let name = name.to_string();
         let tx = self.gate.as_ref().map(|gate| gate.tx_event.clone());
         let cancel = self.context.cancel_token.clone();
@@ -1230,6 +1250,81 @@ impl CodemodeInvoker {
         };
         self.deliver(seq, started, &name, decision, outcome)
     }
+}
+
+impl CodemodeInvoker {
+    pub(crate) async fn start_child_activation(
+        &self,
+        input: Value,
+        withdraw: &CancellationToken,
+        request: Arc<crate::tools::subagent::ChildActivationRequest>,
+    ) -> Result<ToolCallResponse, NestedFailure> {
+        let Some(gate) = self.gate.as_ref() else {
+            return Err(NestedFailure::Unavailable(
+                "child activation requires the turn's permission gate".to_string(),
+            ));
+        };
+        let _permit = tokio::select! {
+            biased;
+            () = withdraw.cancelled() => {
+                return Err(NestedFailure::Unavailable("the call was withdrawn".to_string()));
+            }
+            permit = self.semaphore.clone().acquire_owned() => permit,
+        }
+        .map_err(|_| NestedFailure::Unavailable("code-mode run shut down".to_string()))?;
+        let started = Instant::now();
+        let seq = self.begin("agent");
+        let verdict = {
+            let _paused = self.pause();
+            gate.ask_request("agent".to_string(), input, Some(withdraw.clone()), true)
+                .await
+        };
+        let (input, decision, hook_context) = match verdict {
+            NestedCallVerdict::Run {
+                name,
+                input,
+                decision,
+                hook_context,
+                ..
+            } if name == "agent" && child_activation_input(&input) => {
+                (input, decision, hook_context)
+            }
+            NestedCallVerdict::Run { .. } | NestedCallVerdict::Answered { .. } => {
+                return Err(self.refused(
+                    seq,
+                    started,
+                    NestedDecision::Refused,
+                    "the admitted call is no longer a child activation start".to_string(),
+                ));
+            }
+            NestedCallVerdict::Refused { error, decision } => {
+                return Err(self.refused(seq, started, decision, error.to_string()));
+            }
+        };
+        self.finish(seq, |receipt| receipt.hook_context = hook_context);
+        let mut context = self.context.clone();
+        context.execution.child_activation = Some(request);
+        let outcome = {
+            let _exclusive = self.order.write().await;
+            tokio::select! {
+                biased;
+                () = withdraw.cancelled() => Err(ToolError::cancelled("the call was withdrawn while it ran")),
+                outcome = self.execute_in("agent", input, context) => outcome,
+            }
+        };
+        self.deliver(seq, started, "agent", decision, outcome)
+    }
+}
+
+pub(crate) fn child_activation_input(input: &Value) -> bool {
+    input.as_object().is_some_and(|object| {
+        object.get("action").and_then(Value::as_str) == Some("start")
+            && object.get("fork_context").and_then(Value::as_bool) == Some(false)
+            && object.get("prompt").and_then(Value::as_str).is_some()
+            && object
+                .keys()
+                .all(|key| matches!(key.as_str(), "action" | "prompt" | "model" | "fork_context"))
+    })
 }
 
 #[async_trait]
@@ -1797,7 +1892,7 @@ mod tests {
     async fn gated_nested_mcp_call_runs_through_the_session_pool() {
         let dir = tempfile::tempdir().unwrap();
         let pool = Arc::new(AsyncMutex::new(McpPool::new(
-            crate::mcp::McpConfig::default(),
+            codewhale_mcp::config::McpConfig::default(),
         )));
         let (context, asked) = gated_context(
             dir.path(),

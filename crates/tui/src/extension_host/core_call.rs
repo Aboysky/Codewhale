@@ -94,6 +94,7 @@ use codewhale_config::OwnerRef;
 pub(crate) const METHOD: &str = "core/call";
 const CHECKPOINT_METHOD: &str = "session/checkpoint";
 const QUESTION_METHOD: &str = "user-questions/ask";
+const SUBAGENT_METHOD: &str = "subagent/start";
 /// `core/call`s one invocation may make in all.
 pub(crate) const MAX_CALLS_PER_INVOCATION: u32 = 50;
 /// A backstop only: an invocation ends (and revokes its ticket) long before
@@ -257,12 +258,22 @@ pub(crate) struct Invocation {
     host_generation: u64,
     owner: OwnerRef,
     scope: Option<codewhale_config::EntryRef>,
-    plugins: Option<Arc<crate::plugins::PluginRegistry>>,
+    plugins: Option<Arc<codewhale_plugins::PluginRegistry>>,
     content_hash: String,
     calls: CodemodeInvoker,
     gate: NestedCallGate,
     root_caller: Option<SessionCheckpointCaller>,
     tickets: Vec<Ticket>,
+    caller_tools: Vec<String>,
+    activations: Mutex<
+        HashMap<
+            String,
+            (
+                crate::tools::subagent::SharedSubAgentManager,
+                crate::tools::subagent::ChildActivationContext,
+            ),
+        >,
+    >,
     session_call_lock: tokio::sync::Mutex<()>,
     /// Fires when the invocation ends or is revoked: withdraws every
     /// `core/call` still waiting or running for it.
@@ -382,6 +393,28 @@ impl CoreCalls {
                 uses: MAX_CALLS_PER_INVOCATION,
             })
         });
+        let subagent_ticket = root_caller.as_ref().map(|_| {
+            self.tickets.mint(Grant {
+                kind: TicketKind::Invocation,
+                tier,
+                host_generation,
+                owner: owner.clone(),
+                method: SUBAGENT_METHOD,
+                target: json!({ "call_id": call_id }),
+                ttl: TICKET_TTL,
+                uses: MAX_CALLS_PER_INVOCATION,
+            })
+        });
+        let caller_tools = specs
+            .iter()
+            .map(|spec| spec.name().to_string())
+            .filter(|name| {
+                !context
+                    .disallowed_tools
+                    .iter()
+                    .any(|denied| denied.eq_ignore_ascii_case(name))
+            })
+            .collect();
         let invocation = Arc::new(Invocation {
             tier,
             host_generation,
@@ -395,7 +428,10 @@ impl CoreCalls {
             tickets: std::iter::once(ticket.clone())
                 .chain(checkpoint_ticket.iter().cloned())
                 .chain(question_ticket.iter().cloned())
+                .chain(subagent_ticket.iter().cloned())
                 .collect(),
+            caller_tools,
+            activations: Mutex::new(HashMap::new()),
             session_call_lock: tokio::sync::Mutex::new(()),
             cancel: CancellationToken::new(),
         });
@@ -415,8 +451,15 @@ impl CoreCalls {
                 Arc::clone(&invocation),
             );
         }
+        if let Some(subagent_ticket) = subagent_ticket.as_ref() {
+            self.invocations.lock().expect("invocations lock").insert(
+                subagent_ticket.expose().to_string(),
+                Arc::clone(&invocation),
+            );
+        }
         Some(InvocationGuard {
             question_ticket,
+            subagent_ticket,
             checkpoint_ticket,
             core_calls: Arc::clone(self),
             ticket,
@@ -756,6 +799,270 @@ impl CoreCalls {
             })
     }
 
+    pub(crate) async fn serve_subagent(
+        &self,
+        shared: &ManagerShared,
+        tier: HostTier,
+        host_generation: u64,
+        request: super::protocol::HostRequest,
+        cx: HostRequestContext,
+    ) -> Result<Value, RpcErrorWire> {
+        use super::protocol::HostRequest;
+        use crate::tools::subagent::{
+            ChildActivationRequest, dispose_child_activation, resolve_child_activation_output,
+        };
+        use codewhale_agent_contract::worker_profile::{
+            ChildActivationDelivery, FrozenChildConfiguration,
+        };
+        let refuse = |code, message: String| RpcErrorWire {
+            code,
+            message,
+            data: None,
+        };
+        let (owner, ticket, child_id) = match &request {
+            HostRequest::SubagentStart(p) => (&p.owner, &p.ticket, &p.child_id),
+            HostRequest::SubagentResult(p) | HostRequest::SubagentDispose(p) => {
+                (&p.owner, &p.ticket, &p.child_id)
+            }
+            _ => {
+                return Err(refuse(
+                    error_code::INVALID_PARAMS,
+                    "not a subagent request".into(),
+                ));
+            }
+        };
+        let (owner, child_id) = (owner.clone(), child_id.clone());
+        let invocation = self.redeem_invocation(
+            shared,
+            tier,
+            host_generation,
+            &owner,
+            ticket,
+            SUBAGENT_METHOD,
+            &cx,
+        )?;
+        if invocation.root_caller.is_none() {
+            return Err(refuse(
+                error_code::NOT_AVAILABLE,
+                "child agents require a live root invocation".into(),
+            ));
+        }
+        let withdraw = invocation.cancel.child_token();
+        let _withdraw_guard = withdraw.clone().drop_guard();
+        let entry = |child_id: &str| {
+            invocation
+                .activations
+                .lock()
+                .expect("activations lock")
+                .get(child_id)
+                .cloned()
+        };
+        let result = match request {
+            HostRequest::SubagentStart(params) => {
+                if params.child_id.is_empty()
+                    || params.child_id.len() > 128
+                    || !params
+                        .child_id
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || b"-_.:".contains(&byte))
+                {
+                    return Err(refuse(
+                        error_code::INVALID_PARAMS,
+                        "child id must be 1-128 ASCII letters, digits, '-', '_', '.' or ':'".into(),
+                    ));
+                }
+                if params.prompt.trim().is_empty() {
+                    return Err(refuse(
+                        error_code::INVALID_PARAMS,
+                        "child prompt is empty".into(),
+                    ));
+                }
+                let delivery = match params.delivery.as_str() {
+                    "caller" => ChildActivationDelivery::Caller,
+                    "parent" => ChildActivationDelivery::Parent,
+                    _ => {
+                        return Err(refuse(
+                            error_code::INVALID_PARAMS,
+                            "child delivery must be caller or parent".into(),
+                        ));
+                    }
+                };
+                if entry(&params.child_id).is_some() {
+                    return Err(refuse(
+                        error_code::REFUSED,
+                        "child id is already active in this invocation".into(),
+                    ));
+                }
+                let launch = Arc::new(ChildActivationRequest {
+                    public_child_id: params.child_id.clone(),
+                    configuration: FrozenChildConfiguration {
+                        persona: params.persona,
+                        denied_tools: params.denied_tools,
+                        delivery,
+                    },
+                    launched: std::sync::Mutex::new(None),
+                });
+                let mut input = json!({
+                    "action": "start",
+                    "prompt": params.prompt,
+                    "fork_context": false,
+                });
+                if let Some(model) = params.model {
+                    input["model"] = json!(model);
+                }
+                let started = tokio::select! {
+                    biased;
+                    () = cx.cancel.cancelled() => Err(refuse(error_code::CANCELLED, "child start was cancelled by its host".into())),
+                    () = withdraw.cancelled() => Err(refuse(error_code::CANCELLED, "child start invocation ended".into())),
+                    started = invocation.calls.start_child_activation(input, &withdraw, Arc::clone(&launch)) => match started {
+                        Ok(response) if response.ok => Ok(()),
+                        Ok(response) => Err(refuse(error_code::REFUSED, response.result.as_str().map_or_else(|| response.result.to_string(), str::to_string))),
+                        Err(NestedFailure::Rejected { decision, message }) => Err(refuse(
+                            if decision == NestedDecision::Denied { error_code::DENIED } else { error_code::REFUSED },
+                            message,
+                        )),
+                        Err(NestedFailure::Unavailable(message)) => Err(refuse(error_code::NOT_AVAILABLE, message)),
+                    },
+                };
+                let launched = launch
+                    .launched
+                    .lock()
+                    .expect("child activation lock")
+                    .take();
+                match (started, launched) {
+                    (Ok(()), Some((manager, context))) => {
+                        let accepted = tokio::select! {
+                            biased;
+                            () = cx.cancel.cancelled() => None,
+                            () = withdraw.cancelled() => None,
+                            accepted = context.accepted() => Some(accepted),
+                        };
+                        match accepted {
+                            Some(Ok(admission)) => {
+                                invocation
+                                    .activations
+                                    .lock()
+                                    .expect("activations lock")
+                                    .insert(params.child_id.clone(), (manager, context));
+                                let watched = Arc::clone(&invocation);
+                                let watched_id = params.child_id.clone();
+                                tokio::spawn(async move {
+                                    watched.cancel.cancelled().await;
+                                    let entry = watched
+                                        .activations
+                                        .lock()
+                                        .expect("activations lock")
+                                        .remove(&watched_id);
+                                    if let Some((manager, context)) = entry {
+                                        let _ =
+                                            dispose_child_activation(&manager, &context.identity)
+                                                .await;
+                                    }
+                                });
+                                Ok(json!({
+                                    "child_id": params.child_id,
+                                    "message_id": admission.submission_id,
+                                }))
+                            }
+                            other => {
+                                let _ = dispose_child_activation(&manager, &context.identity).await;
+                                Err(match other {
+                                    Some(Err(error)) => refuse(
+                                        error_code::NOT_AVAILABLE,
+                                        format!("child did not accept its first message: {error}"),
+                                    ),
+                                    _ => refuse(
+                                        error_code::CANCELLED,
+                                        "child start was withdrawn".into(),
+                                    ),
+                                })
+                            }
+                        }
+                    }
+                    (Ok(()), None) => Err(refuse(
+                        error_code::NOT_AVAILABLE,
+                        "the agent start did not record a child activation".into(),
+                    )),
+                    (Err(error), launched) => {
+                        if let Some((manager, context)) = launched {
+                            let _ = dispose_child_activation(&manager, &context.identity).await;
+                        }
+                        Err(error)
+                    }
+                }
+            }
+            HostRequest::SubagentResult(_) => {
+                let (manager, context) = entry(&child_id).ok_or_else(|| {
+                    refuse(
+                        error_code::NOT_AVAILABLE,
+                        "no live child activation with that id".into(),
+                    )
+                })?;
+                let settled = tokio::select! {
+                    biased;
+                    () = cx.cancel.cancelled() => return Err(refuse(error_code::CANCELLED, "child result wait was cancelled".into())),
+                    () = withdraw.cancelled() => return Err(refuse(error_code::CANCELLED, "child result invocation ended".into())),
+                    settled = context.settled() => settled,
+                };
+                match settled {
+                    Err(error) => Err(refuse(error_code::NOT_AVAILABLE, error.to_string())),
+                    Ok(_) => {
+                        match resolve_child_activation_output(&manager, &context.identity).await {
+                            Err(error) => Err(refuse(error_code::NOT_AVAILABLE, error.to_string())),
+                            Ok((blocks, stop_reason)) => {
+                                let total = blocks.len();
+                                let output: Vec<Value> = blocks
+                                    .into_iter()
+                                    .filter_map(|block| match block {
+                                        codewhale_models::ContentBlock::Text { text, .. } => {
+                                            Some(json!({"type": "text", "text": text}))
+                                        }
+                                        _ => None,
+                                    })
+                                    .collect();
+                                Ok(json!({
+                                    "stop_reason": stop_reason,
+                                    "output": output,
+                                    "omitted_blocks": total - output.len(),
+                                }))
+                            }
+                        }
+                    }
+                }
+            }
+            HostRequest::SubagentDispose(_) => {
+                let entry = invocation
+                    .activations
+                    .lock()
+                    .expect("activations lock")
+                    .remove(&child_id);
+                match entry {
+                    None => Ok(json!({})),
+                    Some((manager, context)) => {
+                        dispose_child_activation(&manager, &context.identity)
+                            .await
+                            .map(|_| json!({}))
+                            .map_err(|error| refuse(error_code::NOT_AVAILABLE, error.to_string()))
+                    }
+                }
+            }
+            _ => unreachable!("subagent request variants are matched above"),
+        };
+        shared
+            .check_selection(
+                invocation
+                    .plugins
+                    .as_ref()
+                    .and_then(|plugins| plugins.caller_selection()),
+                invocation.plugins.as_deref(),
+                &owner.plugin_id,
+                &invocation.content_hash,
+                invocation.scope.as_ref(),
+            )
+            .map_err(|message| refuse(error_code::REFUSED, message))?;
+        result
+    }
+
     /// Redeem `params` presented by `tier`'s host process `host_generation`
     /// and run the call. An invalid presentation is a refusal, and a burst of
     /// them a violation `cx` reports.
@@ -883,6 +1190,7 @@ pub(crate) struct InvocationGuard {
     ticket: Ticket,
     checkpoint_ticket: Option<Ticket>,
     question_ticket: Option<Ticket>,
+    subagent_ticket: Option<Ticket>,
     invocation: Arc<Invocation>,
 }
 
@@ -898,6 +1206,16 @@ impl InvocationGuard {
 
     pub(crate) fn question_ticket(&self) -> Option<&str> {
         self.question_ticket.as_ref().map(Ticket::expose)
+    }
+
+    pub(crate) fn subagent_ticket(&self) -> Option<&str> {
+        self.subagent_ticket.as_ref().map(Ticket::expose)
+    }
+
+    pub(crate) fn caller_tools(&self) -> Option<Vec<String>> {
+        self.subagent_ticket
+            .as_ref()
+            .map(|_| self.invocation.caller_tools.clone())
     }
 
     /// The clock the `tool/call` deadline runs on: paused while one of this
