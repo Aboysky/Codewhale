@@ -159,13 +159,19 @@ fn drain_retained_requests(receiver: &mut PersistRequestReceiver) -> (usize, usi
     let mut retained_queued_requests = 0;
     let mut estimated_retained_payload_bytes = 0;
     for session in pending.sessions.values() {
+        let (PendingSession::Snapshot(session) | PendingSession::DisplacedCompletion(session)) =
+            session;
         retained_queued_requests += 1;
         estimated_retained_payload_bytes += retained_session_payload_bytes(session);
     }
-    let applied_version = pending
-        .sessions
-        .get(BACKLOG_SESSION_ID)
-        .and_then(saved_session_version);
+    let applied_version =
+        pending
+            .sessions
+            .get(BACKLOG_SESSION_ID)
+            .and_then(|session| match session {
+                PendingSession::Snapshot(session)
+                | PendingSession::DisplacedCompletion(session) => saved_session_version(session),
+            });
     (
         retained_queued_requests,
         estimated_retained_payload_bytes,

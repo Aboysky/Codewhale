@@ -511,6 +511,12 @@ pub fn spawn_persistence_actor(
     (handle, task)
 }
 
+#[derive(Debug)]
+enum PendingSession {
+    Snapshot(SavedSession),
+    DisplacedCompletion(SavedSession),
+}
+
 /// Coalesced work waiting for the next write cycle.
 #[derive(Debug, Default)]
 struct PendingState {
@@ -524,7 +530,7 @@ struct PendingState {
     /// Latest-wins per session id. Coalescing into one global slot can
     /// drop session A when an immediate `/new` queues session B before
     /// the actor drains.
-    sessions: BTreeMap<String, SavedSession>,
+    sessions: BTreeMap<String, PendingSession>,
     /// Compound completion commits, latest-wins per session id: the
     /// completed snapshot body to write, followed by that session's own
     /// checkpoint clear — the clear only if the write succeeded. Kept
@@ -588,13 +594,15 @@ impl PendingState {
                 // A new in-flight checkpoint means newer turn work started
                 // after the completion it would have cleared: the compound's
                 // clear-on-success intent is stale now (it would erase the
-                // fresher recovery record), so drop the pending compound and
-                // keep only the newer checkpoint body.
-                if self.completed_commits.remove(&id).is_some() {
+                // fresher recovery record), but the completed snapshot still
+                // needs to be saved.
+                if let Some(completed) = self.completed_commits.remove(&id) {
                     tracing::debug!(
                         session_id = %id,
-                        "pending completed commit superseded by a newer in-flight checkpoint"
+                        "pending completed commit retained beside a newer in-flight checkpoint"
                     );
+                    self.sessions
+                        .insert(id.clone(), PendingSession::DisplacedCompletion(completed));
                 }
                 self.checkpoints.insert(id, session);
             }
@@ -607,7 +615,7 @@ impl PendingState {
                 if let Some(pending) = self.completed_commits.get_mut(&id) {
                     *pending = session;
                 } else {
-                    self.sessions.insert(id, session);
+                    self.sessions.insert(id, PendingSession::Snapshot(session));
                 }
             }
             PersistRequest::CompletedCommit { session } => {
@@ -646,6 +654,11 @@ impl PendingState {
                 // session so the discarded session is not re-written.
                 self.checkpoints.remove(&session_id);
                 self.completed_commits.remove(&session_id);
+                if self.sessions.get(&session_id).is_some_and(|session| {
+                    matches!(session, PendingSession::DisplacedCompletion(_))
+                }) {
+                    self.sessions.remove(&session_id);
+                }
                 self.checkpoint_clears.insert(session_id);
             }
             PersistRequest::FlushAndReport { reply } => return Control::Flush(reply),
@@ -695,7 +708,12 @@ fn flush_inner(
 
     // Document saves are bounded (#6842): an oversized journal is archived
     // and pruned here, on the actor, never on the UI loop.
-    for (session_id, session) in std::mem::take(&mut pending.sessions) {
+    for (session_id, pending_session) in std::mem::take(&mut pending.sessions) {
+        let session = match pending_session {
+            PendingSession::Snapshot(session) | PendingSession::DisplacedCompletion(session) => {
+                session
+            }
+        };
         let result = manager.save_session_bounded(session).map(|_| ());
         health.record(&session_id, &result);
         record(format!("session:{session_id}"), result);
@@ -1476,7 +1494,7 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let sessions_dir = tmp.path().join("sessions");
         let manager = SessionManager::new(sessions_dir.clone()).expect("manager");
-        let completed = crate::session_manager::create_saved_session_with_mode(
+        let mut completed = crate::session_manager::create_saved_session_with_mode(
             &[],
             "deepseek-v4-pro",
             tmp.path(),
@@ -1484,6 +1502,7 @@ mod tests {
             None,
             Some("agent"),
         );
+        completed.metadata.title = "Completed turn".to_string();
         let mut inflight = crate::session_manager::create_saved_session_with_mode(
             &[],
             "deepseek-v4-pro",
@@ -1495,7 +1514,9 @@ mod tests {
         // The new turn reuses the same session id: a fresh in-flight
         // checkpoint arrives while the previous completion is still queued.
         inflight.metadata.id = completed.metadata.id.clone();
+        inflight.metadata.title = "Next turn in progress".to_string();
         let session_id = completed.metadata.id.clone();
+        let verification_manager = SessionManager::new(sessions_dir.clone()).expect("manager");
         let (handle, task) = spawn_persistence_actor(manager);
 
         handle.try_send(PersistRequest::CompletedCommit { session: completed });
@@ -1522,9 +1543,43 @@ mod tests {
             !checkpoint.is_empty(),
             "the newer checkpoint body must be on disk"
         );
+        let saved = verification_manager
+            .load_session(&session_id)
+            .expect("completed turn document must survive coalescing");
+        assert_eq!(saved.metadata.title, "Completed turn");
+        let recovery = verification_manager
+            .load_session_checkpoint(&session_id)
+            .expect("read in-flight checkpoint")
+            .expect("in-flight checkpoint must survive");
+        assert_eq!(recovery.metadata.title, "Next turn in progress");
+        let mut pending = PendingState::default();
+        pending.absorb(PersistRequest::CompletedCommit {
+            session: saved.clone(),
+        });
+        pending.absorb(PersistRequest::SaveCheckpoint {
+            session: recovery.clone(),
+        });
+        pending.absorb(PersistRequest::ClearCheckpoint {
+            session_id: session_id.clone(),
+        });
+        assert!(pending.sessions.is_empty());
+
+        let mut reset = saved.clone();
+        reset.metadata.title = "Reset session".to_string();
+        let mut pending = PendingState::default();
+        pending.absorb(PersistRequest::CompletedCommit { session: saved });
+        pending.absorb(PersistRequest::SaveCheckpoint { session: recovery });
+        pending.absorb(PersistRequest::SessionSnapshot(reset));
+        pending.absorb(PersistRequest::ClearCheckpoint {
+            session_id: session_id.clone(),
+        });
+        assert!(matches!(
+            &pending.sessions[&session_id],
+            PendingSession::Snapshot(session) if session.metadata.title == "Reset session"
+        ));
         assert!(
-            report.completed >= 1,
-            "the newer checkpoint write must be counted, got: {report:?}"
+            report.completed >= 2,
+            "both the completed document and newer checkpoint must be counted, got: {report:?}"
         );
         handle.try_send(PersistRequest::Shutdown);
         task.await.expect("persistence actor join");
