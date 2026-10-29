@@ -27,13 +27,13 @@
 //! and at every fullness, not only from 50% up (#5950).
 //!
 //! Shed order as width drops: cache, output count and billing tier, the help
-//! hint, then rate and TTFT, then cost and balance
+//! hint, then rate and TTFT, then cost and balance, followed by goal and update
 //! ([`InfoSegmentId::shed_priority`]). The model and `ctx NN%` never shed; below that floor the row clips at its
 //! right edge.
 //!
-//! Which segments exist at all is the user's call: `/statusline` and
-//! `tui.status_items` compose the row, and [`crate::tui::ui::frame::info_segments`]
-//! builds only the ones that are on. Shedding decides what survives the
+//! `/statusline` and `tui.status_items` select the session metrics;
+//! [`crate::tui::ui::frame::info_segments`] also includes an active goal or
+//! an available-update notice. Shedding decides what survives the
 //! width that is left. `tui.metrics_line` sizes the row (#5950): `hidden`
 //! gives the line back to the transcript, and `compact` starts the shed
 //! pass with secondary counts and the help hint already gone; TTFT and rate

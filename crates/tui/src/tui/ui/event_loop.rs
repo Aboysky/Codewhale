@@ -2239,7 +2239,7 @@ pub(crate) async fn run_event_loop(
             // Transient toast for immediate visibility, plus a durable
             // in-transcript notice so the prompt survives the toast TTL and
             // stays actionable during a busy session (#3961). The persistent
-            // header chip keeps a quiet affordance after both (#14).
+            // metrics-line notice keeps a quiet affordance after both (#14).
             // Which command to advertise depends on who owns this binary on
             // disk, so resolve that here rather than hardcoding our own
             // updater into the wording.

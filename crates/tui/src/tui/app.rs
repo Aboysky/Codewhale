@@ -1669,9 +1669,9 @@ pub struct App {
     pub status_message: Option<String>,
     /// Recent status toasts (ephemeral, newest at back).
     pub status_toasts: VecDeque<StatusToast>,
-    /// Header chip label (e.g. `↑ v0.9.5`) set once by the fire-and-forget
+    /// Metrics-line label (e.g. `↑ v0.9.5`) set once by the fire-and-forget
     /// startup version check when a newer stable release exists. Drives the
-    /// small persistent update chip in the header so the affordance survives
+    /// persistent update notice so the affordance survives
     /// the transient toast without nagging (FINISH-0.9.4 #14).
     pub update_available: Option<String>,
     /// Sticky status toast used for important warnings/errors.

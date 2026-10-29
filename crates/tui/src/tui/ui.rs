@@ -1445,11 +1445,11 @@ impl UpdateNotice {
         )
     }
 
-    /// Compact header chip label shown once the check has landed. Quiet by
+    /// Compact metrics-line label shown once the check has landed. Quiet by
     /// design: no action verb, no repetition — the toast and transcript
     /// notice carry the update instructions (#14).
     fn chip_label(&self) -> String {
-        if self.staged.is_some() {
+        if self.staged == Some(true) {
             format!("↑ v{latest} ready", latest = self.latest)
         } else {
             format!("↑ v{latest}", latest = self.latest)
