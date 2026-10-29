@@ -42,8 +42,10 @@ export function settings(env) {
   }
   if (!env.GH_TOKEN) stop('configuration_missing', 'github_token_required');
   if (!['true', 'false'].includes(env.CW_POST || 'true')) stop('configuration_missing', 'invalid_post');
+  const reasoningEffort = env.CW_REASONING_EFFORT || 'auto';
+  if (!['auto', 'off', 'low', 'medium', 'high', 'max'].includes(reasoningEffort)) stop('configuration_missing', 'invalid_reasoning_effort');
   return {
-    version: env.CW_VERSION, provider, model, post: env.CW_POST !== 'false',
+    version: env.CW_VERSION, provider, model, reasoningEffort, post: env.CW_POST !== 'false',
     maxChars: integer(env.CW_MAX_CHARS, 200000, 1, 8388608),
     maxPasses: integer(env.CW_MAX_PASSES, 1, 1, 64),
     timeout: integer(env.CW_TIMEOUT_SECONDS, 600, 30, 1200) * 1000,
@@ -179,7 +181,7 @@ export function run(env = process.env, execute = command) {
     if (config.post && (['issue_comment', 'pull_request_review_comment'].includes(env.GITHUB_EVENT_NAME)
       || env.CW_ALLOW_FORKS === 'true')) stop('configuration_missing', 'separate_publisher_required');
     receipt = { ...receipt, repository: repo, pr_number: number, version: config.version,
-      provider: config.provider, model: config.model, limits: { max_chars: config.maxChars,
+      provider: config.provider, model: config.model, reasoning_effort: config.reasoningEffort, limits: { max_chars: config.maxChars,
         max_passes: config.maxPasses, timeout_seconds: config.timeout / 1000, max_output_tokens: config.outputTokens } };
     // Isolate user/project configuration and retain only the selected model key.
     // Never execute with unrelated runner credentials or Git configuration.
@@ -191,6 +193,10 @@ export function run(env = process.env, execute = command) {
       env[config.provider === 'codewhale' ? 'CODEWHALE_API_KEY' : KEYS[config.provider]];
     if (config.outputTokens) childEnv.CODEWHALE_MAX_OUTPUT_TOKENS = String(config.outputTokens);
     mkdirSync(childEnv.CODEWHALE_HOME, { recursive: true, mode: 0o700 });
+    if (config.reasoningEffort !== 'auto') {
+      childEnv.CODEWHALE_CONFIG_PATH = join(root, 'review.toml');
+      writeFileSync(childEnv.CODEWHALE_CONFIG_PATH, `reasoning_effort = "${config.reasoningEffort}"\n`, { mode: 0o600 });
+    }
     const checked = (program, args, reason, extra = {}) => {
       const result = execute(program, args, { env: childEnv, cwd: root, ...extra });
       if (result.status !== 0 || result.error) stop('failed', reason);

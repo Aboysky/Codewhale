@@ -38,6 +38,13 @@ Ubuntu runner provides the review tools. No server or GitHub App is required.
    `--action-ref FULL_COMMIT_SHA` with a separately downloaded `setup.mjs`.
    `--max-output-tokens N` changes the explicit output allowance. Reasoning
    models can exhaust smaller automatic allowances before writing findings.
+   Generated workflows use `reasoning-effort: off`: the released v0.10.2
+   binary has an internal 4000-token cap for small reviews that can be consumed
+   entirely by hidden reasoning. `--reasoning-effort auto` restores the
+   Engine default; other explicit effort levels are also available. The Action
+   writes only this non-secret setting into its isolated run configuration.
+   Increasing the Action allowance does not override a released CLI's smaller
+   internal cap. A completed review is still required before publication.
    The generated workflow is `.github/workflows/codewhale-review.yml`.
 
 2. Store only the selected provider's API key as a repository Actions secret:
@@ -141,6 +148,7 @@ your account's machine-key route has been separately verified. The Action runs
 | `version` | Required | Exact released CLI tag, never `latest` |
 | `provider` | Required | Explicit BYOK provider, or `codewhale` for a verified account machine key |
 | `model` | Required | Exact model ID; account mode uses `provider/model` |
+| `reasoning-effort` | Engine automatic | Optional explicit reasoning level; generated v0.10.2 workflows use `off` |
 | `max-chars` | 200000 | Complete diff characters per pass, maximum 8388608 |
 | `max-passes` | 1 | Complete ordered passes, maximum 64 |
 | `max-output-tokens` | CLI automatic | Optional per-pass ceiling, 8192–1000000 |

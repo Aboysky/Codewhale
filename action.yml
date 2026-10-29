@@ -13,6 +13,8 @@ inputs:
   model:
     description: Exact model ID. Account mode requires provider/model from the account catalog.
     required: true
+  reasoning-effort:
+    description: Optional Engine reasoning setting (auto, off, low, medium, high, max).
   github-token:
     description: GitHub token with contents read and pull-requests read; legacy post:true also requires pull-requests write.
     default: ${{ github.token }}
@@ -61,6 +63,7 @@ runs:
         CW_VERSION: ${{ inputs.version }}
         CW_PROVIDER: ${{ inputs.provider }}
         CW_MODEL: ${{ inputs.model }}
+        CW_REASONING_EFFORT: ${{ inputs.reasoning-effort }}
         CW_PR_NUMBER: ${{ inputs.pr-number }}
         CW_TRIGGER_PHRASE: ${{ inputs.trigger-phrase }}
         CW_ALLOW_FORKS: ${{ inputs.allow-forks }}

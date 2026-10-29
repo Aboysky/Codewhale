@@ -16,6 +16,7 @@ const HELP = `Create a Codewhale review bot workflow in your repository.
 
   --provider NAME       ${Object.keys(KEYS).join(', ')}
   --model ID            Exact model ID; account mode requires provider/model
+  --reasoning-effort E  auto, off, low, medium, high, max (default: off)
   --directory PATH      Destination repository (default: current directory)
   --version vX.Y.Z      Checksummed CLI release (default: v0.10.2)
   --action-ref SHA      Reviewed Action commit (default: this clean source checkout)
@@ -31,7 +32,7 @@ Automatic reviews cover same-repository PRs. Maintainers can review fork PRs
 with a manual run or an @codewhale review comment; PR code is never executed.
 `;
 
-export function workflow({ provider, model, version = 'v0.10.2', actionRef, triggerPhrase = '@codewhale', appLogin, maxOutputTokens = '16384' }) {
+export function workflow({ provider, model, version = 'v0.10.2', actionRef, triggerPhrase = '@codewhale', appLogin, maxOutputTokens = '16384', reasoningEffort = 'off' }) {
   if (!Object.hasOwn(KEYS, provider)) throw new Error('Choose a supported --provider.');
   if (!/^[A-Za-z0-9][A-Za-z0-9_./:@+-]{0,199}$/.test(model || '')
     || (provider === 'codewhale' && !/^[A-Za-z0-9_.-]+\/.+/.test(model))) throw new Error('Choose an exact --model ID.');
@@ -40,6 +41,7 @@ export function workflow({ provider, model, version = 'v0.10.2', actionRef, trig
   if (!/^@[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(triggerPhrase)) throw new Error('--trigger-phrase must be @ followed by a GitHub-style name.');
   if (appLogin && !/^[a-zA-Z0-9][a-zA-Z0-9-]{0,99}\[bot\]$/.test(appLogin)) throw new Error('--app-login must include [bot].');
   if (!/^[1-9][0-9]*$/.test(String(maxOutputTokens)) || Number(maxOutputTokens) < 8192 || Number(maxOutputTokens) > 1000000) throw new Error('--max-output-tokens must be between 8192 and 1000000.');
+  if (!['auto', 'off', 'low', 'medium', 'high', 'max'].includes(reasoningEffort)) throw new Error('Choose a supported --reasoning-effort.');
   const action = `codewhale-hq/Codewhale@${actionRef}`;
   const secret = KEYS[provider];
   const expression = value => '${{ ' + value + ' }}';
@@ -86,6 +88,7 @@ jobs:
           version: '${version}'
           provider: '${provider}'
           model: '${model}'
+          reasoning-effort: '${reasoningEffort}'
           max-output-tokens: '${maxOutputTokens}'
           pr-number: ${expression('inputs.pr-number')}
           trigger-phrase: '${triggerPhrase}'
@@ -155,6 +158,7 @@ export function setup(args = process.argv.slice(2)) {
     version: { type: 'string' }, 'action-ref': { type: 'string' }, 'trigger-phrase': { type: 'string' },
     'app-login': { type: 'string' }, print: { type: 'boolean' }, help: { type: 'boolean' },
     'max-output-tokens': { type: 'string' },
+    'reasoning-effort': { type: 'string' },
   } });
   if (values.help) { console.log(HELP); return; }
   let actionRef = values['action-ref'];
@@ -168,7 +172,7 @@ export function setup(args = process.argv.slice(2)) {
     actionRef = head.stdout.trim();
   }
   const yaml = workflow({ provider: values.provider, model: values.model, version: values.version,
-    actionRef, triggerPhrase: values['trigger-phrase'], appLogin: values['app-login'], maxOutputTokens: values['max-output-tokens'] });
+    actionRef, triggerPhrase: values['trigger-phrase'], appLogin: values['app-login'], maxOutputTokens: values['max-output-tokens'], reasoningEffort: values['reasoning-effort'] });
   if (values.print) { process.stdout.write(yaml); return; }
   const directory = realpathSync(values.directory || process.cwd());
   if (spawnSync('git', ['-C', directory, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' }).stdout.trim() !== directory) throw new Error('--directory must be a Git repository root.');
