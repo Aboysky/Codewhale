@@ -41,8 +41,11 @@ Stage 5 of the loop: [cw-orient](../cw-orient/SKILL.md) →
    cargo fmt --all -- --check
    sh scripts/sync-changelog.sh --check        # after any CHANGELOG.md edit
    bash scripts/release/check-versions.sh
-   python3 scripts/check-runtime-contract-budget.py
    ```
+   The runtime-contract budget checker starts a native Cargo build by default;
+   it is not a cheap drift check. Use an applicable existing measurement with
+   `--receipt`, or run a new measurement through the required build-lock and
+   SSD cache workflow when the changed contract or final validation needs it.
    Add the one that matches what you touched: `check-tui-locale-parity.py`
    and `check-tui-product-vocabulary.sh` (locale strings),
    `check-dead-code-budget.py` (`#[allow(dead_code)]`),
