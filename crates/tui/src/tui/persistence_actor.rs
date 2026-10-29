@@ -514,7 +514,7 @@ pub fn spawn_persistence_actor(
 #[derive(Debug)]
 enum PendingSession {
     Snapshot(SavedSession),
-    DisplacedCompletion(SavedSession),
+    Completion(SavedSession),
 }
 
 /// Coalesced work waiting for the next write cycle.
@@ -533,11 +533,10 @@ struct PendingState {
     sessions: BTreeMap<String, PendingSession>,
     /// Compound completion commits, latest-wins per session id: the
     /// completed snapshot body to write, followed by that session's own
-    /// checkpoint clear — the clear only if the write succeeded. Kept
-    /// separate from `sessions` so a plain snapshot can never be drained
-    /// as a completion (or vice versa) and the clear intent stays bound to
-    /// exactly the session that completed.
-    completed_commits: BTreeMap<String, SavedSession>,
+    /// checkpoint clear — the clear only if the write succeeded. A newer
+    /// snapshot can replace the body while retaining the clear intent until
+    /// an explicit clear changes that ordering.
+    completed_commits: BTreeMap<String, PendingSession>,
     /// Latest-wins per session id, for the same reason `sessions` above is:
     /// a single global slot dropped session A's queued text when session B
     /// queued before the actor drained, which defeats the per-session file
@@ -601,8 +600,7 @@ impl PendingState {
                         session_id = %id,
                         "pending completed commit retained beside a newer in-flight checkpoint"
                     );
-                    self.sessions
-                        .insert(id.clone(), PendingSession::DisplacedCompletion(completed));
+                    self.sessions.insert(id.clone(), completed);
                 }
                 self.checkpoints.insert(id, session);
             }
@@ -613,7 +611,7 @@ impl PendingState {
                 // guards is already captured by the newer completed state.
                 let id = session.metadata.id.clone();
                 if let Some(pending) = self.completed_commits.get_mut(&id) {
-                    *pending = session;
+                    *pending = PendingSession::Snapshot(session);
                 } else {
                     self.sessions.insert(id, PendingSession::Snapshot(session));
                 }
@@ -628,7 +626,8 @@ impl PendingState {
                 self.sessions.remove(&id);
                 self.checkpoint_clears.remove(&id);
                 self.checkpoints.remove(&id);
-                self.completed_commits.insert(id, session);
+                self.completed_commits
+                    .insert(id, PendingSession::Completion(session));
             }
             PersistRequest::OfflineQueue { state, lease } => {
                 self.offline_queue.insert(
@@ -650,13 +649,20 @@ impl PendingState {
                 // A clear supersedes a pending checkpoint write for the same
                 // session only — other sessions' pending work is untouched.
                 // An explicit clear is also a user-owned boundary (e.g.
-                // `/new`): it supersedes a pending compound for the same
-                // session so the discarded session is not re-written.
+                // `/new`): it supersedes a pending completion while keeping
+                // a newer explicit snapshot for the same session.
                 self.checkpoints.remove(&session_id);
-                self.completed_commits.remove(&session_id);
-                if self.sessions.get(&session_id).is_some_and(|session| {
-                    matches!(session, PendingSession::DisplacedCompletion(_))
-                }) {
+                if let Some(PendingSession::Snapshot(session)) =
+                    self.completed_commits.remove(&session_id)
+                {
+                    self.sessions
+                        .insert(session_id.clone(), PendingSession::Snapshot(session));
+                }
+                if self
+                    .sessions
+                    .get(&session_id)
+                    .is_some_and(|session| matches!(session, PendingSession::Completion(_)))
+                {
                     self.sessions.remove(&session_id);
                 }
                 self.checkpoint_clears.insert(session_id);
@@ -710,15 +716,16 @@ fn flush_inner(
     // and pruned here, on the actor, never on the UI loop.
     for (session_id, pending_session) in std::mem::take(&mut pending.sessions) {
         let session = match pending_session {
-            PendingSession::Snapshot(session) | PendingSession::DisplacedCompletion(session) => {
-                session
-            }
+            PendingSession::Snapshot(session) | PendingSession::Completion(session) => session,
         };
         let result = manager.save_session_bounded(session).map(|_| ());
         health.record(&session_id, &result);
         record(format!("session:{session_id}"), result);
     }
-    for (session_id, session) in std::mem::take(&mut pending.completed_commits) {
+    for (session_id, pending_session) in std::mem::take(&mut pending.completed_commits) {
+        let session = match pending_session {
+            PendingSession::Snapshot(session) | PendingSession::Completion(session) => session,
+        };
         let commit_result = manager.save_session_bounded(session);
         health.record(&session_id, &commit_result);
         let save_succeeded = commit_result.is_ok();
@@ -1577,6 +1584,32 @@ mod tests {
             &pending.sessions[&session_id],
             PendingSession::Snapshot(session) if session.metadata.title == "Reset session"
         ));
+        let saved = verification_manager.load_session(&session_id).unwrap();
+        let recovery = verification_manager
+            .load_session_checkpoint(&session_id)
+            .unwrap()
+            .unwrap();
+        let mut reset = saved.clone();
+        reset.metadata.title = "Newer reset".to_string();
+        for checkpoint_after_reset in [false, true] {
+            let mut pending = PendingState::default();
+            pending.absorb(PersistRequest::CompletedCommit {
+                session: saved.clone(),
+            });
+            pending.absorb(PersistRequest::SessionSnapshot(reset.clone()));
+            if checkpoint_after_reset {
+                pending.absorb(PersistRequest::SaveCheckpoint {
+                    session: recovery.clone(),
+                });
+            }
+            pending.absorb(PersistRequest::ClearCheckpoint {
+                session_id: session_id.clone(),
+            });
+            assert!(matches!(
+                &pending.sessions[&session_id],
+                PendingSession::Snapshot(session) if session.metadata.title == "Newer reset"
+            ));
+        }
         assert!(
             report.completed >= 2,
             "both the completed document and newer checkpoint must be counted, got: {report:?}"
