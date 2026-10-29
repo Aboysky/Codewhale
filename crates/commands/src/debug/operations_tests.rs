@@ -551,6 +551,45 @@ fn undo_reports_the_request_each_file_and_the_conversation() {
         "{:?}",
         result.message
     );
+
+    struct FailsAt(&'static str);
+    impl CommandPresentationContext for FailsAt {
+        fn translate(&self, key: &str, replacements: &[(&str, &str)]) -> Result<String, String> {
+            if key == self.0 {
+                Err(format!("catalog lacks {key}"))
+            } else {
+                UndoPresentation.translate(key, replacements)
+            }
+        }
+    }
+    for failing_key in ["cmd_undo_action_restored", "cmd_undo_conversation_removed"] {
+        let mut outcome = restored(false, true);
+        outcome.skipped = vec!["kept.mjs".into()];
+        let result = undo::patch_result(DebugUndoOutcome::Restored(outcome), &FailsAt(failing_key));
+        assert_eq!(
+            result.message,
+            Some(format!(
+                "Undo was applied, but its report could not be formatted: catalog lacks {failing_key}\nRequest: Whole hours should read 2h\nFiles it changed:\n  restored duration.mjs\n  brought back old.mjs\n  removed new.mjs\nThe request and its reply were removed from the conversation.\nLeft in place, not reverted: kept.mjs"
+            ))
+        );
+        assert!(!result.is_error);
+        assert_eq!(
+            result.action,
+            Some(DebugAction::SyncSession(synced_conversation()))
+        );
+    }
+    let result = undo::patch_result(
+        DebugUndoOutcome::Restored(restored(true, false)),
+        &FailsAt("cmd_undo_forced_note"),
+    );
+    assert_eq!(
+        result.message,
+        Some("Undo was applied, but its report could not be formatted: catalog lacks cmd_undo_forced_note\nRequest: Whole hours should read 2h\nFiles it changed:\n  restored duration.mjs\n  brought back old.mjs\n  removed new.mjs\nThe end of this request was not recorded, so edits made to these files since it started were also put back.\nThe conversation was not changed.".to_string())
+    );
+    assert_eq!(
+        result.action,
+        Some(DebugAction::SyncSession(synced_conversation()))
+    );
 }
 
 #[test]

@@ -389,74 +389,121 @@ fn patch_report(
             presentation.translate("cmd_undo_changed_since", &[("paths", &paths.join(", "))])?,
         )),
         DebugUndoOutcome::Restored(restored) => {
-            let lines: Vec<String> = restored
-                .files
-                .iter()
-                .map(|file| {
-                    let verb = match file.action {
-                        DebugRestoreAction::Modified => {
-                            presentation.translate("cmd_undo_action_restored", &[])?
-                        }
-                        // The request deleted it.
-                        DebugRestoreAction::Recreated => {
-                            presentation.translate("cmd_undo_action_recreated", &[])?
-                        }
-                        // The request created it.
-                        DebugRestoreAction::Removed => {
-                            presentation.translate("cmd_undo_action_removed", &[])?
-                        }
-                    };
-                    Ok(format!("  {verb} {}", file.path.display()))
-                })
-                .collect::<Result<_, String>>()?;
-            let request = match &restored.request {
-                Some(prompt) => {
-                    presentation.translate("cmd_undo_request_named", &[("prompt", prompt)])?
-                }
-                None => presentation.translate("cmd_undo_request_last", &[])?,
-            };
-            let count = match restored.files.len() {
-                1 => presentation.translate("cmd_undo_one_file_back", &[])?,
-                files => presentation
-                    .translate("cmd_undo_files_back", &[("count", &files.to_string())])?,
-            };
-            let mut summary = presentation.translate(
-                "cmd_undo_undid_summary",
-                &[
-                    ("request", &request),
-                    ("count", &count),
-                    ("files", &lines.join("\n")),
-                ],
-            )?;
-            if restored.forced {
-                summary.push('\n');
-                summary.push_str(&presentation.translate("cmd_undo_forced_note", &[])?);
-            }
-            summary.push('\n');
-            summary.push_str(&presentation.translate(
-                if restored.conversation_removed {
-                    "cmd_undo_conversation_removed"
-                } else {
-                    "cmd_undo_conversation_kept"
-                },
-                &[],
-            )?);
-            if !restored.skipped.is_empty() {
-                let skipped: Vec<String> = restored
-                    .skipped
-                    .iter()
-                    .map(|path| path.display().to_string())
-                    .collect();
-                summary.push('\n');
-                summary.push_str(
-                    &presentation
-                        .translate("cmd_undo_left_in_place", &[("paths", &skipped.join(", "))])?,
-                );
-            }
+            let summary = restored_summary(&restored, presentation)
+                .unwrap_or_else(|error| restored_fallback(&restored, &error));
             Ok(CommandResult::with_message_and_action(
                 summary,
                 DebugAction::SyncSession(restored.sync),
             ))
         }
     }
+}
+
+fn restored_summary(
+    restored: &DebugUndoRestored,
+    presentation: &dyn CommandPresentationContext,
+) -> Result<String, String> {
+    let lines: Vec<String> = restored
+        .files
+        .iter()
+        .map(|file| {
+            let verb = match file.action {
+                DebugRestoreAction::Modified => {
+                    presentation.translate("cmd_undo_action_restored", &[])?
+                }
+                // The request deleted it.
+                DebugRestoreAction::Recreated => {
+                    presentation.translate("cmd_undo_action_recreated", &[])?
+                }
+                // The request created it.
+                DebugRestoreAction::Removed => {
+                    presentation.translate("cmd_undo_action_removed", &[])?
+                }
+            };
+            Ok(format!("  {verb} {}", file.path.display()))
+        })
+        .collect::<Result<_, String>>()?;
+    let request = match &restored.request {
+        Some(prompt) => presentation.translate("cmd_undo_request_named", &[("prompt", prompt)])?,
+        None => presentation.translate("cmd_undo_request_last", &[])?,
+    };
+    let count = match restored.files.len() {
+        1 => presentation.translate("cmd_undo_one_file_back", &[])?,
+        files => presentation.translate("cmd_undo_files_back", &[("count", &files.to_string())])?,
+    };
+    let mut summary = presentation.translate(
+        "cmd_undo_undid_summary",
+        &[
+            ("request", &request),
+            ("count", &count),
+            ("files", &lines.join("\n")),
+        ],
+    )?;
+    if restored.forced {
+        summary.push('\n');
+        summary.push_str(&presentation.translate("cmd_undo_forced_note", &[])?);
+    }
+    summary.push('\n');
+    summary.push_str(&presentation.translate(
+        if restored.conversation_removed {
+            "cmd_undo_conversation_removed"
+        } else {
+            "cmd_undo_conversation_kept"
+        },
+        &[],
+    )?);
+    if !restored.skipped.is_empty() {
+        let skipped: Vec<String> = restored
+            .skipped
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect();
+        summary.push('\n');
+        summary.push_str(
+            &presentation.translate("cmd_undo_left_in_place", &[("paths", &skipped.join(", "))])?,
+        );
+    }
+    Ok(summary)
+}
+
+fn restored_fallback(restored: &DebugUndoRestored, error: &str) -> String {
+    let mut report = format!("Undo was applied, but its report could not be formatted: {error}");
+    if let Some(prompt) = &restored.request {
+        report.push_str(&format!("\nRequest: {prompt}"));
+    }
+    if restored.files.is_empty() {
+        report.push_str("\nNo files were changed.");
+    } else {
+        report.push_str("\nFiles it changed:");
+    }
+    for file in &restored.files {
+        let verb = match file.action {
+            DebugRestoreAction::Modified => "restored",
+            DebugRestoreAction::Recreated => "brought back",
+            DebugRestoreAction::Removed => "removed",
+        };
+        report.push_str(&format!("\n  {verb} {}", file.path.display()));
+    }
+    if restored.forced {
+        report.push_str(
+            "\nThe end of this request was not recorded, so edits made to these files since it started were also put back.",
+        );
+    }
+    report.push_str(if restored.conversation_removed {
+        "\nThe request and its reply were removed from the conversation."
+    } else {
+        "\nThe conversation was not changed."
+    });
+    if !restored.skipped.is_empty() {
+        let skipped: Vec<String> = restored
+            .skipped
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect();
+        report.push_str(&format!(
+            "\nLeft in place, not reverted: {}",
+            skipped.join(", ")
+        ));
+    }
+    report
 }
