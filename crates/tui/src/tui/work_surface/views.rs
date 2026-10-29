@@ -229,7 +229,7 @@ pub(super) fn context_rows(app: &mut App) -> Vec<WorkRow> {
         fact(
             "automatic",
             "automatic compaction off".to_string(),
-            "Emergency compaction may still occur",
+            "Use /compact to make room manually",
         )
     };
     automatic.selectable = true;
