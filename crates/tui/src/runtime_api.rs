@@ -11486,7 +11486,8 @@ fn provider_model_entry_for_api(
     {
         entry.reasoning_effort_levels = efforts
             .into_iter()
-            .filter(|effort| !matches!(effort, ReasoningEffort::Off | ReasoningEffort::Auto))
+            .filter(|effort| *effort != ReasoningEffort::Auto)
+            .filter(|effort| *effort != ReasoningEffort::Off || provider == ProviderKind::Deepseek)
             .map(|effort| effort.as_setting().to_string())
             .collect();
         entry.reasoning_effort_source = Some("catalog");
