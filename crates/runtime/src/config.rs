@@ -9364,7 +9364,7 @@ fn deepseek_missing_key_message() -> &'static str {
         "  codewhale auth set --provider deepseek\n",
         "Get a key: https://platform.deepseek.com/api_keys\n",
         "Or export DEEPSEEK_API_KEY=<your-key> (this shell only).\n",
-        "zsh: ~/.zshrc is interactive only; use ~/.zshenv.\n",
+        "In zsh, ~/.zshrc is read only by interactive shells.\n",
         "Or set api_key in ~/.codewhale/config.toml.\n",
         "If you already use DeepSeek Harness, grant read-only access:\n",
         "  codewhale auth external-consent --provider deepseek --mode read-only"
