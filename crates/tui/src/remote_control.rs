@@ -4658,9 +4658,6 @@ async fn rejection_excerpt(response: reqwest::Response) -> Option<String> {
     sanitized_rejection_excerpt(&body, status)
 }
 
-/// Sanitized, bounded reason excerpt from a rejection body. Only the
-/// conventional error fields are read, control characters are stripped, and
-/// the excerpt is capped — raw server bytes are never echoed further.
 fn sanitized_rejection_excerpt(body: &[u8], status: StatusCode) -> Option<String> {
     let parsed: Value = serde_json::from_slice(body).ok()?;
     match (
@@ -4671,27 +4668,13 @@ fn sanitized_rejection_excerpt(body: &[u8], status: StatusCode) -> Option<String
             .and_then(Value::as_str),
     ) {
         (StatusCode::SERVICE_UNAVAILABLE, Some("runner_runtime_identity_unavailable")) => {
-            return Some("Remote control is temporarily unavailable because this service has not been configured for a Codewhale build. Try again later".to_string());
+            Some("Remote control is temporarily unavailable because this service has not been configured for a Codewhale build. Try again later".to_string())
         }
         (StatusCode::UNPROCESSABLE_ENTITY, Some("runner_runtime_identity_unsupported")) => {
-            return Some("This Codewhale build is not accepted by the remote-control service. Check your installed version or contact the service administrator".to_string());
+            Some("This Codewhale build is not accepted by the remote-control service. Check your installed version or contact the service administrator".to_string())
         }
-        _ => {}
+        _ => None,
     }
-    for field in ["error", "message", "title"] {
-        if let Some(text) = parsed.get(field).and_then(Value::as_str) {
-            let cleaned: String = text
-                .chars()
-                .filter(|character| !character.is_control())
-                .take(140)
-                .collect();
-            let trimmed = cleaned.trim();
-            if !trimmed.is_empty() {
-                return Some(trimmed.to_string());
-            }
-        }
-    }
-    None
 }
 
 async fn read_bounded_json(response: reqwest::Response) -> Result<Value, String> {
@@ -7429,22 +7412,6 @@ mod tests {
     #[test]
     fn sanitized_rejection_excerpt_reads_only_bounded_error_fields() {
         assert_eq!(
-            sanitized_rejection_excerpt(
-                br#"{"error":"client version not accepted","details":"noise"}"#,
-                StatusCode::FORBIDDEN,
-            )
-            .as_deref(),
-            Some("client version not accepted")
-        );
-        assert_eq!(
-            sanitized_rejection_excerpt(
-                br#"{"message":"enrollment closed"}"#,
-                StatusCode::BAD_REQUEST
-            )
-            .as_deref(),
-            Some("enrollment closed")
-        );
-        assert_eq!(
             sanitized_rejection_excerpt(br#"{"error":"RunnerEnrollmentError","details":{"code":"runner_runtime_identity_unavailable"},"message":"private server detail"}"#, StatusCode::SERVICE_UNAVAILABLE).as_deref(),
             Some("Remote control is temporarily unavailable because this service has not been configured for a Codewhale build. Try again later")
         );
@@ -7453,42 +7420,33 @@ mod tests {
             Some("This Codewhale build is not accepted by the remote-control service. Check your installed version or contact the service administrator")
         );
         assert_eq!(
-            sanitized_rejection_excerpt(br#"{"error":"RunnerEnrollmentError","code":"runner_runtime_identity_unavailable"}"#, StatusCode::SERVICE_UNAVAILABLE).as_deref(),
-            Some("Remote control is temporarily unavailable because this service has not been configured for a Codewhale build. Try again later")
-        );
-        assert_eq!(
             sanitized_rejection_excerpt(
-                br#"{"error":"other","details":{"code":"runner_runtime_identity_unavailable"}}"#,
-                StatusCode::BAD_REQUEST
+                br#"{"code":"runner_runtime_identity_unavailable"}"#,
+                StatusCode::SERVICE_UNAVAILABLE
             )
             .as_deref(),
-            Some("other")
+            Some(
+                "Remote control is temporarily unavailable because this service has not been configured for a Codewhale build. Try again later"
+            )
         );
-        // Control characters are stripped, never echoed. A JSON-escaped NUL
-        // parses into the value; the strip must remove it. A raw NUL byte
-        // makes serde_json reject the body outright, which is also safe
-        // (no excerpt) — assert both directions.
-        let with_control = "{\"error\":\"bad\\u0000opaque\"}".to_string();
-        assert_eq!(
-            sanitized_rejection_excerpt(with_control.as_bytes(), StatusCode::BAD_REQUEST)
-                .as_deref(),
-            Some("badopaque")
-        );
-        let raw_nul = "{\"error\":\"bad\u{0}opaque\"}".to_string();
-        assert_eq!(
-            sanitized_rejection_excerpt(raw_nul.as_bytes(), StatusCode::BAD_REQUEST),
-            None
-        );
-        // Non-JSON bodies yield no excerpt.
-        assert_eq!(
-            sanitized_rejection_excerpt(b"<html>403</html>", StatusCode::FORBIDDEN),
-            None
-        );
-        // Overlong reasons are capped.
+        for body in [
+            br#"{"error":"opaque-synthetic-value"}"#.as_slice(),
+            br#"{"message":"https://example.test/?token=synthetic"}"#,
+            br#"{"title":"bad\u0000opaque"}"#,
+            br#"{"details":{"code":"runner_runtime_identity_unavailable"}}"#,
+            b"<html>403</html>",
+            b"{\"error\":\"bad\0opaque\"}",
+        ] {
+            assert_eq!(
+                sanitized_rejection_excerpt(body, StatusCode::BAD_REQUEST),
+                None
+            );
+        }
         let long = format!("{{\"error\":\"{}\"}}", "x".repeat(400));
-        let excerpt = sanitized_rejection_excerpt(long.as_bytes(), StatusCode::BAD_REQUEST)
-            .expect("capped excerpt");
-        assert!(excerpt.chars().count() <= 140);
+        assert_eq!(
+            sanitized_rejection_excerpt(long.as_bytes(), StatusCode::BAD_REQUEST),
+            None
+        );
     }
 
     #[test]
@@ -7553,11 +7511,30 @@ mod tests {
         .await
         .expect_err("403 must fail");
         assert!(error.contains("403"), "{error}");
-        assert!(error.contains("client version not accepted"), "{error}");
-        assert!(
-            !error.contains("documentation"),
-            "only the conventional error fields may surface: {error}"
-        );
+        assert!(!error.contains("client version not accepted"), "{error}");
+        assert!(!error.contains("example.test"), "{error}");
+        Mock::given(method("POST"))
+            .and(path("/oauth/known"))
+            .respond_with(ResponseTemplate::new(503).set_body_json(json!({
+                "code": "runner_runtime_identity_unavailable",
+                "message": "opaque-synthetic-value"
+            })))
+            .mount(&server)
+            .await;
+        let known = public_request(
+            &client,
+            Method::POST,
+            Url::parse(&format!(
+                "{}/oauth/known",
+                server.uri().trim_end_matches('/')
+            ))
+            .expect("server url"),
+            json!({ "audience": "codewhale-runner" }),
+        )
+        .await
+        .expect_err("503 must fail");
+        assert!(known.contains("temporarily unavailable"), "{known}");
+        assert!(!known.contains("opaque-synthetic-value"), "{known}");
     }
 
     #[tokio::test]
