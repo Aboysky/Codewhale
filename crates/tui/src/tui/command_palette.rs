@@ -20,13 +20,13 @@ use crate::skills;
 use crate::tools::spec::ApprovalRequirement;
 use crate::tools::spec::ToolCapability;
 use crate::tools::{ToolContext, ToolRegistryBuilder};
-use crate::tui::menu_style;
 use crate::tui::views::{
     ActionHint, CommandPaletteAction, ModalKind, ModalView, ViewAction, ViewEvent,
     centered_modal_area, render_modal_footer, render_modal_surface,
 };
 use codewhale_localization::{Locale, MessageId, tr};
 use codewhale_palette as palette;
+use codewhale_tui_kit::menu_style;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PaletteSection {
@@ -770,7 +770,8 @@ impl CommandPaletteView {
     }
 
     fn move_selection(&mut self, delta: isize) {
-        self.selected = crate::tui::list_nav::wrap_index(self.selected, self.filtered.len(), delta);
+        self.selected =
+            codewhale_tui_kit::list_nav::wrap_index(self.selected, self.filtered.len(), delta);
         self.hovered.set(None);
     }
 
@@ -1000,20 +1001,23 @@ impl ModalView for CommandPaletteView {
                     Style::default().fg(palette::TEXT_PRIMARY)
                 };
 
-                let pointer = crate::tui::glyphs::selection_marker(is_selected);
+                let pointer = codewhale_tui_kit::glyphs::selection_marker(is_selected);
                 // `{:<width$}` pads but never truncates, so a long label — every
                 // `mcp:server:tool` row — ran past the column and pushed the
                 // description off the card entirely. Truncate first, then pad, so
                 // the description column stays on one axis.
-                let label = crate::tui::ui_text::truncate_line_to_width(&entry.label, label_width);
+                let label =
+                    codewhale_tui_kit::ui_text::truncate_line_to_width(&entry.label, label_width);
                 let mut line = format!("{pointer} {label:<label_width$}");
                 // The rows are drawn into `content`, which is the popup less its
                 // borders and padding — measuring against `popup_width` overstated
                 // the room by four columns.
                 let content_width = (popup_width as usize).saturating_sub(4);
                 let desc_capacity = content_width.saturating_sub(label_width + 4);
-                let desc =
-                    crate::tui::ui_text::truncate_line_to_width(&entry.description, desc_capacity);
+                let desc = codewhale_tui_kit::ui_text::truncate_line_to_width(
+                    &entry.description,
+                    desc_capacity,
+                );
                 line.push_str("  ");
                 line.push_str(&desc);
                 entry_line_indices.push((lines.len(), absolute));
@@ -2351,7 +2355,7 @@ mod tests {
 
             // The selected row carries the charter pointer glyph.
             assert!(
-                text.contains(crate::tui::glyphs::SELECTION),
+                text.contains(codewhale_tui_kit::glyphs::SELECTION),
                 "{w}x{h}: selected row missing charter pointer"
             );
 

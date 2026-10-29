@@ -16,14 +16,14 @@ const OSC12_RESET: &[u8] = b"\x1b]112\x07";
 static ACTIVE: AtomicBool = AtomicBool::new(false);
 
 /// RAII handle for one process-wide cursor accent installation.
-pub(crate) struct CursorAccentGuard {
+pub struct CursorAccentGuard {
     active: bool,
 }
 
 impl CursorAccentGuard {
     /// Install the accent only when the resolved settings and environment make
     /// decorative terminal control safe and explicit.
-    pub(crate) fn install(reduced_motion: bool, accent: Color) -> Self {
+    pub fn install(reduced_motion: bool, accent: Color) -> Self {
         if reduced_motion || !environment_allows_cursor_accent() {
             return Self { active: false };
         }
@@ -55,7 +55,7 @@ impl Drop for CursorAccentGuard {
 
 /// Restore the terminal's default cursor color once. Safe from normal,
 /// panic, and signal cleanup paths; repeated calls are no-ops.
-pub(crate) fn restore_cursor_accent() {
+pub fn restore_cursor_accent() {
     if !ACTIVE.swap(false, Ordering::SeqCst) {
         return;
     }

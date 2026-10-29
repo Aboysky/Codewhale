@@ -73,7 +73,7 @@ impl LineLink {
 /// rendered viewport. Metadata outside `area` is clipped rather than allowed
 /// to hyperlink adjacent chrome (for example the transcript scrollbar).
 #[must_use]
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub fn link_regions_for_lines(
     area: ratatui::layout::Rect,
     links: &[Vec<LineLink>],

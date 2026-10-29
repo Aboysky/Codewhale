@@ -9,33 +9,27 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use codewhale_ratatui::{MotionMode, VerificationSpinner, spin};
 
-#[cfg(test)]
-pub(crate) const BRAILLE_SPINNER_FRAMES: [&str; 8] = spin::FRAMES;
+#[cfg(any(test, feature = "test-support"))]
+pub const BRAILLE_SPINNER_FRAMES: [&str; 8] = spin::FRAMES;
 #[cfg(test)]
 const VERIFY_TICK_FRAMES: [&str; 8] = VerificationSpinner::FRAMES;
-pub(crate) const LIVE_MARKER_DELAY_MS: u64 = spin::EARN_DELAY.as_millis() as u64;
-pub(crate) const LIVE_STATIC_MARKER: &str = spin::PENDING_FRAME;
-pub(crate) const BRAILLE_SPINNER_STILL_FRAME: &str = spin::STILL_FRAME;
-pub(crate) const BRAILLE_SPINNER_FRAME_MS: u64 = spin::FRAME_INTERVAL.as_millis() as u64;
+pub const LIVE_MARKER_DELAY_MS: u64 = spin::EARN_DELAY.as_millis() as u64;
+pub const LIVE_STATIC_MARKER: &str = spin::PENDING_FRAME;
+pub const BRAILLE_SPINNER_STILL_FRAME: &str = spin::STILL_FRAME;
+pub const BRAILLE_SPINNER_FRAME_MS: u64 = spin::FRAME_INTERVAL.as_millis() as u64;
 
 #[must_use]
-pub(crate) fn braille_spinner_frame_for_elapsed_ms(
-    elapsed_ms: u128,
-    low_motion: bool,
-) -> &'static str {
+pub fn braille_spinner_frame_for_elapsed_ms(elapsed_ms: u128, low_motion: bool) -> &'static str {
     spin::frame(elapsed(elapsed_ms), motion(low_motion), false)
 }
 
 #[must_use]
-pub(crate) fn braille_spinner_frame(started_at: Option<Instant>, low_motion: bool) -> &'static str {
+pub fn braille_spinner_frame(started_at: Option<Instant>, low_motion: bool) -> &'static str {
     braille_spinner_frame_for_elapsed_ms(marker_elapsed_ms(started_at), low_motion)
 }
 
 #[must_use]
-pub(crate) fn verification_tick_frame(
-    started_at: Option<Instant>,
-    low_motion: bool,
-) -> &'static str {
+pub fn verification_tick_frame(started_at: Option<Instant>, low_motion: bool) -> &'static str {
     VerificationSpinner::frame(
         elapsed(marker_elapsed_ms(started_at)),
         motion(low_motion),

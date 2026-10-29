@@ -327,7 +327,7 @@ pub(crate) fn open_diff_pager(app: &mut App, title: String, diff: &str) {
     // A patch is file content. Keep the terminal-injection boundary
     // `PagerView::from_text` applies to every other pager body.
     let mut sanitized = String::with_capacity(diff.len());
-    crate::tui::osc8::strip_ansi_into(diff, &mut sanitized);
+    codewhale_tui_kit::osc8::strip_ansi_into(diff, &mut sanitized);
     app.view_stack.push(PagerView::from_diff(
         title,
         sanitized,
@@ -629,7 +629,7 @@ pub(crate) fn jump_to_adjacent_tool_cell(app: &mut App, direction: SearchDirecti
         .min(line_meta.len().saturating_sub(1));
     let current_cell = line_meta
         .get(top)
-        .and_then(crate::tui::scrolling::TranscriptLineMeta::cell_line)
+        .and_then(codewhale_tui_kit::scrolling::TranscriptLineMeta::cell_line)
         .map(|(cell_index, _)| app.original_cell_index_for_rendered(cell_index));
 
     let mut scan_indices = Vec::new();

@@ -663,7 +663,7 @@ pub(super) fn flush_paste_burst_before_composer(app: &mut App, now: Instant) -> 
         return false;
     }
     match app.take_paste_burst_flush_if_enabled(now) {
-        crate::tui::paste_burst::FlushResult::Paste(text) => {
+        codewhale_tui_kit::paste_burst::FlushResult::Paste(text) => {
             // Terminals without bracketed paste deliver a dropped file the
             // same way; attach it exactly as `insert_paste_text` would.
             if !app.attach_pasted_image_paths(&text) {
@@ -671,13 +671,13 @@ pub(super) fn flush_paste_burst_before_composer(app: &mut App, now: Instant) -> 
             }
             true
         }
-        crate::tui::paste_burst::FlushResult::Typed(' ')
+        codewhale_tui_kit::paste_burst::FlushResult::Typed(' ')
             if app.input.is_empty() && handle_transcript_space(app) =>
         {
             true
         }
-        crate::tui::paste_burst::FlushResult::Typed(_) if app.vim_is_visual_mode() => true,
-        crate::tui::paste_burst::FlushResult::Typed(ch) => {
+        codewhale_tui_kit::paste_burst::FlushResult::Typed(_) if app.vim_is_visual_mode() => true,
+        codewhale_tui_kit::paste_burst::FlushResult::Typed(ch) => {
             let mention_menu_limit = app.mention_menu_limit;
             if app.vim_is_normal_mode()
                 && visible_slash_menu_entries(app, SLASH_MENU_LIMIT).is_empty()
@@ -691,11 +691,11 @@ pub(super) fn flush_paste_burst_before_composer(app: &mut App, now: Instant) -> 
             }
             true
         }
-        crate::tui::paste_burst::FlushResult::SuppressionExpired => {
+        codewhale_tui_kit::paste_burst::FlushResult::SuppressionExpired => {
             app.needs_redraw = true;
             true
         }
-        crate::tui::paste_burst::FlushResult::None => false,
+        codewhale_tui_kit::paste_burst::FlushResult::None => false,
     }
 }
 
@@ -954,7 +954,7 @@ pub async fn run_tui(
     // mishandle the terminator, so the default stays off there; opt in via
     // `[tui] osc8_links = true` on any platform.
     let osc8_default_on = !cfg!(target_os = "windows");
-    crate::tui::osc8::set_enabled(
+    codewhale_tui_kit::osc8::set_enabled(
         config
             .tui
             .as_ref()
@@ -1071,10 +1071,10 @@ pub async fn run_tui(
     let background = palette::probe_terminal_background();
     // Same window, same reason: the kitty graphics capability query answers
     // on stdin, so it is asked before the input pump exists.
-    let kitty_graphics = crate::tui::mark::probe_kitty_graphics();
+    let kitty_graphics = codewhale_tui_kit::mark::probe_kitty_graphics();
     // Same window again: the sixel probe is a primary-DA query whose reply
     // also arrives on stdin. Keep both capability receipts before input starts.
-    let sixel_graphics = crate::tui::mark::probe_sixel_graphics();
+    let sixel_graphics = codewhale_tui_kit::mark::probe_sixel_graphics();
     crate::tui::composer_ui::probe_terminal_keyboard_enhancement();
     let palette_mode = background.mode();
     tracing::debug!(
@@ -1108,7 +1108,7 @@ pub async fn run_tui(
     let mut config = config.clone();
     let config = &mut config;
     let mut app = App::new_with_plugin_registry(options.clone(), config, plugin_registry);
-    let _cursor_accent_guard = crate::tui::cursor_accent::CursorAccentGuard::install(
+    let _cursor_accent_guard = codewhale_tui_kit::cursor_accent::CursorAccentGuard::install(
         app.low_motion || !app.fancy_animations,
         app.ui_theme.accent_primary,
     );
@@ -1554,7 +1554,7 @@ pub async fn run_tui(
     }
 
     cleanup_guard.defused = true;
-    crate::tui::cursor_accent::restore_cursor_accent();
+    codewhale_tui_kit::cursor_accent::restore_cursor_accent();
     pop_keyboard_enhancement_flags(terminal.backend_mut());
     disable_alternate_scroll_mode(terminal.backend_mut());
     execute!(terminal.backend_mut(), DisableFocusChange)?;
@@ -1744,7 +1744,7 @@ pub(super) fn present_turn_failure(
         })
         && let Some(HistoryCell::Error { severity, .. }) = app.cell_at_virtual_index_mut(index)
     {
-        *severity = crate::error_taxonomy::ErrorSeverity::Error;
+        *severity = codewhale_error_taxonomy::ErrorSeverity::Error;
     }
     // What the transcript shows for this turn's failure: the error cell an
     // earlier `Event::Error` already posted, or the notice added here.
@@ -1755,7 +1755,7 @@ pub(super) fn present_turn_failure(
         if failed {
             app.add_message(HistoryCell::Error {
                 message: notice.clone(),
-                severity: crate::error_taxonomy::ErrorSeverity::Error,
+                severity: codewhale_error_taxonomy::ErrorSeverity::Error,
             });
         }
         app.set_sticky_status(notice.clone(), StatusToastLevel::Error, None);
@@ -2787,7 +2787,9 @@ pub(crate) async fn run_event_loop(
 
                         if app.translation_enabled
                             && !current_streaming_text.is_empty()
-                            && crate::tui::translation::needs_translation(&current_streaming_text)
+                            && codewhale_tui_kit::translation::needs_translation(
+                                &current_streaming_text,
+                            )
                             && let Some(translation_client) = active_translation_client.as_ref()
                         {
                             app.status_message = Some(
@@ -2897,7 +2899,9 @@ pub(crate) async fn run_event_loop(
                                 transcript_batch_updated = true;
                             }
                             if !original_thinking.is_empty()
-                                && crate::tui::translation::needs_translation(&original_thinking)
+                                && codewhale_tui_kit::translation::needs_translation(
+                                    &original_thinking,
+                                )
                                 && let Some(translation_client) = active_translation_client.as_ref()
                                 && let Some(cell_index) = cell_index
                             {
@@ -3890,7 +3894,7 @@ pub(crate) async fn run_event_loop(
                         let rollback_after_auth_failure =
                             matches!(
                                 envelope.category,
-                                crate::error_taxonomy::ErrorCategory::Authentication
+                                codewhale_error_taxonomy::ErrorCategory::Authentication
                             ) && app.pending_provider_switch.is_some();
                         apply_engine_error_to_app(app, envelope);
                         if app.api_provider != provider_before_error
@@ -5488,7 +5492,8 @@ pub(crate) async fn run_event_loop(
                 && matches!(&evt, Event::Key(_) | Event::Paste(_) | Event::Resize(_, _))
             {
                 app.launch.mark_reveal_started_at = Some(
-                    Instant::now() - Duration::from_millis(crate::tui::mark::REVEAL_MS as u64),
+                    Instant::now()
+                        - Duration::from_millis(codewhale_tui_kit::mark::REVEAL_MS as u64),
                 );
             }
             app.needs_redraw = true;
@@ -7101,14 +7106,14 @@ pub(crate) async fn run_event_loop(
                     move_slash_menu_selection(
                         app,
                         slash_menu_entries.len(),
-                        crate::tui::list_nav::Motion::PagePrev,
+                        codewhale_tui_kit::list_nav::Motion::PagePrev,
                     );
                 }
                 KeyCode::PageDown if key.modifiers.is_empty() && slash_menu_open => {
                     move_slash_menu_selection(
                         app,
                         slash_menu_entries.len(),
-                        crate::tui::list_nav::Motion::PageNext,
+                        codewhale_tui_kit::list_nav::Motion::PageNext,
                     );
                 }
                 // Home/End deliberately stay cursor keys while the menu is open:

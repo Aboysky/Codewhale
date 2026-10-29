@@ -4,11 +4,10 @@ use ratatui::text::{Line, Span};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-use crate::tui::history::HistoryCell;
-use crate::tui::osc8;
+use crate::osc8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum CopyLineSeparator {
+pub enum CopyLineSeparator {
     None,
     Space,
     Newline,
@@ -16,7 +15,7 @@ pub(crate) enum CopyLineSeparator {
 
 impl CopyLineSeparator {
     #[must_use]
-    pub(crate) const fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::None => "",
             Self::Space => " ",
@@ -25,7 +24,7 @@ impl CopyLineSeparator {
     }
 }
 
-pub(crate) fn truncate_line_to_width(text: &str, max_width: usize) -> String {
+pub fn truncate_line_to_width(text: &str, max_width: usize) -> String {
     if max_width == 0 {
         return String::new();
     }
@@ -64,7 +63,7 @@ pub(crate) fn truncate_line_to_width(text: &str, max_width: usize) -> String {
 }
 
 /// Truncate `text` to `max_width` display columns, preferring whole words.
-pub(crate) fn semantic_truncate(text: &str, max_width: usize) -> String {
+pub fn semantic_truncate(text: &str, max_width: usize) -> String {
     if max_width == 0 {
         return String::new();
     }
@@ -128,14 +127,14 @@ fn breaks_after_cjk(grapheme: &str) -> bool {
     let Some(first) = grapheme.chars().next() else {
         return false;
     };
-    crate::tui::translation::is_cjk(first)
+    crate::translation::is_cjk(first)
         && !matches!(
             first,
             '（' | '「' | '『' | '【' | '〔' | '《' | '〈' | '［' | '｛'
         )
 }
 
-pub(crate) fn semantic_truncate_with_affixes(
+pub fn semantic_truncate_with_affixes(
     prefix: &str,
     text: &str,
     suffix: &str,
@@ -151,7 +150,7 @@ pub(crate) fn semantic_truncate_with_affixes(
     )
 }
 
-pub(crate) fn semantic_truncate_between_affixes(
+pub fn semantic_truncate_between_affixes(
     prefix: &str,
     text: &str,
     suffix: &str,
@@ -164,53 +163,11 @@ pub(crate) fn semantic_truncate_between_affixes(
     semantic_truncate(text, max_width - fixed_width)
 }
 
-pub(super) fn history_cell_to_text(cell: &HistoryCell, width: u16) -> String {
-    // Error detail/copy is a diagnostic boundary, not a screenshot of the
-    // live wrapping. Preserve the exact source message so narrow terminals do
-    // not insert newlines into hostnames, env vars, commands, or URLs.
-    if let HistoryCell::Error { message, .. } = cell {
-        return message.clone();
-    }
-    cell.transcript_lines(width)
-        .into_iter()
-        .map(line_to_string)
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-/// Serialize one complete history cell for Copy Message.
-///
-/// User, assistant and system cells have canonical source text. Returning it directly
-/// preserves authored Markdown and hard line breaks while keeping role glyphs,
-/// continuation rails, and visual wrapping out of the clipboard. Transcript
-/// drag selections reuse this same projection per intersected cell
-/// (`selection_to_markdown`, #6156); only the rendered-text fallback still
-/// serializes the live cache, where Markdown has already been transformed and
-/// user-message soft wraps do not carry join metadata.
-///
-/// Complex cells intentionally retain the full-transcript representation.
-/// Tool and thinking transcript renderers include semantic headers and complete
-/// output that can differ from the capped or folded live cache.
-pub(super) fn history_cell_to_clipboard_text(cell: &HistoryCell, width: u16) -> String {
-    match cell {
-        HistoryCell::User { content }
-        | HistoryCell::Assistant { content, .. }
-        | HistoryCell::System { content } => content.clone(),
-        _ => history_cell_to_text(cell, width),
-    }
-}
-
-fn line_to_string(line: Line<'static>) -> String {
-    let mut out = String::new();
-    append_spans_plain(line.spans.iter(), &mut out);
-    out
-}
-
 /// Convert a rendered transcript line to plain text, stripping OSC-8 link
 /// escape sequences. The caller is responsible for shifting selection columns
 /// to account for any visual-only rail prefix (see
 /// `TranscriptViewCache::rail_prefix_width`).
-pub(super) fn line_to_plain(line: &Line<'static>) -> String {
+pub fn line_to_plain(line: &Line<'static>) -> String {
     let mut out = String::new();
     append_spans_plain(line.spans.iter(), &mut out);
     out
@@ -229,7 +186,7 @@ where
     }
 }
 
-pub(crate) fn text_display_width(text: &str) -> usize {
+pub fn text_display_width(text: &str) -> usize {
     text.graphemes(true).map(grapheme_display_width).sum()
 }
 
@@ -251,7 +208,7 @@ fn visible_grapheme_width(grapheme: &str) -> usize {
 /// measure in this space: the fixed-4 [`text_display_width`] would shift
 /// every column after a tab away from what the user dragged over. The two
 /// agree on text without control characters.
-pub(crate) fn text_visible_width(text: &str) -> usize {
+pub fn text_visible_width(text: &str) -> usize {
     text.graphemes(true).map(visible_grapheme_width).sum()
 }
 
@@ -262,7 +219,7 @@ pub(crate) fn text_visible_width(text: &str) -> usize {
 /// rule for every width: zero-width control spans join the output only when
 /// the window strictly covers their position, so interior tabs survive while
 /// un-aimable edge touches stay out.
-pub(crate) fn slice_visible_columns(text: &str, start: usize, end: usize) -> String {
+pub fn slice_visible_columns(text: &str, start: usize, end: usize) -> String {
     if end <= start {
         return String::new();
     }
@@ -283,7 +240,7 @@ pub(crate) fn slice_visible_columns(text: &str, start: usize, end: usize) -> Str
     out
 }
 
-pub(super) fn char_display_width(ch: char) -> usize {
+pub fn char_display_width(ch: char) -> usize {
     match ch {
         '\t' => 4,
         // Enclosed Alphanumerics (U+2460-U+24FF), Dingbat Circled Digits
@@ -311,7 +268,7 @@ pub(super) fn char_display_width(ch: char) -> usize {
 /// selector still render as 2 columns in terminals, but unicode-width's
 /// `grapheme.width()` only reports 1. We force 2 when U+20E3 is present in a
 /// multi-codepoint grapheme. (#4479)
-pub(super) fn grapheme_display_width(grapheme: &str) -> usize {
+pub fn grapheme_display_width(grapheme: &str) -> usize {
     if grapheme == "\t" {
         return 4;
     }
@@ -650,140 +607,5 @@ mod tests {
                 assert!(!out.starts_with('\u{20e3}'));
             }
         }
-    }
-
-    #[test]
-    fn clipboard_text_for_assistant_uses_source_without_visual_rails() {
-        let content = "A long assistant response that will wrap at a narrow width.";
-        let cell = HistoryCell::Assistant {
-            content: content.to_string(),
-            streaming: false,
-        };
-
-        let rendered = history_cell_to_text(&cell, 12);
-        assert_ne!(rendered, content, "test setup must exercise rendering");
-        assert!(
-            rendered.contains('\n'),
-            "test setup must exercise visual wrapping: {rendered:?}"
-        );
-        assert_eq!(history_cell_to_clipboard_text(&cell, 12), content);
-    }
-
-    #[test]
-    fn clipboard_text_preserves_authored_rail_glyphs() {
-        let content = "● literal role glyph\n▏ literal rail glyph";
-        let cell = HistoryCell::Assistant {
-            content: content.to_string(),
-            streaming: false,
-        };
-
-        assert_eq!(history_cell_to_clipboard_text(&cell, 10), content);
-    }
-
-    #[test]
-    fn clipboard_text_preserves_markdown_source_and_hard_breaks() {
-        let content = r#"Heading
-
-```rust
-fn main() {
-    println!("hello");
-}
-```
-
-After code."#;
-        let cell = HistoryCell::Assistant {
-            content: content.to_string(),
-            streaming: false,
-        };
-
-        assert_eq!(history_cell_to_clipboard_text(&cell, 16), content);
-        let diagnostic = serde_json::json!({"prompt": "Use \"quoted\" input\nwith a second line"});
-        let source = serde_json::to_string_pretty(&diagnostic).unwrap();
-        let cell = HistoryCell::System {
-            content: source.clone(),
-        };
-        let copied = history_cell_to_clipboard_text(&cell, 16);
-        assert_eq!(copied, source);
-        assert_eq!(
-            serde_json::from_str::<serde_json::Value>(&copied).unwrap(),
-            diagnostic
-        );
-    }
-
-    #[test]
-    fn clipboard_text_for_user_uses_source_text() {
-        let content = "user text that wraps visually";
-        let cell = HistoryCell::User {
-            content: content.to_string(),
-        };
-
-        let rendered = history_cell_to_text(&cell, 8);
-        assert_ne!(rendered, content, "test setup must exercise rendering");
-        assert!(
-            rendered.contains('\n'),
-            "test setup must exercise visual wrapping: {rendered:?}"
-        );
-        assert_eq!(history_cell_to_clipboard_text(&cell, 8), content);
-    }
-
-    #[test]
-    fn clipboard_text_for_thinking_keeps_full_transcript_semantics() {
-        let content = "First paragraph lede.\n\
-            Second sentence of the first paragraph.\n\n\
-            Second paragraph: deeper analysis follows.\n\
-            More detail in paragraph two.\n\n\
-            Third paragraph: even more reasoning.\n\
-            With another line.\n\n\
-            Fourth paragraph: the conclusion.\n\
-            And one more line for good measure.\n\n\
-            Fifth paragraph: final verification.\n\
-            One last supporting detail.";
-        let cell = HistoryCell::Thinking {
-            content: content.to_string(),
-            streaming: false,
-            duration_secs: Some(3.2),
-        };
-
-        let live = cell
-            .lines_with_options(
-                80,
-                crate::tui::history::TranscriptRenderOptions {
-                    low_motion: true,
-                    ..crate::tui::history::TranscriptRenderOptions::default()
-                },
-            )
-            .into_iter()
-            .map(line_to_string)
-            .collect::<Vec<_>>()
-            .join("\n");
-        let transcript = history_cell_to_text(&cell, 80);
-        let copied = history_cell_to_clipboard_text(&cell, 80);
-
-        assert!(!live.contains("Fifth paragraph"), "{live:?}");
-        assert!(transcript.contains("Fifth paragraph"), "{transcript:?}");
-        assert_eq!(copied, transcript);
-    }
-
-    #[test]
-    fn clipboard_text_for_tool_keeps_full_transcript_semantics() {
-        use crate::tui::history::{GenericToolCell, ToolCell, ToolStatus};
-
-        let cell = HistoryCell::Tool(ToolCell::Generic(GenericToolCell {
-            name: "exec_shell".to_string(),
-            status: ToolStatus::Success,
-            input_summary: Some("cargo test".to_string()),
-            output: Some("complete tool output".to_string()),
-            prompts: None,
-            spillover_path: None,
-            output_summary: None,
-            is_diff: false,
-        }));
-
-        let transcript = history_cell_to_text(&cell, 80);
-        assert!(
-            transcript.contains("complete tool output"),
-            "{transcript:?}"
-        );
-        assert_eq!(history_cell_to_clipboard_text(&cell, 80), transcript);
     }
 }

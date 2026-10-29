@@ -757,8 +757,10 @@ impl Engine {
             let display_message = self.decorate_auth_error_message(
                 initial_stream_error_user_message(&self.config.locale_tag, &rejection),
             );
-            let mut envelope =
-                crate::error_taxonomy::envelope_for_llm_error(rejection, display_message.clone());
+            let mut envelope = crate::llm_error_envelope::envelope_for_llm_error(
+                rejection,
+                display_message.clone(),
+            );
             envelope.message = display_message.clone();
             let _ = self.send_event(Event::error(envelope)).await;
             return PhaseResult::Return((TurnOutcomeStatus::Failed, Some(display_message)));

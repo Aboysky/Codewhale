@@ -24,8 +24,8 @@ use crate::skills::audit::{
 use crate::skills::mutation::{ConflictPolicy, SkillMutationRequest, SkillTargetScope};
 use crate::skills::roots::SkillRootKind;
 use crate::tui::app::App;
-use crate::tui::menu_style;
 use codewhale_palette as palette;
+use codewhale_tui_kit::menu_style;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ManagerMode {
@@ -398,7 +398,7 @@ impl SkillsManagerView {
             } else {
                 Style::default().fg(palette::TEXT_PRIMARY)
             };
-            let mark = crate::tui::glyphs::selection_marker(selected);
+            let mark = codewhale_tui_kit::glyphs::selection_marker(selected);
             let line = format!(
                 "{mark} {:<6} {}  {}  {}",
                 skill_tier_label(skill),
@@ -936,7 +936,7 @@ mod tests {
             .map(|position| buf[position].symbol())
             .collect::<String>();
         assert!(
-            text.contains(crate::tui::glyphs::SELECTION),
+            text.contains(codewhale_tui_kit::glyphs::SELECTION),
             "selected skill row must carry the charter pointer: {text}"
         );
     }

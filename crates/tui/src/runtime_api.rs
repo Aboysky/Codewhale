@@ -68,10 +68,12 @@ use crate::fleet::task_spec::FleetTaskSpecDocument;
 use crate::fleet::worker_runtime::fleet_write_roots;
 use crate::mcp::McpPool;
 use crate::runtime_threads::{
-    CompactThreadRequest, CreateThreadRequest, ExternalApprovalDecision,
-    MAX_RUNTIME_EVENT_REPLAY_TAIL, RuntimeThreadManager, RuntimeThreadManagerConfig,
-    SharedRuntimeThreadManager, StartTurnRequest, SteerTurnRequest, ThreadDetail, ThreadListFilter,
-    ThreadRecord, TurnRecord, UpdateThreadRequest, UsageGroupBy, UsageTotals,
+    MAX_RUNTIME_EVENT_REPLAY_TAIL, ThreadRecord, TurnRecord, manager::CompactThreadRequest,
+    manager::CreateThreadRequest, manager::ExternalApprovalDecision, manager::RuntimeThreadManager,
+    manager::RuntimeThreadManagerConfig, manager::SharedRuntimeThreadManager,
+    manager::StartTurnRequest, manager::SteerTurnRequest, manager::ThreadDetail,
+    manager::ThreadListFilter, manager::UpdateThreadRequest, manager::UsageGroupBy,
+    manager::UsageTotals,
 };
 use codewhale_config::ProviderKind;
 #[cfg(test)]
@@ -3419,7 +3421,7 @@ async fn create_thread(
         )
         .await
         .map_err(|e| {
-            if e.is::<crate::runtime_threads::RuntimeThreadCreateConflict>() {
+            if e.is::<crate::runtime_threads::manager::RuntimeThreadCreateConflict>() {
                 ApiError::conflict(e.to_string())
             } else {
                 ApiError::bad_request(e.to_string())
@@ -3445,7 +3447,7 @@ async fn list_threads(
 /// accounting (#6180). One call, no inference from latest-turn status.
 async fn list_running_threads(
     State(state): State<RuntimeApiState>,
-) -> Result<Json<Vec<crate::runtime_threads::RunningThread>>, ApiError> {
+) -> Result<Json<Vec<crate::runtime_threads::manager::RunningThread>>, ApiError> {
     let running = state
         .runtime_threads
         .running_threads()
@@ -3460,7 +3462,7 @@ async fn list_running_threads(
 async fn list_thread_notices(
     State(state): State<RuntimeApiState>,
     Path(id): Path<String>,
-) -> Result<Json<Vec<crate::runtime_threads::ActiveNotice>>, ApiError> {
+) -> Result<Json<Vec<crate::runtime_threads::manager::ActiveNotice>>, ApiError> {
     state
         .runtime_threads
         .get_thread(&id)
@@ -5337,8 +5339,8 @@ async fn list_commands(
 async fn run_thread_command(
     State(state): State<RuntimeApiState>,
     Path(thread_id): Path<String>,
-    Json(request): Json<crate::runtime_threads::RuntimeCommandRequest>,
-) -> Result<Json<crate::runtime_threads::RuntimeCommandResult>, ApiError> {
+    Json(request): Json<crate::runtime_threads::manager::RuntimeCommandRequest>,
+) -> Result<Json<crate::runtime_threads::manager::RuntimeCommandResult>, ApiError> {
     let operation_key = request.operation_key.clone();
     match state
         .runtime_threads
@@ -8618,7 +8620,7 @@ fn no_restore_point(turn_id: &str, why: &str) -> ApiError {
 /// (`yolo || trust_mode`), evaluated once a real change is known.
 fn patch_undo_workspace_files(
     workspace: &FsPath,
-    dropped_turns: &[crate::runtime_threads::DroppedTurnSnapshots],
+    dropped_turns: &[crate::runtime_threads::manager::DroppedTurnSnapshots],
     trusted: bool,
 ) -> Result<PatchUndoResult, ApiError> {
     // An unreadable workspace directory (unmounted volume, disconnected
@@ -9270,7 +9272,7 @@ async fn get_thread_turn_operation(
     State(state): State<RuntimeApiState>,
     Path((id, operation_key)): Path<(String, String)>,
 ) -> Result<Json<TurnRecord>, ApiError> {
-    use crate::runtime_threads::RuntimeTurnOperationLookupError;
+    use crate::runtime_threads::manager::RuntimeTurnOperationLookupError;
     let turn = state
         .runtime_threads
         .lookup_turn_operation(&id, &operation_key)

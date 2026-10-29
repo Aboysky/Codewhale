@@ -17,7 +17,7 @@
 
 use std::time::{Duration, Instant};
 
-use crate::tui::ui_text::CopyLineSeparator;
+use crate::ui_text::CopyLineSeparator;
 
 const TRACKPAD_EVENT_WINDOW: Duration = Duration::from_millis(35);
 const WHEEL_LINES_PER_TICK: i32 = 3;

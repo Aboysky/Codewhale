@@ -1456,7 +1456,7 @@ pub(crate) fn accrue_streaming_token_estimate(app: &mut App, visible_text: &str)
 /// untouched (#7123). A text drain must never carry reasoning into the
 /// assistant cell, and must never take a block that is not its own: taking a
 /// reasoning tail here would append it to the prose and drop it from the card.
-pub(crate) fn drain_text_block(state: &mut crate::tui::streaming::StreamingState) -> String {
+pub(crate) fn drain_text_block(state: &mut codewhale_tui_kit::streaming::StreamingState) -> String {
     if state.block_is_thinking(0) {
         String::new()
     } else {
@@ -1478,7 +1478,8 @@ pub(crate) fn commit_streaming_display_tick(
     // function of the clock instead of the provider's chunking.
     let interval = stream_display_clock.interval();
     let mut updated = false;
-    let budget = crate::tui::streaming::reveal_budget(interval, app.streaming_state.pending_len(0));
+    let budget =
+        codewhale_tui_kit::streaming::reveal_budget(interval, app.streaming_state.pending_len(0));
     let committed = app.streaming_state.commit_text(0, budget);
     if !committed.is_empty() {
         // #7123: route by the block's own kind. An assistant cell stays live
@@ -2443,7 +2444,7 @@ mod tests {
     /// split sentence this fix exists to prevent.
     #[test]
     fn issue_7123_drain_text_block_leaves_a_reasoning_block_alone() {
-        use crate::tui::streaming::StreamingState;
+        use codewhale_tui_kit::streaming::StreamingState;
 
         let mut state = StreamingState::new();
         state.start_thinking(0);

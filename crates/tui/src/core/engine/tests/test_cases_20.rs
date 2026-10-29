@@ -1101,7 +1101,7 @@ async fn credential_rejection_retracts_the_unanswered_question() {
     }
     assert_eq!(
         codes,
-        vec![crate::error_taxonomy::CREDENTIAL_REJECTED_UNSENT_CODE.to_string()]
+        vec![codewhale_error_taxonomy::CREDENTIAL_REJECTED_UNSENT_CODE.to_string()]
     );
 }
 

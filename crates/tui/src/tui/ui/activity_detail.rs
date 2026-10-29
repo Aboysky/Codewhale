@@ -9,13 +9,12 @@
 
 use crate::tui::app::App;
 use crate::tui::footer_ui::one_line_summary;
+use crate::tui::history::text::{history_cell_to_clipboard_text, history_cell_to_text};
 use crate::tui::history::{HistoryCell, ToolCell, ToolStatus, tool_status_label};
 use crate::tui::pager::{PagerPage, PagerView};
-use crate::tui::ui_text::{
-    history_cell_to_clipboard_text, history_cell_to_text, truncate_line_to_width,
-};
 use codewhale_localization::{MessageId, tr};
 use codewhale_snapshot::SnapshotRepo;
+use codewhale_tui_kit::ui_text::truncate_line_to_width;
 
 fn selected_transcript_cell_index(app: &App) -> Option<usize> {
     if let Some(owner) = app.selection_owner_cell() {
@@ -1714,7 +1713,7 @@ fn cleaned_turn_text(text: &str, detail: ResultDetail, max_width: usize) -> Stri
     }
 
     let mut cleaned = String::with_capacity(text.len());
-    crate::tui::osc8::strip_ansi_into(text, &mut cleaned);
+    codewhale_tui_kit::osc8::strip_ansi_into(text, &mut cleaned);
     cleaned.trim().to_string()
 }
 

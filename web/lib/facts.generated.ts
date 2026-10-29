@@ -38,7 +38,7 @@ export interface RepoFacts {
 }
 
 export const FACTS: RepoFacts = {
-  "generatedAt": "2026-10-29T07:40:04.237Z",
+  "generatedAt": "2026-10-29T15:32:52.622Z",
   "sourceRevision": null,
   "sourceCommittedAt": null,
   "version": "0.10.2",
@@ -55,6 +55,7 @@ export const FACTS: RepoFacts = {
     "config",
     "core",
     "dependencies",
+    "error-taxonomy",
     "execpolicy",
     "hooks",
     "lane",
@@ -81,6 +82,7 @@ export const FACTS: RepoFacts = {
     "telemetry",
     "tools",
     "tui",
+    "tui-kit",
     "util",
     "workflow",
     "workflow-js"

@@ -27514,28 +27514,34 @@ mod readonly_shell_6015 {
 async fn late_launch_permit_still_gets_the_full_work_budget() {
     use tokio_util::sync::CancellationToken;
 
-    const WALL_TIME: Duration = Duration::from_millis(2_000);
-    const QUEUE_HOLD: Duration = Duration::from_millis(1_500);
+    const WALL_TIME: Duration = Duration::from_millis(4_000);
+    const QUEUE_HOLD: Duration = Duration::from_millis(3_500);
     const MODEL_DELAY: Duration = Duration::from_millis(900);
 
+    let requests = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let observed_requests = Arc::clone(&requests);
     let app = Router::new().route(
         "/{*path}",
-        post(move |Json(body): Json<Value>| async move {
-            tokio::time::sleep(MODEL_DELAY).await;
-            chat_fixture_response(
-                body.get("stream").and_then(Value::as_bool).unwrap_or(false),
-                json!({
-                    "id": "chatcmpl-late",
-                    "model": "deepseek-v4-flash",
-                    "choices": [{
-                        "index": 0,
-                        "message": {"role": "assistant", "content": "done after launch"},
-                        "finish_reason": "stop"
-                    }],
-                    "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
-                }),
-            )
-            .into_response()
+        post(move |Json(body): Json<Value>| {
+            let requests = Arc::clone(&observed_requests);
+            async move {
+                requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                tokio::time::sleep(MODEL_DELAY).await;
+                chat_fixture_response(
+                    body.get("stream").and_then(Value::as_bool).unwrap_or(false),
+                    json!({
+                        "id": "chatcmpl-late",
+                        "model": "deepseek-v4-flash",
+                        "choices": [{
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "done after launch"},
+                            "finish_reason": "stop"
+                        }],
+                        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+                    }),
+                )
+                .into_response()
+            }
         }),
     );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -27633,8 +27639,10 @@ async fn late_launch_permit_still_gets_the_full_work_budget() {
         .expect("child remains inspectable");
     assert!(
         matches!(snapshot.status, SubAgentStatus::Completed),
-        "a late launch must still get its full budget: {:?}",
-        snapshot.status
+        "a late launch must still get its full budget: {:?}; retained result {:?}; model requests {}",
+        snapshot.status,
+        snapshot.result,
+        requests.load(std::sync::atomic::Ordering::Relaxed)
     );
     assert_eq!(snapshot.result.as_deref(), Some("done after launch"));
 

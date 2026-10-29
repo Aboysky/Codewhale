@@ -186,7 +186,7 @@ pub(crate) fn apply_picker_session_rename_to_active_app(
 /// `Warning`, dim for `Info`.
 pub(crate) fn apply_engine_error_to_app(
     app: &mut App,
-    envelope: crate::error_taxonomy::ErrorEnvelope,
+    envelope: codewhale_error_taxonomy::ErrorEnvelope,
 ) {
     let recoverable = envelope.recoverable;
     let message = envelope.message.clone();
@@ -202,7 +202,7 @@ pub(crate) fn apply_engine_error_to_app(
     // The engine decides whether the question was taken back out of the
     // session; the host only follows, so the two cannot disagree (#6566).
     let credential_rejected_before_output = turn_was_in_progress
-        && envelope.code == crate::error_taxonomy::CREDENTIAL_REJECTED_UNSENT_CODE;
+        && envelope.code == codewhale_error_taxonomy::CREDENTIAL_REJECTED_UNSENT_CODE;
     streaming_thinking::finalize_current(app);
     if turn_was_in_progress {
         app.finalize_streaming_assistant_as_interrupted();
@@ -266,7 +266,7 @@ pub(crate) fn apply_engine_error_to_app(
     }
     if matches!(
         envelope.category,
-        crate::error_taxonomy::ErrorCategory::Authentication
+        codewhale_error_taxonomy::ErrorCategory::Authentication
     ) && app.api_key_env_only
     {
         app.offline_mode = true;
@@ -305,9 +305,9 @@ pub(crate) fn apply_engine_error_to_app(
     if recoverable
         && matches!(
             envelope.category,
-            crate::error_taxonomy::ErrorCategory::Network
-                | crate::error_taxonomy::ErrorCategory::RateLimit
-                | crate::error_taxonomy::ErrorCategory::Timeout
+            codewhale_error_taxonomy::ErrorCategory::Network
+                | codewhale_error_taxonomy::ErrorCategory::RateLimit
+                | codewhale_error_taxonomy::ErrorCategory::Timeout
         )
         && app.advance_fallback(message.clone()).is_some()
     {
@@ -3735,7 +3735,7 @@ pub(crate) async fn apply_provider_picker_test_connection(
 /// step, in place of the provider's raw reply (#6566). Only a failure with no
 /// plain reading keeps a sanitized, bounded excerpt of that reply.
 fn plain_key_verification_error(app: &App, reason: &str, api_key: &str) -> String {
-    use crate::error_taxonomy::ErrorCategory;
+    use codewhale_error_taxonomy::ErrorCategory;
     match provider_verification_error_category(reason) {
         ErrorCategory::Authentication => app.tr(MessageId::ProviderKeyRejected).into_owned(),
         ErrorCategory::Authorization => app.tr(MessageId::ProviderKeyForbidden).into_owned(),
@@ -4510,7 +4510,7 @@ pub(crate) fn apply_loaded_session_with_goal(
         {
             app.extend_history(std::iter::once(HistoryCell::Error {
                 message: outcome.error.clone(),
-                severity: crate::error_taxonomy::ErrorSeverity::Error,
+                severity: codewhale_error_taxonomy::ErrorSeverity::Error,
             }));
         }
     };

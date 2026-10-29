@@ -1453,7 +1453,7 @@ pub(crate) async fn run_exec_agent(
                     last_error_category = summary
                         .error
                         .as_deref()
-                        .map(crate::error_taxonomy::classify_error_message);
+                        .map(codewhale_error_taxonomy::classify_error_message);
                     summary.error_category =
                         last_error_category.map(|category| category.to_string());
                 }
@@ -1502,7 +1502,8 @@ pub(crate) async fn run_exec_agent(
                                 Some(previous) => format!("{previous}; {error}"),
                                 None => error.clone(),
                             });
-                            last_error_category = Some(crate::error_taxonomy::ErrorCategory::State);
+                            last_error_category =
+                                Some(codewhale_error_taxonomy::ErrorCategory::State);
                             summary.error_category =
                                 last_error_category.map(|category| category.to_string());
                             if output_format == ExecOutputFormat::StreamJson {
@@ -1757,7 +1758,7 @@ pub(crate) async fn run_exec_agent(
             "Engine event channel closed before a terminal turn receipt".to_string()
         });
         let category = last_error_category
-            .unwrap_or_else(|| crate::error_taxonomy::classify_error_message(&error));
+            .unwrap_or_else(|| codewhale_error_taxonomy::classify_error_message(&error));
         let termination_reason = crate::core::termination::classify_turn_termination(
             crate::core::events::TurnOutcomeStatus::Failed,
             Some(category),
@@ -2269,9 +2270,9 @@ mod tests {
         engine.tx_event.send(completed_parent(5)).await.unwrap();
         engine
             .tx_event
-            .send(Event::error(crate::error_taxonomy::ErrorEnvelope::fatal(
-                "fan-in route unavailable",
-            )))
+            .send(Event::error(
+                codewhale_error_taxonomy::ErrorEnvelope::fatal("fan-in route unavailable"),
+            ))
             .await
             .unwrap();
         assert!(matches!(events.next().await, Some(Event::Error { .. })));

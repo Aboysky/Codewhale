@@ -2666,7 +2666,7 @@ fn elevation_always_paints_every_option_including_the_safe_exit() {
                 );
             }
             assert!(
-                joined.contains(&format!("{}Abort", crate::tui::glyphs::SELECTION)),
+                joined.contains(&format!("{}Abort", codewhale_tui_kit::glyphs::SELECTION)),
                 "{w}x{h}: Abort needs a visible marker, not only a color change:\n{joined}"
             );
             for old_hint in ["[n]", "[w]", "[f]", "[a]"] {

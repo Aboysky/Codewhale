@@ -170,7 +170,7 @@ impl ApprovalView {
         let order = ApprovalOption::order_for(&self.request);
         let mut selected = self.selected;
         for _ in 0..order.len() {
-            selected = crate::tui::list_nav::wrap_index(selected, order.len(), delta);
+            selected = codewhale_tui_kit::list_nav::wrap_index(selected, order.len(), delta);
             if self.offers(order[selected]) {
                 break;
             }

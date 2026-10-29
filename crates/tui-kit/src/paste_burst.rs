@@ -11,7 +11,7 @@ const PASTE_BURST_ACTIVE_IDLE_TIMEOUT: Duration = Duration::from_millis(8);
 const PASTE_BURST_ACTIVE_IDLE_TIMEOUT: Duration = Duration::from_millis(60);
 
 #[derive(Default)]
-pub(crate) struct PasteBurst {
+pub struct PasteBurst {
     last_plain_char_time: Option<Instant>,
     consecutive_plain_char_burst: u16,
     burst_window_until: Option<Instant>,
@@ -20,14 +20,14 @@ pub(crate) struct PasteBurst {
     pending_first_char: Option<(char, Instant)>,
 }
 
-pub(crate) enum CharDecision {
+pub enum CharDecision {
     BeginBuffer,
     BufferAppend,
     RetainFirstChar,
     BeginBufferFromPending,
 }
 
-pub(crate) enum FlushResult {
+pub enum FlushResult {
     Paste(String),
     Typed(char),
     /// Enter can submit again even though the composer text has not changed.
@@ -36,13 +36,13 @@ pub(crate) enum FlushResult {
 }
 
 impl PasteBurst {
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn recommended_flush_delay() -> Duration {
         PASTE_BURST_CHAR_INTERVAL + Duration::from_millis(1)
     }
 
-    #[cfg(test)]
-    pub(crate) fn recommended_active_flush_delay() -> Duration {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn recommended_active_flush_delay() -> Duration {
         PASTE_BURST_ACTIVE_IDLE_TIMEOUT + Duration::from_millis(1)
     }
 
@@ -72,7 +72,7 @@ impl PasteBurst {
         CharDecision::RetainFirstChar
     }
 
-    pub(crate) fn note_plain_char(&mut self, now: Instant) -> u16 {
+    pub fn note_plain_char(&mut self, now: Instant) -> u16 {
         match self.last_plain_char_time {
             Some(prev) if now.duration_since(prev) <= PASTE_BURST_CHAR_INTERVAL => {
                 self.consecutive_plain_char_burst =

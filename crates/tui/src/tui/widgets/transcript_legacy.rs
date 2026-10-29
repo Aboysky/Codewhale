@@ -14,7 +14,7 @@ pub struct ChatWidget {
     /// intentionally outside transcript hit-testing.
     transcript_area: Rect,
     lines: Vec<Line<'static>>,
-    line_links: Vec<Vec<crate::tui::osc8::LineLink>>,
+    line_links: Vec<Vec<codewhale_tui_kit::osc8::LineLink>>,
     scrollbar: Option<TranscriptScrollbar>,
     jump_to_latest_button: Option<Rect>,
     background: Color,
@@ -809,7 +809,7 @@ fn scrolled_user_prompt_pin(
 
     Some(Line::from(vec![
         Span::styled(
-            format!("{} ", crate::tui::glyphs::USER),
+            format!("{} ", codewhale_tui_kit::glyphs::USER),
             Style::default()
                 .fg(palette::WHALE_HUMAN)
                 .add_modifier(Modifier::BOLD),
@@ -860,8 +860,8 @@ impl Renderable for ChatWidget {
                 .saturating_sub(u16::from(self.scrollbar.is_some())),
             ..area
         };
-        let regions = crate::tui::osc8::link_regions_for_lines(link_area, &self.line_links);
-        crate::tui::osc8::set_frame_links(regions);
+        let regions = codewhale_tui_kit::osc8::link_regions_for_lines(link_area, &self.line_links);
+        codewhale_tui_kit::osc8::set_frame_links(regions);
 
         if let Some(scrollbar) = self.scrollbar {
             let scrollable_range = scrollbar.total.saturating_sub(scrollbar.visible);
@@ -895,7 +895,7 @@ impl Renderable for ChatWidget {
                 .saturating_sub(u16::from(self.scrollbar.is_some())),
             ..area
         };
-        for region in crate::tui::osc8::link_regions_for_lines(link_area, &self.line_links) {
+        for region in codewhale_tui_kit::osc8::link_regions_for_lines(link_area, &self.line_links) {
             let width = region
                 .col_end
                 .saturating_sub(region.col_start)

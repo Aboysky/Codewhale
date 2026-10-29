@@ -4902,7 +4902,7 @@ impl Engine {
                             stream_error.get_or_insert(user_message.clone());
                             let _ = self
                                 .send_stream_event(Event::error(
-                                    crate::error_taxonomy::ErrorEnvelope::image_count_exceeded(
+                                    codewhale_error_taxonomy::ErrorEnvelope::image_count_exceeded(
                                         user_message,
                                     ),
                                 ))
@@ -4911,7 +4911,7 @@ impl Engine {
                         }
                     }
                     let envelope =
-                        crate::error_taxonomy::envelope_for_llm_error(e, user_message.clone());
+                        crate::llm_error_envelope::envelope_for_llm_error(e, user_message.clone());
                     if self.child_host.is_some() {
                         terminal_stream_error = !envelope.recoverable;
                         stream_error.get_or_insert(user_message);
@@ -5064,7 +5064,7 @@ impl Engine {
                                     "Stream retry failed: {retry_err}"
                                 ));
                                 stream_error.get_or_insert(retry_msg.clone());
-                                let envelope = crate::error_taxonomy::envelope_for_llm_error(
+                                let envelope = crate::llm_error_envelope::envelope_for_llm_error(
                                     retry_err, retry_msg,
                                 );
                                 terminal_stream_error = !envelope.recoverable;
@@ -5090,7 +5090,7 @@ impl Engine {
                     // and the normal surface-the-error path below runs,
                     // so the final failure is still reported.
                     let network_class_error = matches!(
-                        crate::error_taxonomy::classify_error_message(&message),
+                        codewhale_error_taxonomy::classify_error_message(&message),
                         ErrorCategory::Network | ErrorCategory::Timeout
                     );
                     if should_resume_after_network_drop(
@@ -5509,7 +5509,7 @@ impl Engine {
                         .unwrap_or("provider stream error");
                     // A bare placeholder ("ERROR") says nothing about the
                     // cause; the transcript states that instead (#6843).
-                    let unreadable = crate::error_taxonomy::unreadable_error_notice(raw_message);
+                    let unreadable = codewhale_error_taxonomy::unreadable_error_notice(raw_message);
                     let message = unreadable.as_deref().unwrap_or(raw_message);
                     codewhale_runtime::logging::warn(format!(
                         "Provider stream error event: {message}"
@@ -5527,7 +5527,7 @@ impl Engine {
                             stream_error.get_or_insert(message.to_string());
                             let _ = self
                                 .send_stream_event(Event::error(
-                                    crate::error_taxonomy::ErrorEnvelope::image_count_exceeded(
+                                    codewhale_error_taxonomy::ErrorEnvelope::image_count_exceeded(
                                         message.to_string(),
                                     ),
                                 ))

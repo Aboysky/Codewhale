@@ -49,9 +49,10 @@ impl DoctorPathReport {
         let task_manager_root = crate::task_manager::default_tasks_dir();
         let task_manager_tasks = task_manager_root.join("tasks");
         let task_manager_artifacts = task_manager_root.join("artifacts");
-        let runtime_config = crate::runtime_threads::RuntimeThreadManagerConfig::from_task_data_dir(
-            task_manager_root.clone(),
-        );
+        let runtime_config =
+            crate::runtime_threads::manager::RuntimeThreadManagerConfig::from_task_data_dir(
+                task_manager_root.clone(),
+            );
         let runtime_store = runtime_config.data_dir;
         let runtime_events = runtime_store.join("events");
         let personal_fleet_definitions = crate::fleet::exact::personal_fleet_definitions_dir()

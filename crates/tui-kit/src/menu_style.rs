@@ -16,7 +16,7 @@
 
 use ratatui::style::{Color, Modifier, Style};
 
-use crate::tui::glyphs;
+use crate::glyphs;
 use codewhale_palette::{self as palette, UiTheme};
 
 /// Canonical selected-row treatment: selection ink on the selection
@@ -92,16 +92,12 @@ pub struct StatusMark {
 /// The status states shared by the footer, work surface, and pickers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StatusKind {
-    #[cfg_attr(not(test), expect(dead_code))]
     Ready,
-    #[cfg_attr(not(test), expect(dead_code))]
     Working,
-    #[cfg_attr(not(test), expect(dead_code))]
     Paused,
     Done,
     /// Chartered vocabulary entry. No surface renders a failure mark yet, so
     /// nothing constructs it outside the exhaustiveness sweep below.
-    #[cfg_attr(not(test), expect(dead_code))]
     Failed,
     Attention,
 }

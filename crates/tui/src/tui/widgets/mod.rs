@@ -19,11 +19,6 @@ use crate::provider_lake::all_catalog_models_for_provider;
 use crate::tui::app::{App, ComposerDensity, ViewportState};
 use crate::tui::approval::{ApprovalRequest, ApprovalView, ElevationOption, ElevationRequest};
 use crate::tui::history::{GenericToolCell, HistoryCell, ToolCell, ToolRun, ToolStatus};
-use crate::tui::menu_style;
-use crate::tui::scrolling::TranscriptLineMeta;
-use crate::tui::ui_text::grapheme_display_width;
-#[cfg(test)]
-use crate::tui::ui_text::text_display_width;
 use crate::tui::underwater::ShellPhase;
 #[cfg(test)]
 use codewhale_config::ProviderKind;
@@ -33,6 +28,11 @@ use codewhale_ratatui::{
     DecisionBand, DecisionBandAction, DecisionBandSave,
     decision_wrapped_rows as measure_wrapped_rows,
 };
+use codewhale_tui_kit::menu_style;
+use codewhale_tui_kit::scrolling::TranscriptLineMeta;
+use codewhale_tui_kit::ui_text::grapheme_display_width;
+#[cfg(test)]
+use codewhale_tui_kit::ui_text::text_display_width;
 #[cfg(test)]
 use ratatui::widgets::BorderType;
 use ratatui::{
@@ -56,7 +56,7 @@ pub struct ChatWidget {
     /// intentionally outside transcript hit-testing.
     transcript_area: Rect,
     lines: Vec<Line<'static>>,
-    line_links: Vec<Vec<crate::tui::osc8::LineLink>>,
+    line_links: Vec<Vec<codewhale_tui_kit::osc8::LineLink>>,
     scrollbar: Option<codewhale_ratatui::TranscriptScrollFacts>,
     jump_to_latest_button: Option<Rect>,
     background: Color,
@@ -940,7 +940,7 @@ fn scrolled_user_prompt_pin(
     Some((
         Line::from(vec![
             Span::styled(
-                format!("{} ", crate::tui::glyphs::USER),
+                format!("{} ", codewhale_tui_kit::glyphs::USER),
                 Style::default()
                     .fg(palette::WHALE_HUMAN)
                     .add_modifier(Modifier::BOLD),
@@ -985,7 +985,7 @@ impl Renderable for ChatWidget {
         // The kit guarded background pass stays between content and chrome.
         self.render_underwater_field(plan.area, buf);
         plan.paint_chrome(buf);
-        let regions = crate::tui::osc8::link_regions_for_plan(&plan, &self.line_links);
+        let regions = codewhale_tui_kit::osc8::link_regions_for_plan(&plan, &self.line_links);
         for region in &regions {
             let hit = Rect::new(
                 region.col_start,
@@ -1003,7 +1003,7 @@ impl Renderable for ChatWidget {
                 true,
             );
         }
-        crate::tui::osc8::set_frame_links(regions);
+        codewhale_tui_kit::osc8::set_frame_links(regions);
     }
     fn desired_height(&self, _width: u16) -> u16 {
         1
@@ -1330,7 +1330,7 @@ impl<'a> ComposerWidget<'a> {
             };
             NativeComposerMenuItem::Line(Line::from(vec![
                 Span::raw(" "),
-                Span::styled(crate::tui::glyphs::selection_marker(selected), style),
+                Span::styled(codewhale_tui_kit::glyphs::selection_marker(selected), style),
                 Span::styled(" ", style),
                 Span::styled(label, style),
             ]))
@@ -1399,7 +1399,10 @@ impl<'a> ComposerWidget<'a> {
                             .unwrap_or_else(|| entry.name.clone()),
                         description: entry.description.clone(),
                         prefix: Span::styled(if entry.is_skill { "✦" } else { " " }, name_style),
-                        marker: Span::styled(crate::tui::glyphs::selection_marker(selected), style),
+                        marker: Span::styled(
+                            codewhale_tui_kit::glyphs::selection_marker(selected),
+                            style,
+                        ),
                         name_style,
                         description_style,
                     }
@@ -2613,7 +2616,10 @@ impl Renderable for ElevationWidget<'_> {
             lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled(
-                    format!("{} ", crate::tui::glyphs::selection_marker(is_selected)),
+                    format!(
+                        "{} ",
+                        codewhale_tui_kit::glyphs::selection_marker(is_selected)
+                    ),
                     style,
                 ),
                 Span::styled(tr(self.locale, label_id), style.fg(label_color)),
@@ -3768,11 +3774,11 @@ mod tests {
     use crate::tui::history::{
         ExecCell, ExecSource, GenericToolCell, HistoryCell, ToolCell, ToolRun, ToolStatus,
     };
-    use crate::tui::scrolling::{TranscriptLineMeta, TranscriptScroll};
     use codewhale_config::ProviderKind;
     use codewhale_localization::Locale;
     use codewhale_palette as palette;
     use codewhale_runtime::config::Config;
+    use codewhale_tui_kit::scrolling::{TranscriptLineMeta, TranscriptScroll};
     use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
     use ratatui::{
         buffer::Buffer,
@@ -4038,7 +4044,7 @@ mod tests {
             cell_index: 0,
             line_in_cell: 0,
             copy_prefix_width: 0,
-            copy_separator_after: crate::tui::ui_text::CopyLineSeparator::Newline,
+            copy_separator_after: codewhale_tui_kit::ui_text::CopyLineSeparator::Newline,
         }];
         let original_index_map = vec![2];
 
@@ -4065,7 +4071,7 @@ mod tests {
         });
         app.add_message(HistoryCell::Error {
             message: "验证失败 detail target".to_string(),
-            severity: crate::error_taxonomy::ErrorSeverity::Error,
+            severity: codewhale_error_taxonomy::ErrorSeverity::Error,
         });
 
         let area = Rect::new(0, 0, 80, 12);
@@ -6482,9 +6488,9 @@ mod tests {
 
         let area = Rect::new(4, 2, 20, 10);
         let mut buf = Buffer::empty(area);
-        let _ = crate::tui::osc8::take_frame_links();
+        let _ = codewhale_tui_kit::osc8::take_frame_links();
         ChatWidget::new(&mut app, area).render(area, &mut buf);
-        let regions = crate::tui::osc8::take_frame_links();
+        let regions = codewhale_tui_kit::osc8::take_frame_links();
 
         assert!(regions.len() > 1, "narrow chat should wrap: {regions:?}");
         assert!(regions.iter().all(|region| region.target == target));
@@ -6917,7 +6923,7 @@ mod tests {
                 cell_index: *cell_index,
                 line_in_cell: *line_in_cell,
                 copy_prefix_width: 0,
-                copy_separator_after: crate::tui::ui_text::CopyLineSeparator::None,
+                copy_separator_after: codewhale_tui_kit::ui_text::CopyLineSeparator::None,
             })
             .collect()
     }

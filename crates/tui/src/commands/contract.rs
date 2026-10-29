@@ -1871,12 +1871,12 @@ fn project_history_cell(cell: &HistoryCell) -> HistoryEntry {
     }
 }
 
-fn error_severity_role(severity: crate::error_taxonomy::ErrorSeverity) -> &'static str {
+fn error_severity_role(severity: codewhale_error_taxonomy::ErrorSeverity) -> &'static str {
     match severity {
-        crate::error_taxonomy::ErrorSeverity::Info => "info",
-        crate::error_taxonomy::ErrorSeverity::Warning => "warning",
-        crate::error_taxonomy::ErrorSeverity::Error => "error",
-        crate::error_taxonomy::ErrorSeverity::Critical => "critical error",
+        codewhale_error_taxonomy::ErrorSeverity::Info => "info",
+        codewhale_error_taxonomy::ErrorSeverity::Warning => "warning",
+        codewhale_error_taxonomy::ErrorSeverity::Error => "error",
+        codewhale_error_taxonomy::ErrorSeverity::Critical => "critical error",
     }
 }
 

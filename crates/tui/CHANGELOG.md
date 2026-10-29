@@ -52,6 +52,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Model pricing ownership (internal):** hand-sourced price metadata and recorded-time rules move into `codewhale-models`; cost auditing and live catalog callers use the same owner. (S24p1, CW-6129)
+
+- **`codewhale-error-taxonomy` crate (internal):** `error_taxonomy` moves out of `codewhale-tui` into a new crate; the `LlmError` envelope conversion stays in the TUI crate until the model-wire split. No behavior change. (N13, CW-6129)
+
+- **`codewhale-tui-kit` crate (internal):** terminal rendering helpers (markdown, diff, text width, paste burst, OSC-8, streaming) move out of `codewhale-tui` into a new crate, and `syntect` is no longer a direct `codewhale-tui` dependency. No behavior change. (S52, CW-6129)
+
 - **Terminal kit on design tokens 2.3.0:** the vendored `codewhale-ratatui` now follows design tokens 2.3.0: an `Accent` role carries the one blue for links, focus and selection, and `Primary` is the ink of filled actions (upstream codewhale-hq/codewhale-ratatui 528a9c4). The built-in TUI themes keep their colours; only surfaces drawn in the kit's own roles take the 2.3.0 values.
 - **Fleet workers run the same Codewhale:** `codewhale fleet run` and Runtime API Fleet runs (`POST /v1/fleet/runs`) now start workers from the running `codewhale` binary instead of whichever `codewhale` is first on `PATH`, so they work with a minimal `PATH` and never pick up a stale copy. `CODEWHALE_FLEET_CODEWHALE_BINARY` still overrides it. (#7119)
 - **Switching provider lands on its current model:** `/provider stepfun` now selects Step 5 Preview instead of the older Step 3.7 Flash; a model you saved for a provider is still kept. `/model` now lists the current provider's own models (bundled and live, newest first, up to 20) instead of only the selected one. Search also matches ids typed without separators (`step5`). While you search, Shift+P and Shift+F type their letters rather than pinning or adding to Fleet, so `Step-5-Preview` can be typed in full; Ctrl+P and Ctrl+F pin or add the highlighted row at any time.
@@ -233,6 +239,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`codewhale-config` modules (internal):** the 8,100-line `lib.rs` is split into 23 modules (provider TOML, permissions, fleet, config resolution, env overrides, state dirs, config store and backup, and others); `codewhale_config::` paths are unchanged. No behavior change. (S57, CW-6129)
 - **`codewhale-app-server` modules (internal):** `lib.rs` is carved into `http`, `stdio`, `turns`, `bridge` and `config_rpc` modules; `BoundedLines` and `runtime_compatibility_router` now live at `codewhale_app_server::stdio` and `::http`. No behavior change. (S49, CW-6129)
 - **`codewhale-account-cli` crate (internal):** the cloud account, cloud computer and dispatch CLI commands move out of `codewhale-cli` into a new crate. No behavior change. (S50, CW-6129)
+- **`runtime_threads` store and manager (internal):** `runtime_threads` is split into the durable store (`runtime_threads.rs`) and the thread manager (`runtime_threads/manager.rs`); callers import from `runtime_threads::manager`. No behavior change. (S35, CW-6129)
 - **Crate split S24a (internal):** the workshop byte-budget slot moves to `codewhale-runtime`, `AutoRouteDecisionEvidence` to `codewhale-models`, and cost-status session persistence to a tui `usage_persistence` module, so billing no longer reaches the session manager or model routing. No behavior change. (CW-6129)
 - **Provider pre-cuts B (internal):** client wire helpers, reasoning-effort mapping and the Ollama catalog parsers move into their own client modules, and test-only provider gates use the shared test-isolation predicate. No behavior change. (CW-6129)
 - **`codewhale-dependencies`, `codewhale-snapshot`, `codewhale-lsp`, `codewhale-repl` crates:** external-tool resolution, workspace snapshots, the language-server client and the Python REPL runtime moved out of `codewhale-tui` into their own crates; `write_context_file` now lives in `codewhale-repl`. No behavior change. (CW-6129)

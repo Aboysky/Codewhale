@@ -19,7 +19,7 @@ pub(crate) struct OfflineQueueTransition {
 pub(crate) fn surface_session_load_failure(app: &mut App, message: String) {
     app.add_message(crate::tui::history::HistoryCell::Error {
         message: message.clone(),
-        severity: crate::error_taxonomy::ErrorSeverity::Error,
+        severity: codewhale_error_taxonomy::ErrorSeverity::Error,
     });
     app.status_message = Some(message);
 }
@@ -653,7 +653,7 @@ pub(crate) fn recover_engine_event_disconnect(app: &mut App) -> bool {
     app.add_message(HistoryCell::Error {
         message: "Engine stopped before completing the turn. Check ~/.codewhale/crashes and retry."
             .to_string(),
-        severity: crate::error_taxonomy::ErrorSeverity::Error,
+        severity: codewhale_error_taxonomy::ErrorSeverity::Error,
     });
     app.push_status_toast(
         "Engine stopped before completing the turn.",

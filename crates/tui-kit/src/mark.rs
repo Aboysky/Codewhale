@@ -7,9 +7,9 @@ use std::sync::OnceLock;
 use ratatui::style::Color;
 
 /// The launch mark resolves once; controls and text never wait for it.
-pub(crate) const REVEAL_MS: u128 = 360;
+pub const REVEAL_MS: u128 = 360;
 
-pub(crate) fn reveal_row(row: &str, elapsed_ms: u128, animated: bool) -> String {
+pub fn reveal_row(row: &str, elapsed_ms: u128, animated: bool) -> String {
     let mask = if !animated || elapsed_ms >= REVEAL_MS {
         0xff
     } else if elapsed_ms < 60 {

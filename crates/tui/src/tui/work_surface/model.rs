@@ -15,13 +15,13 @@ use crate::tui::background_indicator::is_live_shell_entry;
 use crate::tui::history::{
     FileActivityKind, FileActivitySummary, FileMutationReceipt, HistoryCell, ToolCell,
 };
-use crate::tui::menu_style::{StatusKind, status_mark};
 use crate::work_graph::{
     AcceptanceRequirement, EdgeKind, EvidenceKind, EvidenceKindTag, NodeKind, NodeState,
     OperationBinding, OwnerState, Provenance, WorkGraphSnapshot, WorkNode,
 };
 use codewhale_execpolicy::canonical_action::canonical_action_alias;
 use codewhale_runtime::settings::InlineDiffMode;
+use codewhale_tui_kit::menu_style::{StatusKind, status_mark};
 
 /// Persisted Ocean work-surface placement. Bottom is deliberately absent: the
 /// composer and phase footer own the shell's lower edge. `Off` hides the rail
@@ -1015,9 +1015,9 @@ fn finished_background_rows(app: &App) -> Vec<WorkRow> {
                 WorkTone::Muted
             };
             let mark = match entry.status.as_str() {
-                "completed" => crate::tui::glyphs::DONE,
-                _ if failed => crate::tui::glyphs::ATTENTION,
-                _ => crate::tui::glyphs::NEUTRAL,
+                "completed" => codewhale_tui_kit::glyphs::DONE,
+                _ if failed => codewhale_tui_kit::glyphs::ATTENTION,
+                _ => codewhale_tui_kit::glyphs::NEUTRAL,
             };
             if is_shell_entry(entry) {
                 let command = shell_command(entry);
@@ -1614,9 +1614,9 @@ fn coordination_row(app: &App) -> Option<RankedWorkRow> {
         row: WorkRow {
             id: WorkRowId("coordination".to_string()),
             mark: if attention {
-                crate::tui::glyphs::ATTENTION
+                codewhale_tui_kit::glyphs::ATTENTION
             } else {
-                crate::tui::glyphs::DONE
+                codewhale_tui_kit::glyphs::DONE
             },
             label: title.clone(),
             detail: crate::tui::coordination_detail::summary(app.ui_locale, projection),
@@ -2304,10 +2304,10 @@ const fn bucket_tone(bucket: WorkBucket) -> WorkTone {
 
 const fn agent_mark(bucket: WorkBucket) -> &'static str {
     match bucket {
-        WorkBucket::Active => crate::tui::glyphs::SELECTION,
-        WorkBucket::Attention => crate::tui::glyphs::ATTENTION,
-        WorkBucket::Ready => crate::tui::glyphs::READY,
-        WorkBucket::Recent => crate::tui::glyphs::DONE,
+        WorkBucket::Active => codewhale_tui_kit::glyphs::SELECTION,
+        WorkBucket::Attention => codewhale_tui_kit::glyphs::ATTENTION,
+        WorkBucket::Ready => codewhale_tui_kit::glyphs::READY,
+        WorkBucket::Recent => codewhale_tui_kit::glyphs::DONE,
     }
 }
 
@@ -2429,7 +2429,7 @@ fn aggregate_activity_row(activity: &SettledFileActivity) -> Option<RankedWorkRo
         is_plan_step: false,
         row: WorkRow {
             id: WorkRowId("activity:aggregate".to_string()),
-            mark: crate::tui::glyphs::DONE,
+            mark: codewhale_tui_kit::glyphs::DONE,
             label,
             detail,
             tone: WorkTone::Success,
@@ -2694,10 +2694,10 @@ fn shells_section_heading(shells: &[WorkRow]) -> WorkRow {
 
 fn graph_node_row(snapshot: &WorkGraphSnapshot, node: &WorkNode) -> WorkRow {
     let (mark, tone) = match node.state {
-        NodeState::Ready => (crate::tui::glyphs::READY, WorkTone::Muted),
-        NodeState::Initializing => (crate::tui::glyphs::SELECTION, WorkTone::Live),
-        NodeState::Active => (crate::tui::glyphs::SELECTION, WorkTone::Live),
-        NodeState::Waiting => (crate::tui::glyphs::ATTENTION, WorkTone::Attention),
+        NodeState::Ready => (codewhale_tui_kit::glyphs::READY, WorkTone::Muted),
+        NodeState::Initializing => (codewhale_tui_kit::glyphs::SELECTION, WorkTone::Live),
+        NodeState::Active => (codewhale_tui_kit::glyphs::SELECTION, WorkTone::Live),
+        NodeState::Waiting => (codewhale_tui_kit::glyphs::ATTENTION, WorkTone::Attention),
         NodeState::Blocked => (
             status_mark(StatusKind::Attention).glyph,
             WorkTone::Attention,
@@ -2712,7 +2712,7 @@ fn graph_node_row(snapshot: &WorkGraphSnapshot, node: &WorkNode) -> WorkRow {
         NodeState::Verified => (status_mark(StatusKind::Done).glyph, WorkTone::Success),
         NodeState::Stale => ("?", WorkTone::Attention),
         NodeState::Superseded | NodeState::Cancelled => ("−", WorkTone::Muted),
-        NodeState::Failed => (crate::tui::glyphs::FAILED, WorkTone::Failure),
+        NodeState::Failed => (codewhale_tui_kit::glyphs::FAILED, WorkTone::Failure),
     };
     let state = state_label(node);
     let kind = kind_label(node.kind);

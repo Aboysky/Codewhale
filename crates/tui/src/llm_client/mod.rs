@@ -1815,7 +1815,7 @@ mod tests {
                     assert!(matches!(error, LlmError::QuotaExhausted(_)), "{error:?}");
                     assert!(!error.is_retryable());
                     assert!(error.to_string().contains("ChatGPT Settings > Usage"));
-                    let envelope = crate::error_taxonomy::envelope_for_llm_error(
+                    let envelope = crate::llm_error_envelope::envelope_for_llm_error(
                         error.into(),
                         "allowance unavailable".into(),
                     );

@@ -28,9 +28,9 @@ use super::{
     render_underwater_surface, truncate_view_text,
 };
 use crate::tui::app::App;
-use crate::tui::menu_style;
 use codewhale_localization::{Locale, MessageId, tr};
 use codewhale_palette as palette;
+use codewhale_tui_kit::menu_style;
 
 fn localize(locale: Locale, id: MessageId, replacements: &[(&str, &str)]) -> String {
     let mut value = tr(locale, id).into_owned();

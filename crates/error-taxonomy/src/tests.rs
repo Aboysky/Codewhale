@@ -40,47 +40,6 @@ fn raw_rate_and_quota_phrases_remain_coarse_rate_limit_diagnostics() {
 }
 
 #[test]
-fn typed_llm_quota_envelope_is_non_recoverable_and_distinct_from_rate_limit() {
-    let envelope = ErrorEnvelope::from(LlmError::from_http_response(
-        429,
-        r#"{"error":{"code":"insufficient_quota"}}"#,
-    ));
-    assert_eq!(envelope.category, ErrorCategory::RateLimit);
-    assert_eq!(envelope.severity, ErrorSeverity::Error);
-    assert!(!envelope.recoverable);
-    assert_eq!(envelope.code, "llm_quota_exhausted");
-}
-
-#[test]
-fn llm_auth_error_envelope_renders_context_without_secret() {
-    let api_key = "tp-secret-token-plan-value";
-    let envelope = ErrorEnvelope::from(LlmError::from_http_response_with_request_context(
-        401,
-        &format!("Invalid API Key: {api_key}"),
-        Some("Xiaomi MiMo"),
-        Some("https://token-plan-sgp.xiaomimimo.com/v1"),
-        Some("mimo-v2.5"),
-        Some("env"),
-        Some(api_key),
-    ));
-    assert_eq!(envelope.category, ErrorCategory::Authentication);
-    assert_eq!(envelope.severity, ErrorSeverity::Critical);
-    assert!(!envelope.recoverable);
-    for expected in [
-        "provider: Xiaomi MiMo",
-        "base URL authority: token-plan-sgp.xiaomimimo.com",
-        "model: mimo-v2.5",
-        "key source: env",
-        "key fingerprint: tp-... (len=26)",
-        "key type: Xiaomi MiMo Token Plan key",
-    ] {
-        assert!(envelope.message.contains(expected));
-    }
-    assert!(!envelope.message.contains(api_key));
-    assert!(!envelope.message.contains("secret-token-plan-value"));
-}
-
-#[test]
 fn model_not_exist_rejection_is_a_terminal_invalid_input_error() {
     // The reported incident: a provider switch left GLM-5.3 selected on a
     // Model Studio route; the next message failed with
@@ -112,27 +71,6 @@ fn model_not_exist_rejection_is_a_terminal_invalid_input_error() {
         // operator can repair the route.
         assert!(envelope.recoverable, "session stays online: {message}");
     }
-}
-
-#[test]
-fn typed_llm_error_preserves_terminal_severity_across_boundary() {
-    // Even where the typed error survives to the boundary (the turn loop's
-    // stream-initiation and mid-stream paths), `envelope_for_llm_error`
-    // must keep the typed contract instead of re-classifying the string
-    // with `recoverable = true`.
-    let typed: anyhow::Error =
-        crate::llm_client::LlmError::ModelError("Model not exist.".to_string()).into();
-    let envelope = envelope_for_llm_error(typed, "Model error: Model not exist.".to_string());
-    assert_eq!(envelope.category, ErrorCategory::InvalidInput);
-    assert_eq!(envelope.severity, ErrorSeverity::Error);
-    assert_eq!(envelope.code, "llm_model_error");
-    assert_eq!(envelope.message, "Model error: Model not exist.");
-
-    // Untyped errors keep the legacy string fallback.
-    let untyped: anyhow::Error = anyhow::anyhow!("stream read error: connection reset");
-    let envelope = envelope_for_llm_error(untyped, "stream read error: connection reset".into());
-    assert_eq!(envelope.category, ErrorCategory::Network);
-    assert!(envelope.recoverable);
 }
 
 /// #6843: determinate rejections and Codewhale's own stops used to fall to
@@ -213,30 +151,6 @@ fn unreadable_error_notice_states_it_and_classifies_as_parse() {
 }
 
 #[test]
-fn untyped_other_llm_error_keeps_its_determinate_class() {
-    // Row 4 of the report: `LlmError::Other` carries a 402 without explicit
-    // quota evidence. It is a spent balance, not an internal fault, and
-    // resending cannot fix it.
-    let envelope = ErrorEnvelope::from(LlmError::Other(
-        "HTTP 402: This request requires more credits, or fewer max_tokens.".to_string(),
-    ));
-    assert_eq!(envelope.category, ErrorCategory::RateLimit);
-    assert_eq!(envelope.severity, ErrorSeverity::Error);
-    assert!(!envelope.recoverable);
-
-    // A rejected input is terminal like the typed `InvalidRequest`.
-    let envelope = ErrorEnvelope::from(LlmError::Other("HTTP 413: payload too large".to_string()));
-    assert_eq!(envelope.category, ErrorCategory::InvalidInput);
-    assert!(!envelope.recoverable);
-
-    // Text the classifier cannot place keeps the legacy label.
-    let envelope = ErrorEnvelope::from(LlmError::Other("Unknown retry error".to_string()));
-    assert_eq!(envelope.category, ErrorCategory::Internal);
-    assert_eq!(envelope.code, "llm_other");
-    assert!(envelope.recoverable);
-}
-
-#[test]
 fn a_failure_that_ended_the_work_is_never_a_warning() {
     // #6795: an error frame that fails the turn passes `recoverable = false`.
     // Network is a transient class, but an ended turn is an error.
@@ -247,25 +161,6 @@ fn a_failure_that_ended_the_work_is_never_a_warning() {
         let ongoing = ErrorEnvelope::classify(message.to_string(), true);
         assert_eq!(ongoing.severity, ErrorSeverity::Warning, "{message}");
     }
-}
-
-#[test]
-fn untyped_other_llm_error_keeps_the_retry_tail_unless_it_cannot_heal() {
-    // A malformed chunk or a transient class wrapped as `Other` keeps the
-    // legacy retry contract; only a rejected input, a refused credential and a
-    // spent balance are terminal.
-    for message in ["malformed chunk in stream", "error decoding response body"] {
-        let envelope = ErrorEnvelope::from(LlmError::Other(message.to_string()));
-        assert!(envelope.recoverable, "{message}");
-    }
-    // A transient `Other` is an Error-severity card like the typed
-    // `NetworkError`, not an amber one that outlives a failed retry.
-    let envelope = ErrorEnvelope::from(LlmError::Other("error decoding response body".to_string()));
-    assert_eq!(envelope.category, ErrorCategory::Network);
-    assert_eq!(envelope.severity, ErrorSeverity::Error);
-    let envelope = ErrorEnvelope::from(LlmError::Other("HTTP 403: forbidden".to_string()));
-    assert_eq!(envelope.category, ErrorCategory::Authorization);
-    assert!(!envelope.recoverable);
 }
 
 #[test]

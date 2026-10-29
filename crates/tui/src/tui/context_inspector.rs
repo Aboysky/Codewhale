@@ -20,7 +20,6 @@ use crate::compaction::{
 };
 use crate::session_manager::SessionContextReference;
 use crate::tui::app::{App, ToolDetailRecord};
-use crate::tui::menu_style;
 use crate::tui::views::{
     ActionHint, ModalKind, ModalView, ViewAction, ViewEvent, render_modal_footer,
     render_underwater_surface,
@@ -32,6 +31,7 @@ use codewhale_palette as palette;
 use codewhale_runtime::context_budget::{
     CONTEXT_CRITICAL_THRESHOLD_PERCENT, CONTEXT_WARNING_THRESHOLD_PERCENT,
 };
+use codewhale_tui_kit::menu_style;
 
 /// Marker used by per-turn working-set metadata. Replicated here so the
 /// context inspector can distinguish stable prompt blocks from volatile
@@ -994,7 +994,7 @@ impl ModalView for ContextInspectorView {
         self.hitboxes.borrow_mut().clear();
         for (idx, row) in self.rows.iter().enumerate() {
             let selected = idx == self.selected;
-            let marker = crate::tui::glyphs::selection_marker(selected);
+            let marker = codewhale_tui_kit::glyphs::selection_marker(selected);
             let style = if selected {
                 menu_style::selected_row_style()
             } else {
@@ -1005,11 +1005,12 @@ impl ModalView for ContextInspectorView {
                 .replace("{percent}", &format!("{:.1}", row.percent));
             // Display cells, not bytes: a CJK or localized row measured in
             // bytes padded short and pushed the value off the row (U04-m5).
-            let value_width = crate::tui::ui_text::text_display_width(&value);
+            let value_width = codewhale_tui_kit::ui_text::text_display_width(&value);
             let label_width = width.saturating_sub(value_width + 5);
-            let label = crate::tui::ui_text::semantic_truncate(&row.label, label_width);
-            let gap = width
-                .saturating_sub(crate::tui::ui_text::text_display_width(&label) + value_width + 3);
+            let label = codewhale_tui_kit::ui_text::semantic_truncate(&row.label, label_width);
+            let gap = width.saturating_sub(
+                codewhale_tui_kit::ui_text::text_display_width(&label) + value_width + 3,
+            );
             let y = content
                 .y
                 .saturating_add(u16::try_from(lines.len()).unwrap_or(u16::MAX));

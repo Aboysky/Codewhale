@@ -30,10 +30,10 @@ use super::{
 use crate::session_manager::{SessionManager, create_saved_session};
 use crate::tools::plan::{PlanSnapshot, StepStatus};
 use crate::tui::motion::MotionMode;
-use crate::tui::ui_text::{
+use codewhale_models::{ContentBlock, Message, Role};
+use codewhale_tui_kit::ui_text::{
     line_to_plain, slice_visible_columns, text_display_width, text_visible_width,
 };
-use codewhale_models::{ContentBlock, Message, Role};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tempfile::tempdir;
@@ -157,7 +157,7 @@ fn ordinary_cell_fold_preserves_body_metadata_and_full_exports() {
         },
         HistoryCell::Error {
             message: content.clone(),
-            severity: crate::error_taxonomy::ErrorSeverity::Error,
+            severity: codewhale_error_taxonomy::ErrorSeverity::Error,
         },
         HistoryCell::Tool(ToolCell::Exec(tool)),
     ];
@@ -184,7 +184,7 @@ fn ordinary_cell_fold_preserves_body_metadata_and_full_exports() {
         }
         assert_eq!(
             body.last().unwrap().copy_separator_after,
-            crate::tui::ui_text::CopyLineSeparator::Newline
+            codewhale_tui_kit::ui_text::CopyLineSeparator::Newline
         );
         let (plain, plain_action) =
             cell.lines_with_options_folded(80, options, Some(TranscriptFold::Collapsed));
@@ -1261,7 +1261,7 @@ fn reduced_and_still_motion_render_a_frame_that_does_not_move() {
 
     // Half a spinner cycle apart, and both well under the 3s elapsed-badge
     // threshold so the badge itself cannot be the thing that differs.
-    let early = crate::tui::spinner::LIVE_MARKER_DELAY_MS;
+    let early = codewhale_tui_kit::spinner::LIVE_MARKER_DELAY_MS;
     let late = early + super::TOOL_STATUS_SYMBOL_MS * (frame_symbols / 2);
     assert!(
         late < 3_000,
@@ -1695,7 +1695,7 @@ fn an_unknown_tool_failure_shows_only_the_catalog_error() {
 /// transient retry cannot be mistaken for a hard failure sitting next to it.
 #[test]
 fn error_severity_ranks_stay_visually_distinguishable() {
-    use crate::error_taxonomy::ErrorSeverity;
+    use codewhale_error_taxonomy::ErrorSeverity;
 
     let rank = |severity| {
         let cell = HistoryCell::Error {
@@ -1749,7 +1749,7 @@ fn error_guidance_keeps_recovery_commands_on_their_own_line() {
     let cell = HistoryCell::Error {
         message: "DeepSeek API key not found.\nSave it:\n  codewhale auth set --provider deepseek"
             .to_string(),
-        severity: crate::error_taxonomy::ErrorSeverity::Error,
+        severity: codewhale_error_taxonomy::ErrorSeverity::Error,
     };
     for width in [80, 140] {
         let lines = cell.lines(width);
@@ -1779,7 +1779,7 @@ Loopback hosts (localhost, 127.0.0.1, [::1]) are auto-allowed.\n\
 Set CODEWHALE_ALLOW_INSECURE_HTTP=1 only for a trusted LAN host.";
     let cell = HistoryCell::Error {
         message: recovery.to_string(),
-        severity: crate::error_taxonomy::ErrorSeverity::Error,
+        severity: codewhale_error_taxonomy::ErrorSeverity::Error,
     };
 
     let live_text = lines_text(&cell.lines(48));
@@ -2409,7 +2409,7 @@ fn user_history_hides_only_the_trailing_turn_metadata_block() {
 /// no role marker, and never a half-streamed cell.
 #[test]
 fn the_answer_projection_copies_authored_text_and_nothing_else() {
-    use crate::tui::ui_text::history_cell_to_clipboard_text;
+    use crate::tui::history::text::history_cell_to_clipboard_text;
 
     let cells = [
         HistoryCell::User {

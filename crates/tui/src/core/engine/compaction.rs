@@ -1120,7 +1120,7 @@ impl Engine {
 /// summary itself. Context-length rejections are excluded: those really are
 /// the budget problem the caller already reports.
 pub(super) fn is_provider_rejection(err: &anyhow::Error) -> bool {
-    use crate::error_taxonomy::{ErrorCategory, classify_error_message};
+    use codewhale_error_taxonomy::{ErrorCategory, classify_error_message};
     let text = format!("{err:#}");
     if super::context::is_context_length_error_message(&text)
         || matches!(

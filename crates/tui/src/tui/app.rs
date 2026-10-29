@@ -38,11 +38,8 @@ use crate::tui::history::{
 };
 use crate::tui::hotbar::HotbarActionRegistry;
 use crate::tui::motion::MotionPolicy;
-use crate::tui::paste_burst::{FlushResult, PasteBurst};
-use crate::tui::scrolling::{MouseScrollState, TranscriptLineMeta, TranscriptScroll};
 use crate::tui::selection::{SelectionAutoscroll, TranscriptSelection};
 use crate::tui::shell_key_routing::Focus;
-use crate::tui::streaming::StreamingState;
 use crate::tui::transcript::TranscriptViewCache;
 use crate::tui::views::ViewStack;
 use codewhale_config::ProviderKind;
@@ -54,6 +51,9 @@ use codewhale_models::{ContentBlock, Message, SystemPrompt, Tool, Usage};
 use codewhale_palette::{self as palette, UiTheme};
 use codewhale_runtime::config::{ApprovalPolicyControl, Config};
 use codewhale_runtime::settings::{InlineDiffMode, Settings};
+use codewhale_tui_kit::paste_burst::{FlushResult, PasteBurst};
+use codewhale_tui_kit::scrolling::{MouseScrollState, TranscriptLineMeta, TranscriptScroll};
+use codewhale_tui_kit::streaming::StreamingState;
 
 mod composer;
 mod init;
@@ -515,7 +515,7 @@ impl AgentCurrentActivity {
 /// can enter the parent transcript/sidebar pass through this seam.
 pub(crate) fn bound_agent_activity_text(value: &str) -> String {
     let mut visible = String::with_capacity(value.len());
-    crate::tui::osc8::strip_ansi_into(value, &mut visible);
+    codewhale_tui_kit::osc8::strip_ansi_into(value, &mut visible);
     let redacted = codewhale_config::persistence::redact_secrets(&visible);
     crate::tui::history::summarize_tool_output(&redacted)
 }
@@ -4265,7 +4265,7 @@ impl App {
         rows.iter()
             .map(|(id, status, duration, summary)| {
                 let summary =
-                    crate::tui::ui_text::truncate_line_to_width(summary, summary_width);
+                    codewhale_tui_kit::ui_text::truncate_line_to_width(summary, summary_width);
                 format!(
                     "{id:<id_width$}  {status:<status_width$}  {duration:<duration_width$}  {summary}"
                 )

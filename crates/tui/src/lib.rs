@@ -39,12 +39,12 @@ mod cost_status;
 pub mod delivery_files;
 mod doctor;
 mod doctor_fix;
-mod error_taxonomy;
 mod eval;
 mod extension_host;
 mod fleet;
 mod git_status;
 mod keybinding_table;
+mod llm_error_envelope;
 mod usage_persistence;
 use crate::fleet::executor::exec_stream_final_answer_excerpt;
 mod hooks;
@@ -3768,7 +3768,7 @@ async fn run_fleet_command(workspace: &Path, config: &Config, args: FleetArgs) -
             // re-arm mouse reporting in the caller's shell and leave it
             // executing escape fragments after this command exits.
             let mut safe_preview = String::with_capacity(preview.len());
-            crate::tui::osc8::strip_ansi_into(&preview, &mut safe_preview);
+            codewhale_tui_kit::osc8::strip_ansi_into(&preview, &mut safe_preview);
             print!("{safe_preview}");
             if contents.chars().count() > preview.chars().count() {
                 println!("\n[truncated]");
@@ -5189,10 +5189,7 @@ async fn run_doctor(
         "  workspace: {}",
         codewhale_util::utils::display_path(workspace)
     );
-    let search_provider_line = doctor_search_provider_line(config);
-    if all || search_provider_line.contains("missing TAVILY_API_KEY") {
-        println!("  {search_provider_line}");
-    }
+    println!("  {}", doctor_search_provider_line(config));
 
     println!();
     println!("{}", "Resolved User Paths (read-only):".bold());
@@ -9355,7 +9352,7 @@ async fn print_doctor_stored_secrets_report(config_path: Option<PathBuf>, profil
 
     let scan = tokio::task::spawn_blocking(move || -> Result<_> {
         let sessions_dir = codewhale_config::resolve_state_dir("sessions")?;
-        let runtime = runtime_threads::RuntimeThreadManagerConfig::from_task_data_dir(
+        let runtime = runtime_threads::manager::RuntimeThreadManagerConfig::from_task_data_dir(
             task_manager::default_tasks_dir(),
         );
         let mut unreadable = Vec::new();
@@ -9438,7 +9435,7 @@ fn run_sessions_scrub_secrets_blocking(
     profile: Option<&str>,
 ) -> Result<()> {
     let manager = session_manager::SessionManager::default_location()?;
-    let runtime = runtime_threads::RuntimeThreadManagerConfig::from_task_data_dir(
+    let runtime = runtime_threads::manager::RuntimeThreadManagerConfig::from_task_data_dir(
         task_manager::default_tasks_dir(),
     );
     let mut unreadable = Vec::new();
@@ -10125,11 +10122,13 @@ async fn prepare_mounted_session(
     plugins: Arc<codewhale_plugins::PluginRegistry>,
 ) -> Result<(PreparedInteractiveConfig, String)> {
     use crate::runtime_api::thread_history::{
-        history_owner_work, lookup_thread_history_operation_in_runtime,
-        mutate_thread_history_in_runtime, recover_thread_history_operation_in_runtime,
-        saved_document_digest, session_goal_digest,
+        lookup_thread_history_operation_in_runtime, mutate_thread_history_in_runtime,
+        recover_thread_history_operation_in_runtime, session_goal_digest,
     };
-    use crate::runtime_threads::{RuntimeThreadManager, RuntimeThreadManagerConfig};
+    use crate::runtime_threads::manager::history::{history_owner_work, saved_document_digest};
+    use crate::runtime_threads::{
+        manager::RuntimeThreadManager, manager::RuntimeThreadManagerConfig,
+    };
     use codewhale_protocol::{
         CanonicalHistoryOptions, CanonicalHistorySource, CanonicalThreadMutation,
         CanonicalThreadMutationRequest, CanonicalThreadOperationKind,
@@ -14441,7 +14440,7 @@ fn exec_failure_exit_code(error_category: Option<&str>) -> i32 {
 /// visibility, but the terminal `TurnComplete` event carries the
 /// authoritative turn outcome — a warning must never fail a run whose turn
 /// later completes.
-fn exec_error_event_is_fatal(envelope: &crate::error_taxonomy::ErrorEnvelope) -> bool {
+fn exec_error_event_is_fatal(envelope: &codewhale_error_taxonomy::ErrorEnvelope) -> bool {
     !envelope.recoverable
 }
 
@@ -17580,7 +17579,8 @@ mod interactive_startup_tests {
 mod mounted_history_tests {
     use super::*;
     use crate::runtime_threads::{
-        RuntimeThreadManager, RuntimeThreadManagerConfig, ThreadListFilter,
+        manager::RuntimeThreadManager, manager::RuntimeThreadManagerConfig,
+        manager::ThreadListFilter,
     };
     use crate::session_manager::{SavedSession, SessionGoalState, SessionWorkState};
     use crate::test_support::{EnvVarGuard, lock_test_env};
@@ -18274,7 +18274,7 @@ mod mounted_history_tests {
     #[tokio::test]
     async fn mounted_retained_pending_resume_finishes_published_source_once_without_reconstructing_intent()
     -> Result<()> {
-        use crate::runtime_api::thread_history::saved_document_digest;
+        use crate::runtime_threads::manager::history::saved_document_digest;
         let _env = lock_test_env();
         let _runtime_override = EnvVarGuard::remove("CODEWHALE_RUNTIME_DIR");
         let _legacy_runtime_override = EnvVarGuard::remove("DEEPSEEK_RUNTIME_DIR");

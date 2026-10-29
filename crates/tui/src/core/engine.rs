@@ -28,7 +28,6 @@ use crate::approval_log::ApprovalReceiptStore;
 use crate::client::CodewhaleClient;
 use crate::compaction::{CompactionConfig, PreparedCompactionEnvelope, compact_messages_safe};
 use crate::core::model_client::SharedModelClient;
-use crate::error_taxonomy::{ErrorCategory, ErrorEnvelope, ErrorSeverity, StreamError};
 use crate::mcp::{McpPool, McpSupervisorUpdate};
 use crate::prompts;
 use crate::purge::{emit_purge_completed, emit_purge_failed, emit_purge_started, run_purge};
@@ -63,6 +62,7 @@ use codewhale_agent_contract::worker_profile::WorkerRuntimeProfile;
 use codewhale_config::AppMode;
 use codewhale_config::ProviderKind;
 use codewhale_config::descriptors::defaults::DEFAULT_TEXT_MODEL;
+use codewhale_error_taxonomy::{ErrorCategory, ErrorEnvelope, ErrorSeverity, StreamError};
 use codewhale_execpolicy::ApprovalMode;
 use codewhale_mcp::config::McpConfig;
 #[cfg(test)]
@@ -1817,7 +1817,8 @@ impl Engine {
         let Some(hint) = self.api_key_env_only_recovery.as_ref() else {
             return message;
         };
-        if crate::error_taxonomy::classify_error_message(&message) != ErrorCategory::Authentication
+        if codewhale_error_taxonomy::classify_error_message(&message)
+            != ErrorCategory::Authentication
             || message.contains("no saved config key is present")
         {
             return message;
@@ -6537,8 +6538,8 @@ impl Engine {
                 );
                 let _ = self
                     .send_event(Event::error(ErrorEnvelope::new(
-                        crate::error_taxonomy::ErrorCategory::InvalidInput,
-                        crate::error_taxonomy::ErrorSeverity::Error,
+                        codewhale_error_taxonomy::ErrorCategory::InvalidInput,
+                        codewhale_error_taxonomy::ErrorSeverity::Error,
                         true,
                         "image_input_invalid",
                         message.clone(),

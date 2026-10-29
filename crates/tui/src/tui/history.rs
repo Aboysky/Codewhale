@@ -12,12 +12,12 @@ use crate::runtime_handoff::is_turn_metadata_block;
 use crate::tools::plan::PlanSnapshot;
 use crate::tools::review::ReviewOutput;
 use crate::tui::app::TranscriptSpacing;
-use crate::tui::diff_render;
 use crate::tui::motion::MotionMode;
-use crate::tui::ui_text::CopyLineSeparator;
 use codewhale_localization::Locale;
 use codewhale_models::{ContentBlock, Message};
 use codewhale_palette as palette;
+use codewhale_tui_kit::diff_render;
+use codewhale_tui_kit::ui_text::CopyLineSeparator;
 
 mod agent_activity;
 mod archived_context;
@@ -28,6 +28,7 @@ mod file_mutation;
 mod latex_render;
 mod message;
 mod plan;
+pub(crate) mod text;
 mod thinking;
 mod tool_output;
 mod tool_run;
@@ -156,7 +157,7 @@ pub enum HistoryCell {
     /// the user can prioritize at a glance.
     Error {
         message: String,
-        severity: crate::error_taxonomy::ErrorSeverity,
+        severity: codewhale_error_taxonomy::ErrorSeverity,
     },
     Thinking {
         content: String,
@@ -345,9 +346,9 @@ impl HistoryCell {
         width: u16,
         options: TranscriptRenderOptions,
         verified_append: bool,
-        cache: &mut crate::tui::markdown_render::IncrementalMarkdownRenderCache,
+        cache: &mut codewhale_tui_kit::markdown_render::IncrementalMarkdownRenderCache,
         lines: &mut Vec<Line<'static>>,
-        links: &mut Vec<Vec<crate::tui::osc8::LineLink>>,
+        links: &mut Vec<Vec<codewhale_tui_kit::osc8::LineLink>>,
         copy_separators: &mut Vec<CopyLineSeparator>,
         copy_prefix_widths: &mut Vec<usize>,
     ) -> Option<usize> {
@@ -363,7 +364,7 @@ impl HistoryCell {
             links.clear();
             copy_separators.clear();
             copy_prefix_widths.clear();
-            *cache = crate::tui::markdown_render::IncrementalMarkdownRenderCache::default();
+            *cache = codewhale_tui_kit::markdown_render::IncrementalMarkdownRenderCache::default();
             return Some(0);
         }
         let width = options.prose_width(width);
@@ -421,7 +422,7 @@ impl HistoryCell {
             HistoryCell::ArchivedContext { .. } => render_archived_context(
                 self,
                 width,
-                crate::tui::markdown_render::detected_palette_mode(),
+                codewhale_tui_kit::markdown_render::detected_palette_mode(),
             ),
         }
     }
@@ -579,11 +580,12 @@ impl HistoryCell {
             match options.motion_mode {
                 MotionMode::Reduced => apply_static_tool_markers(
                     &mut lines,
-                    crate::tui::spinner::BRAILLE_SPINNER_STILL_FRAME,
+                    codewhale_tui_kit::spinner::BRAILLE_SPINNER_STILL_FRAME,
                 ),
-                MotionMode::Still => {
-                    apply_static_tool_markers(&mut lines, crate::tui::spinner::LIVE_STATIC_MARKER)
-                }
+                MotionMode::Still => apply_static_tool_markers(
+                    &mut lines,
+                    codewhale_tui_kit::spinner::LIVE_STATIC_MARKER,
+                ),
                 MotionMode::Full => {}
             }
         }
@@ -735,7 +737,7 @@ impl HistoryCell {
             HistoryCell::ArchivedContext { .. } => render_archived_context(
                 self,
                 width,
-                crate::tui::markdown_render::detected_palette_mode(),
+                codewhale_tui_kit::markdown_render::detected_palette_mode(),
             ),
         }
     }
@@ -1415,7 +1417,8 @@ impl ExecCell {
             .saturating_sub(mark_width + suffix.iter().map(Span::width).sum::<usize>());
         let state_row = !suffix.is_empty()
             && inline_budget
-                < crate::tui::ui_text::text_display_width(&headline).min(CALM_HEADLINE_MIN_WIDTH);
+                < codewhale_tui_kit::ui_text::text_display_width(&headline)
+                    .min(CALM_HEADLINE_MIN_WIDTH);
         let budget = if state_row {
             usize::from(width).saturating_sub(mark_width)
         } else {
@@ -1465,7 +1468,7 @@ impl ExecCell {
 
     fn description_text(&self) -> Option<String> {
         let mut plain = String::new();
-        crate::tui::osc8::strip_ansi_into(self.description.as_deref()?, &mut plain);
+        codewhale_tui_kit::osc8::strip_ansi_into(self.description.as_deref()?, &mut plain);
         normalize_header_summary(&plain)
     }
 
@@ -1619,7 +1622,7 @@ impl ExploringCell {
                 let glyph = match e.status {
                     ToolStatus::Success | ToolStatus::Hydrated => "\u{25CF}",
                     ToolStatus::Warning => "!",
-                    ToolStatus::Stopped => crate::tui::glyphs::NEUTRAL,
+                    ToolStatus::Stopped => codewhale_tui_kit::glyphs::NEUTRAL,
                     ToolStatus::Running => "\u{25D0}",
                     ToolStatus::Failed => "\u{2715}",
                 };
@@ -2553,7 +2556,7 @@ impl GenericToolCell {
                 detail
             } else {
                 let room = usize::from(width).saturating_sub(4).max(8);
-                crate::tui::ui_text::semantic_truncate(&detail, room)
+                codewhale_tui_kit::ui_text::semantic_truncate(&detail, room)
             };
             lines.extend(render_card_detail_line(
                 None,
@@ -2846,7 +2849,7 @@ fn tool_copy_prefix_width(line: &Line<'static>, first_line: bool) -> usize {
     }
     let mark = status.trim_end();
     if first_line
-        && (mark == crate::tui::spinner::LIVE_STATIC_MARKER
+        && (mark == codewhale_tui_kit::spinner::LIVE_STATIC_MARKER
             || mark.chars().all(|ch| matches!(ch, '\u{2800}'..='\u{28FF}')))
     {
         return UnicodeWidthStr::width(status);
@@ -2916,13 +2919,15 @@ fn status_symbol(
 ) -> String {
     match status {
         ToolStatus::Running if family == crate::tui::widgets::tool_card::ToolFamily::Verify => {
-            crate::tui::spinner::verification_tick_frame(started_at, low_motion).to_string()
+            codewhale_tui_kit::spinner::verification_tick_frame(started_at, low_motion).to_string()
         }
         ToolStatus::Running => {
-            crate::tui::spinner::braille_spinner_frame(started_at, low_motion).to_string()
+            codewhale_tui_kit::spinner::braille_spinner_frame(started_at, low_motion).to_string()
         }
         ToolStatus::Success => TOOL_DONE_SYMBOL.to_string(),
-        ToolStatus::Hydrated | ToolStatus::Stopped => crate::tui::glyphs::NEUTRAL.to_string(),
+        ToolStatus::Hydrated | ToolStatus::Stopped => {
+            codewhale_tui_kit::glyphs::NEUTRAL.to_string()
+        }
         ToolStatus::Warning => "!".to_string(),
         ToolStatus::Failed => TOOL_FAILED_SYMBOL.to_string(),
     }
@@ -2943,14 +2948,14 @@ fn details_affordance_line(text: &str, style: Style) -> Line<'static> {
 /// split a ZWJ or combining sequence (U04-m5); ASCII output is unchanged.
 fn truncate_text(text: &str, max_len: usize) -> String {
     use unicode_segmentation::UnicodeSegmentation;
-    if crate::tui::ui_text::text_display_width(text) <= max_len {
+    if codewhale_tui_kit::ui_text::text_display_width(text) <= max_len {
         return text.to_string();
     }
     let budget = max_len.saturating_sub(3);
     let mut out = String::new();
     let mut used = 0usize;
     for grapheme in text.graphemes(true) {
-        let width = crate::tui::ui_text::text_display_width(grapheme);
+        let width = codewhale_tui_kit::ui_text::text_display_width(grapheme);
         if used + width > budget {
             break;
         }
@@ -2964,34 +2969,34 @@ fn truncate_text(text: &str, max_len: usize) -> String {
 /// Label glyph for an error cell. `Critical`/`Error` get the loudest marker;
 /// `Warning` is softer; `Info` is neutral. Kept as ASCII so it survives any
 /// terminal font fallback.
-fn error_label_text(severity: crate::error_taxonomy::ErrorSeverity) -> &'static str {
+fn error_label_text(severity: codewhale_error_taxonomy::ErrorSeverity) -> &'static str {
     match severity {
-        crate::error_taxonomy::ErrorSeverity::Critical
-        | crate::error_taxonomy::ErrorSeverity::Error => "Error",
-        crate::error_taxonomy::ErrorSeverity::Warning => "Warn",
-        crate::error_taxonomy::ErrorSeverity::Info => "Info",
+        codewhale_error_taxonomy::ErrorSeverity::Critical
+        | codewhale_error_taxonomy::ErrorSeverity::Error => "Error",
+        codewhale_error_taxonomy::ErrorSeverity::Warning => "Warn",
+        codewhale_error_taxonomy::ErrorSeverity::Info => "Info",
     }
 }
 
 /// Label color for an error cell — drives the leading rail glyph.
-fn error_label_style(severity: crate::error_taxonomy::ErrorSeverity) -> Style {
+fn error_label_style(severity: codewhale_error_taxonomy::ErrorSeverity) -> Style {
     let color = match severity {
-        crate::error_taxonomy::ErrorSeverity::Critical
-        | crate::error_taxonomy::ErrorSeverity::Error => palette::STATUS_ERROR,
-        crate::error_taxonomy::ErrorSeverity::Warning => palette::STATUS_WARNING,
-        crate::error_taxonomy::ErrorSeverity::Info => palette::TEXT_DIM,
+        codewhale_error_taxonomy::ErrorSeverity::Critical
+        | codewhale_error_taxonomy::ErrorSeverity::Error => palette::STATUS_ERROR,
+        codewhale_error_taxonomy::ErrorSeverity::Warning => palette::STATUS_WARNING,
+        codewhale_error_taxonomy::ErrorSeverity::Info => palette::TEXT_DIM,
     };
     Style::default().fg(color).add_modifier(Modifier::BOLD)
 }
 
 /// Body color for an error cell — softer than the label so the rail draws
 /// the eye but the prose stays readable.
-fn error_body_style(severity: crate::error_taxonomy::ErrorSeverity) -> Style {
+fn error_body_style(severity: codewhale_error_taxonomy::ErrorSeverity) -> Style {
     let color = match severity {
-        crate::error_taxonomy::ErrorSeverity::Critical
-        | crate::error_taxonomy::ErrorSeverity::Error => palette::STATUS_ERROR,
-        crate::error_taxonomy::ErrorSeverity::Warning => palette::STATUS_WARNING,
-        crate::error_taxonomy::ErrorSeverity::Info => palette::TEXT_MUTED,
+        codewhale_error_taxonomy::ErrorSeverity::Critical
+        | codewhale_error_taxonomy::ErrorSeverity::Error => palette::STATUS_ERROR,
+        codewhale_error_taxonomy::ErrorSeverity::Warning => palette::STATUS_WARNING,
+        codewhale_error_taxonomy::ErrorSeverity::Info => palette::TEXT_MUTED,
     };
     Style::default().fg(color)
 }
@@ -3004,7 +3009,7 @@ fn error_body_style(severity: crate::error_taxonomy::ErrorSeverity) -> Style {
 /// while preserving every character.
 fn render_error_message(
     message: &str,
-    severity: crate::error_taxonomy::ErrorSeverity,
+    severity: codewhale_error_taxonomy::ErrorSeverity,
     width: u16,
     show_full_error_affordance: bool,
 ) -> Vec<Line<'static>> {
@@ -3134,7 +3139,7 @@ fn render_tool_header_with_family_and_summary(
 
 fn header_shows_in_full(header: &Line<'static>, summary: &str, available: usize) -> bool {
     normalize_header_summary(summary).is_none_or(|summary| {
-        crate::tui::ui_text::text_display_width(&summary) <= TOOL_HEADER_SUMMARY_LIMIT
+        codewhale_tui_kit::ui_text::text_display_width(&summary) <= TOOL_HEADER_SUMMARY_LIMIT
     }) && header.width() <= available
 }
 

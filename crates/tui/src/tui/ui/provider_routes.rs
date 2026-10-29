@@ -1253,18 +1253,18 @@ pub(crate) fn picker_provider_identity(
 
 pub(crate) fn provider_verification_error_category(
     reason: &str,
-) -> crate::error_taxonomy::ErrorCategory {
+) -> codewhale_error_taxonomy::ErrorCategory {
     let lower = reason.to_ascii_lowercase();
     if lower.contains("http 401") || lower.contains("status 401") {
-        crate::error_taxonomy::ErrorCategory::Authentication
+        codewhale_error_taxonomy::ErrorCategory::Authentication
     } else if lower.contains("http 403") || lower.contains("status 403") {
-        crate::error_taxonomy::ErrorCategory::Authorization
+        codewhale_error_taxonomy::ErrorCategory::Authorization
     } else if ["500", "502", "503", "504"]
         .iter()
         .any(|status| lower.contains(&format!("http {status}")))
     {
-        crate::error_taxonomy::ErrorCategory::Network
+        codewhale_error_taxonomy::ErrorCategory::Network
     } else {
-        crate::error_taxonomy::classify_error_message(reason)
+        codewhale_error_taxonomy::classify_error_message(reason)
     }
 }

@@ -1197,7 +1197,7 @@ impl RouteHotbarAction {
         let trimmed_model = model.trim().to_string();
         Self {
             id: route_action_id(&identity, &trimmed_model),
-            short_label: crate::tui::ui_text::truncate_line_to_width(
+            short_label: codewhale_tui_kit::ui_text::truncate_line_to_width(
                 identity.key.as_str(),
                 HOTBAR_COMPACT_LABEL_MAX_WIDTH,
             ),
@@ -1277,7 +1277,7 @@ impl SkillHotbarAction {
         Self {
             name: name.to_string(),
             id: format!("skill.{name}"),
-            short_label: crate::tui::ui_text::truncate_line_to_width(
+            short_label: codewhale_tui_kit::ui_text::truncate_line_to_width(
                 name,
                 HOTBAR_COMPACT_LABEL_MAX_WIDTH,
             ),
@@ -1352,7 +1352,7 @@ impl McpToolHotbarAction {
             model_name: tool.model_name.trim().to_string(),
             description: tool.description.clone(),
             id: format!("mcp.{server}.{}", tool.name),
-            short_label: crate::tui::ui_text::truncate_line_to_width(
+            short_label: codewhale_tui_kit::ui_text::truncate_line_to_width(
                 &tool.name,
                 HOTBAR_COMPACT_LABEL_MAX_WIDTH,
             ),

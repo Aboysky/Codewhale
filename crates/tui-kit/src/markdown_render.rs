@@ -21,7 +21,7 @@
 //! cell and re-runs only the render step on width changes. That makes resize a
 //! re-flow operation rather than a re-parse + re-flow operation.
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::sync::OnceLock;
@@ -34,26 +34,26 @@ use syntect::parsing::{ParseState as SyntectParseState, SyntaxSet};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-use crate::tui::osc8;
-use crate::tui::ui_text::CopyLineSeparator;
+use crate::osc8;
+use crate::ui_text::CopyLineSeparator;
 use codewhale_palette as palette;
 
 // Thread-local counter incremented every time `parse` runs. Used by tests to
 // prove that width-only changes hit the cached-AST path and skip parsing.
 // Thread-local (not global atomic) so concurrent tests calling `parse()` can't
 // pollute each other's counters.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 thread_local! {
     static PARSE_INVOCATIONS: Cell<u64> = const { Cell::new(0) };
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[must_use]
 pub fn parse_invocation_count() -> u64 {
     PARSE_INVOCATIONS.with(|c| c.get())
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub fn reset_parse_invocation_count() {
     PARSE_INVOCATIONS.with(|c| c.set(0));
 }
@@ -141,7 +141,7 @@ fn theme_set() -> &'static ThemeSet {
 /// Load the syntect syntax and theme sets ahead of the first fenced code
 /// block, so that render does not pay the one-time deserialization cost.
 /// Idempotent; intended to run once on a background thread at TUI boot.
-pub(crate) fn prewarm_syntax_highlighting() {
+pub fn prewarm_syntax_highlighting() {
     let _ = syntax_set();
     let _ = theme_set();
 }
@@ -150,7 +150,7 @@ fn syntax_color_depth() -> palette::ColorDepth {
     *COLOR_DEPTH.get_or_init(palette::ColorDepth::detect)
 }
 
-pub(crate) fn detected_palette_mode() -> palette::PaletteMode {
+pub fn detected_palette_mode() -> palette::PaletteMode {
     *PALETTE_MODE.get_or_init(palette::PaletteMode::detect)
 }
 
@@ -163,7 +163,7 @@ pub(crate) fn detected_palette_mode() -> palette::PaletteMode {
 /// classify as `Block::Paragraph`.
 #[must_use]
 pub fn parse(content: &str) -> ParsedMarkdown {
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     PARSE_INVOCATIONS.with(|c| c.set(c.get() + 1));
 
     STREAM_PARSE_MEMO.with(|memo| {
@@ -354,7 +354,7 @@ fn committed_prefix_digest(bytes: &[u8]) -> u64 {
 /// deliberately do not use wall-clock time, allocator counters, or sampling,
 /// so regression tests are stable on every machine.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(crate) struct MarkdownRenderWork {
+pub struct MarkdownRenderWork {
     pub classified_lines: u64,
     pub stable_blocks_rendered: u64,
     pub tail_blocks_rendered: u64,
@@ -382,7 +382,7 @@ struct IncrementalCodeHighlighter {
 /// tail begins. That lets each append truncate and replace the old tail without
 /// cloning or re-rendering the committed prefix.
 #[derive(Debug, Default)]
-pub(crate) struct IncrementalMarkdownRenderCache {
+pub struct IncrementalMarkdownRenderCache {
     parser: ParseState,
     key: Option<IncrementalRenderKey>,
     source_len: usize,
@@ -391,28 +391,28 @@ pub(crate) struct IncrementalMarkdownRenderCache {
     work: MarkdownRenderWork,
 }
 
-pub(crate) struct IncrementalMarkdownRenderDelta {
+pub struct IncrementalMarkdownRenderDelta {
     pub replace_from: usize,
     pub lines: Vec<RenderedMarkdownLine>,
 }
 
 impl IncrementalMarkdownRenderCache {
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     #[must_use]
-    pub(crate) fn work(&self) -> MarkdownRenderWork {
+    pub fn work(&self) -> MarkdownRenderWork {
         self.work
     }
 
     #[cfg(test)]
     #[must_use]
-    pub(crate) fn retained_source_bytes(&self) -> usize {
+    pub fn retained_source_bytes(&self) -> usize {
         self.parser.prefix.len()
     }
 
     /// Update from a source mutation whose append-only provenance was recorded
     /// by the live event loop. `verified_append` must be false for edits,
     /// replacement text, cell reuse, or any unknown mutation.
-    pub(crate) fn update(
+    pub fn update(
         &mut self,
         content: &str,
         width: u16,
@@ -660,7 +660,7 @@ pub fn render_parsed(parsed: &ParsedMarkdown, width: u16, base_style: Style) -> 
 }
 
 /// Render a parsed-markdown AST and preserve per-line source metadata.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[must_use]
 pub fn render_parsed_tagged(
     parsed: &ParsedMarkdown,
@@ -675,7 +675,7 @@ pub fn render_parsed_tagged(
 /// The live transcript uses this entry point so an explicit theme selection
 /// wins over terminal/OS auto-detection and participates in cache invalidation.
 #[must_use]
-pub(crate) fn render_parsed_tagged_with_palette(
+pub fn render_parsed_tagged_with_palette(
     parsed: &ParsedMarkdown,
     width: u16,
     base_style: Style,
@@ -963,7 +963,7 @@ pub fn render_markdown(content: &str, width: u16, base_style: Style) -> Vec<Line
 }
 
 /// Convenience wrapper: parse + render while keeping per-line source metadata.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[must_use]
 pub fn render_markdown_tagged(
     content: &str,
@@ -976,7 +976,7 @@ pub fn render_markdown_tagged(
 
 /// Parse and render markdown using an already-resolved UI palette mode.
 #[must_use]
-pub(crate) fn render_markdown_tagged_with_palette(
+pub fn render_markdown_tagged_with_palette(
     content: &str,
     width: u16,
     base_style: Style,

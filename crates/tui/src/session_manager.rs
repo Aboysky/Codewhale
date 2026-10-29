@@ -586,7 +586,7 @@ pub fn current_session_boot_id() -> &'static str {
 /// Which archive states a session listing includes.
 ///
 /// Deliberately the same three-way shape as
-/// [`crate::runtime_threads::ThreadListFilter`] so `/v1/sessions` and
+/// [`crate::runtime_threads::manager::ThreadListFilter`] so `/v1/sessions` and
 /// `/v1/threads` answer the same `include_archived` / `archived_only` query
 /// pair with the same semantics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

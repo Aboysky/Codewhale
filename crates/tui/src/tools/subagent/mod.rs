@@ -20011,14 +20011,14 @@ fn annotate_child_model_error_with_origin(
         ),
     };
     let lower = err.to_ascii_lowercase();
-    match crate::error_taxonomy::classify_error_message(err) {
-        crate::error_taxonomy::ErrorCategory::Authorization => hint(),
-        crate::error_taxonomy::ErrorCategory::RateLimit
-            if crate::error_taxonomy::is_spent_balance_message(err) =>
+    match codewhale_error_taxonomy::classify_error_message(err) {
+        codewhale_error_taxonomy::ErrorCategory::Authorization => hint(),
+        codewhale_error_taxonomy::ErrorCategory::RateLimit
+            if codewhale_error_taxonomy::is_spent_balance_message(err) =>
         {
             hint()
         }
-        crate::error_taxonomy::ErrorCategory::State if lower.contains("model") => hint(),
+        codewhale_error_taxonomy::ErrorCategory::State if lower.contains("model") => hint(),
         _ => {
             // #3020 (#2653): Provider rejections like "Model Not Exist" or
             // "does not exist or you do not have access" often classify as

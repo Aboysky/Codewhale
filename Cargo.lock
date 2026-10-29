@@ -1047,6 +1047,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "codewhale-error-taxonomy"
+version = "0.10.2"
+dependencies = [
+ "codewhale-tools",
+ "serde",
+]
+
+[[package]]
 name = "codewhale-execpolicy"
 version = "0.10.2"
 dependencies = [
@@ -1152,6 +1160,7 @@ dependencies = [
 name = "codewhale-models"
 version = "0.10.2"
 dependencies = [
+ "chrono",
  "codewhale-config",
  "codewhale-core",
  "codewhale-sanitize",
@@ -1558,6 +1567,7 @@ dependencies = [
  "codewhale-config",
  "codewhale-core",
  "codewhale-dependencies",
+ "codewhale-error-taxonomy",
  "codewhale-execpolicy",
  "codewhale-hooks",
  "codewhale-lane",
@@ -1583,6 +1593,7 @@ dependencies = [
  "codewhale-snapshot",
  "codewhale-telemetry",
  "codewhale-tools",
+ "codewhale-tui-kit",
  "codewhale-util",
  "codewhale-workflow",
  "codewhale-workflow-js",
@@ -1630,7 +1641,6 @@ dependencies = [
  "shlex 2.0.1",
  "similar",
  "syn 3.0.9",
- "syntect",
  "tar",
  "tempfile",
  "thiserror 2.0.21",
@@ -1655,6 +1665,21 @@ dependencies = [
  "windows-sys 0.61.2",
  "wiremock",
  "yaml-rust2",
+]
+
+[[package]]
+name = "codewhale-tui-kit"
+version = "0.10.2"
+dependencies = [
+ "codewhale-palette",
+ "codewhale-ratatui",
+ "codewhale-secrets",
+ "crossterm",
+ "ratatui",
+ "similar",
+ "syntect",
+ "unicode-segmentation",
+ "unicode-width",
 ]
 
 [[package]]
