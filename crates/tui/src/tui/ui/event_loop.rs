@@ -685,6 +685,7 @@ pub(super) fn flush_paste_burst_before_composer(app: &mut App, now: Instant) -> 
                     .is_empty()
             {
                 vim_mode::handle_vim_normal_key(app, ch);
+                app.needs_redraw = true;
             } else {
                 app.insert_char(ch);
             }
