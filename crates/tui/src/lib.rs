@@ -9431,10 +9431,14 @@ fn list_sessions(limit: usize, search: Option<String>) -> Result<()> {
 
     let manager = SessionManager::default_location()?;
 
-    let sessions = if let Some(query) = search {
-        manager.search_sessions(&query)?
+    let (sessions, interrupted) = if let Some(query) = search {
+        (manager.search_sessions(&query)?, Default::default())
     } else {
-        manager.list_sessions()?
+        let (sessions, interrupted, warning) = manager.list_sessions_with_recovery()?;
+        if let Some(warning) = warning {
+            eprintln!("Some interrupted sessions could not be listed: {warning}");
+        }
+        (sessions, interrupted)
     };
 
     if sessions.is_empty() {
@@ -9456,7 +9460,10 @@ fn list_sessions(limit: usize, search: Option<String>) -> Result<()> {
     println!();
 
     for (i, session) in sessions.iter().take(limit).enumerate() {
-        let line = format_session_line(session);
+        let mut line = format_session_line(session);
+        if interrupted.contains(&session.id) {
+            line.push_str(" | interrupted");
+        }
         if i == 0 {
             println!("  {} {}", "*".truecolor(aqua_r, aqua_g, aqua_b), line);
         } else {
