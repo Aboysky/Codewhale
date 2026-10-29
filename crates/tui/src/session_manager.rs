@@ -2785,9 +2785,6 @@ impl SessionManager {
     ///
     /// Checkpoints are keyed per session (`checkpoints/<session_id>.json`) so
     /// concurrent sessions never overwrite each other's crash-recovery state.
-    ///
-    /// Borrowing callers live in tests; the persistence path calls
-    /// [`Self::save_checkpoint_owned`] to avoid a deep copy.
     #[cfg(test)]
     pub fn save_checkpoint(&self, session: &SavedSession) -> std::io::Result<PathBuf> {
         self.save_checkpoint_owned(session.clone())

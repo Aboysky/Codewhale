@@ -287,8 +287,6 @@ where
     F: FnMut(String) -> Fut,
     Fut: std::future::Future<Output = anyhow::Result<OllamaTagProfile>>,
 {
-    // Owned tags keep the per-item future free of a borrow, so the stream's
-    // item type does not depend on the caller's lifetime.
     let candidates: Vec<String> = tags
         .iter()
         .filter(|tag| {
