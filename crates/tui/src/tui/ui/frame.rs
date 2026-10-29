@@ -364,6 +364,7 @@ struct InfoLineInteractionHitboxes {
     /// The model name and its effort tier — one span, because they are
     /// always adjacent and `/model` owns both.
     model: Option<Rect>,
+    update: Option<Rect>,
 }
 
 /// Separator between rendered route fields. Three columns wide, matching
@@ -465,8 +466,10 @@ fn render_info_row(
             .last_infoline_hitboxes
             .iter()
             .find(|hb| {
-                matches!(hb.id, InfoSegmentId::Model | InfoSegmentId::Context)
-                    && hb.area.x <= mx
+                matches!(
+                    hb.id,
+                    InfoSegmentId::Model | InfoSegmentId::Context | InfoSegmentId::Update
+                ) && hb.area.x <= mx
                     && mx < hb.area.right()
                     && hb.area.y == my
             })
@@ -510,6 +513,10 @@ fn render_info_row(
         context: crate::tui::infoline::context_meter_hitbox(&info, area),
         route: provider_area,
         model: model_area,
+        update: hitboxes
+            .iter()
+            .find(|hitbox| hitbox.id == InfoSegmentId::Update)
+            .map(|hitbox| hitbox.area),
     };
     // Keep the row's quiet background under the widget itself.
     let buf = f.buffer_mut();
@@ -668,6 +675,18 @@ fn register_info_interaction_targets(app: &mut App, hitboxes: InfoLineInteractio
                 inspect_detail: crate::tui::tideline::InspectDetail::Route,
             });
     }
+    if let Some(hitbox) = hitboxes.update {
+        app.viewport
+            .interaction_targets
+            .register(crate::tui::tideline::InteractionTarget {
+                id: crate::tui::tideline::InteractionTargetId::HEADER_UPDATE,
+                area: hitbox,
+                focus: crate::tui::tideline::InteractionFocus::Direct,
+                keyboard_action: None,
+                mouse_action: Some(crate::tui::tideline::InteractionAction::OpenUpdate),
+                inspect_detail: crate::tui::tideline::InspectDetail::Update,
+            });
+    }
 
     for target in app.viewport.interaction_targets.iter() {
         let label = match target.mouse_action {
@@ -700,6 +719,13 @@ fn register_info_interaction_targets(app: &mut App, hitboxes: InfoLineInteractio
                 codewhale_localization::tr(
                     app.ui_locale,
                     codewhale_localization::MessageId::CmdModelDescription,
+                ),
+            ),
+            Some(crate::tui::tideline::InteractionAction::OpenUpdate) => format!(
+                "/update · {}",
+                codewhale_localization::tr(
+                    app.ui_locale,
+                    codewhale_localization::MessageId::CmdUpdateDescription,
                 ),
             ),
             Some(crate::tui::tideline::InteractionAction::ShowDockPanel(panel)) => {
@@ -3075,6 +3101,7 @@ mod tests {
 
     #[test]
     fn empty_session_keeps_opted_in_workspace_identity_visible() {
+        let _guard = crate::tui::hover_layer::HOVER_TEST_LOCK.lock().unwrap();
         let mut app = app_with_context_percent(0);
         app.workspace = std::path::PathBuf::from("/fixture/checkout");
         app.workspace_context = Some("feature-6112 | clean".to_string());
@@ -3086,7 +3113,8 @@ mod tests {
         terminal
             .draw(|frame| {
                 let area = frame.area();
-                super::render_info_row(frame, &mut app, area, true);
+                let hitboxes = super::render_info_row(frame, &mut app, area, true);
+                super::register_info_interaction_targets(&mut app, hitboxes);
             })
             .unwrap();
         let rendered: String = terminal
@@ -3099,6 +3127,49 @@ mod tests {
         assert!(rendered.contains("checkout"), "{rendered}");
         assert!(rendered.contains("feature-6112"), "{rendered}");
         assert!(rendered.contains("v9.9.9"), "{rendered}");
+        let target = app
+            .viewport
+            .interaction_targets
+            .iter()
+            .find(|target| target.id == crate::tui::tideline::InteractionTargetId::HEADER_UPDATE)
+            .expect("visible update notice is actionable")
+            .clone();
+        assert_eq!(
+            target.mouse_action,
+            Some(crate::tui::tideline::InteractionAction::OpenUpdate)
+        );
+        app.last_mouse_pos = Some((target.area.x, target.area.y));
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                super::render_info_row(frame, &mut app, area, true);
+            })
+            .unwrap();
+        assert!(
+            terminal.backend().buffer()[(target.area.x, target.area.y)]
+                .modifier
+                .contains(ratatui::style::Modifier::UNDERLINED)
+        );
+        for launch_visible in [true, false] {
+            app.launch.visible = launch_visible;
+            let events = crate::tui::mouse_ui::handle_mouse_event(
+                &mut app,
+                crossterm::event::MouseEvent {
+                    kind: crossterm::event::MouseEventKind::Down(
+                        crossterm::event::MouseButton::Left,
+                    ),
+                    column: target.area.x,
+                    row: target.area.y,
+                    modifiers: crossterm::event::KeyModifiers::NONE,
+                },
+            );
+            assert!(matches!(
+                events.as_slice(),
+                [crate::tui::views::ViewEvent::CommandPaletteSelected {
+                    action: crate::tui::views::CommandPaletteAction::ExecuteCommand { command },
+                }] if command == "/update"
+            ));
+        }
         let mut notice = super::super::UpdateNotice {
             current: "0.10.1".to_string(),
             latest: "0.10.2".to_string(),
