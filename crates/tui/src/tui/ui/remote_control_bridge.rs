@@ -413,7 +413,15 @@ fn report_remote_control_failure(app: &mut App, error: String) {
 
 fn report_remote_control_start_failure(app: &mut App, error: String) {
     app.remote_control.record_start_failure(&error);
-    report_remote_control_failure(app, error);
+    if app.remote_control.status() == crate::remote_control::Status::Failed {
+        report_remote_control_failure(app, error);
+    } else {
+        app.push_status_toast(
+            codewhale_config::persistence::redact_secrets(&error),
+            StatusToastLevel::Error,
+            Some(12_000),
+        );
+    }
 }
 
 pub(crate) fn start_remote_control_session(app: &mut App, config: &Config) {
