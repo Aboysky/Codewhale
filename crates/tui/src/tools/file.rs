@@ -113,7 +113,7 @@ fn verify_expected_hash(
 /// The hidden compatibility schema still has a byte budget, so this is only the
 /// instruction the legacy caller needs: what to pass and what happens on a
 /// mismatch. The rationale stays in doc comments rather than schema bytes.
-pub(super) const EXPECTED_HASH_DESCRIPTION: &str = "The `content_hash` from a prior read; the write is refused and the file left unchanged if it changed since";
+pub(super) const EXPECTED_HASH_DESCRIPTION: &str = "Prior read's content_hash; refuse the write if the file has changed.";
 
 // === Cross-harness parameter aliases ===
 
@@ -1021,7 +1021,7 @@ impl ToolSpec for ReadFileTool {
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Path to the file (relative to workspace, absolute, or ~/ home-relative). Alias: `file_path`"
+                    "description": "File path: workspace-relative, absolute or ~/. Alias: file_path"
                 },
                 "start_line": {
                     "type": "integer",
@@ -1029,11 +1029,11 @@ impl ToolSpec for ReadFileTool {
                 },
                 "max_lines": {
                     "type": "integer",
-                    "description": "Maximum lines to return (default 500, max 500; a 16KB byte budget applies regardless). Aliases: `limit`, `n_lines`"
+                    "description": "Lines: default/max 500, also capped at 16KB. Aliases: limit, n_lines"
                 },
                 "pages": {
                     "type": "string",
-                    "description": "PDF only: page range to extract, e.g. \"1-5\" or \"10\". Ignored for non-PDF files."
+                    "description": "PDF page range, e.g. 1-5 or 10; ignored for other files."
                 }
             },
             "required": ["path"]
@@ -1702,7 +1702,7 @@ impl ToolSpec for WriteFileTool {
                 "line_ending": {
                     "type": "string",
                     "enum": ["preserve", "lf", "crlf"],
-                    "description": "Line endings to use: preserve existing style by default, or set lf or crlf when explicitly requested. Explicit selection converts CRLF and lone CR to the requested style."
+                    "description": "Default: preserve existing endings. Explicit lf/crlf converts CRLF and lone CR."
                 }
             },
             "required": ["path", "content"]

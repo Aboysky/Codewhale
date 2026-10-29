@@ -3178,13 +3178,12 @@ mod tests {
         assert!(rendered.contains("checkout"), "{rendered}");
         assert!(rendered.contains("feature-6112"), "{rendered}");
         assert!(rendered.contains("v9.9.9"), "{rendered}");
-        let target = app
+        let target = *app
             .viewport
             .interaction_targets
             .iter()
             .find(|target| target.id == crate::tui::tideline::InteractionTargetId::HEADER_UPDATE)
-            .expect("visible update notice is actionable")
-            .clone();
+            .expect("visible update notice is actionable");
         assert_eq!(
             target.mouse_action,
             Some(crate::tui::tideline::InteractionAction::OpenUpdate)

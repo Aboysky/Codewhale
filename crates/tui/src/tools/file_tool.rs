@@ -126,6 +126,7 @@ impl ToolSpec for WriteTool {
     }
 
     fn input_schema(&self) -> Value {
+        let write = WriteFileTool.input_schema();
         json!({
             "type": "object",
             "properties": {
@@ -134,11 +135,7 @@ impl ToolSpec for WriteTool {
                     "description": "Path to the file to write (relative or absolute)."
                 },
                 "content": { "type": "string", "description": "Content to write to the file." },
-                "line_ending": {
-                    "type": "string",
-                    "enum": ["preserve", "lf", "crlf"],
-                    "description": "Preserve the existing style by default. Use lf or crlf when explicitly requested; CRLF and lone CR are converted to the selected style."
-                }
+                "line_ending": write["properties"]["line_ending"]
             },
             "required": ["path", "content"],
             "additionalProperties": false
