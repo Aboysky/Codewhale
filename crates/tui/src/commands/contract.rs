@@ -501,6 +501,7 @@ impl CommandSessionLifecycleContext for SessionLifecycleAdapter<'_> {
         let manager = crate::session_manager::SessionManager::default_location()
             .map_err(|error| format!("could not open sessions directory: {error}"))?;
         let mut session = crate::tui::ui::build_session_snapshot(&mut app, &manager)?;
+        let work_owner = app.current_session_id.clone();
         // Snapshots are journal-only (#6214 T3); this path serializes
         // directly instead of through `save_session`, so rehydrate the
         // `messages` projection first — otherwise the file loses history.
@@ -549,7 +550,10 @@ impl CommandSessionLifecycleContext for SessionLifecycleAdapter<'_> {
                         app.current_session_id = Some(session.metadata.id.clone());
                         app.current_session_metadata = Some(session.metadata.clone());
                         app.session_title = Some(session.metadata.title.clone());
-                        if let Err(err) = app.publish_pending_work_state() {
+                        if let Err(err) = app.publish_saved_work_state(
+                            work_owner.as_deref(),
+                            session.work_state.as_ref(),
+                        ) {
                             return Err(format!(
                                 "Session saved, but Work views were not published: {err}"
                             ));
@@ -581,6 +585,7 @@ impl CommandSessionLifecycleContext for SessionLifecycleAdapter<'_> {
         };
 
         let mut parent = crate::tui::ui::build_session_snapshot(&mut app, &manager)?;
+        let work_owner = app.current_session_id.clone();
         parent.make_storage_compatible();
         if let Err(err) = manager.save_session(&parent) {
             return Err(format!("Failed to save parent session: {err}"));
@@ -606,9 +611,12 @@ impl CommandSessionLifecycleContext for SessionLifecycleAdapter<'_> {
         if let Err(err) = manager.save_session(&forked) {
             return Err(format!("Failed to save forked session: {err}"));
         }
-        if let Err(err) = app.publish_pending_work_state() {
+        if let Err(err) =
+            app.publish_saved_work_state(work_owner.as_deref(), parent.work_state.as_ref())
+        {
             return Err(format!(
-                "Sessions saved, but Work views were not published: {err}"
+                "Parent and fork {} were saved; the active session did not change because Work views were not published: {err}",
+                forked.metadata.id
             ));
         }
 
@@ -1252,7 +1260,9 @@ impl CommandSessionControlContext for SessionControlAdapter<'_> {
             Ok(_) => {
                 app.current_session_metadata = Some(session.metadata.clone());
                 app.session_title = Some(new_title.to_string());
-                if let Err(err) = app.publish_pending_work_state() {
+                if let Err(err) =
+                    app.publish_saved_work_state(Some(&session_id), session.work_state.as_ref())
+                {
                     return Err(format!(
                         "Session renamed, but Work views were not published: {err}"
                     ));
@@ -1428,7 +1438,9 @@ fn persist_session_display(
             // The render loop syncs the resolved prefix into the terminal
             // title; force a frame so the change lands immediately.
             app.needs_redraw = true;
-            if let Err(error) = app.publish_pending_work_state() {
+            if let Err(error) =
+                app.publish_saved_work_state(Some(&session_id), session.work_state.as_ref())
+            {
                 return Err(format!(
                     "{saved} saved, but Work views were not published: {error}"
                 ));

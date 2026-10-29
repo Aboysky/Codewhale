@@ -24072,6 +24072,7 @@ fn session_snapshot_and_resume_round_trip_work_state() {
     let manager =
         crate::session_manager::SessionManager::new(tmp.path().join("sessions")).expect("manager");
     let mut app = create_test_app();
+    app.current_session_id = None;
     app.api_messages_mut()
         .push(text_message("user", "keep my work"));
     app.api_messages_mut()
@@ -24100,8 +24101,14 @@ fn session_snapshot_and_resume_round_trip_work_state() {
     }
 
     let snapshot = build_session_snapshot(&mut app, &manager).expect("session snapshot");
+    let projection = saved_work_projection(&app, &snapshot);
     let expected = snapshot.work_state.clone().expect("persisted Work state");
     manager.save_session(&snapshot).expect("save session");
+    app.current_session_id = Some(snapshot.metadata.id.clone());
+    assert!(
+        app.publish_saved_work_state(projection.owner.as_deref(), projection.state.as_ref())
+            .expect("publish the unsaved owner’s Work")
+    );
 
     let loaded = manager
         .load_session(&snapshot.metadata.id)
@@ -24148,11 +24155,15 @@ async fn session_snapshot_prefers_newer_memory_over_stale_disk_when_lock_is_busy
         crate::tools::todo::TodoStatus::Completed,
     );
     let disk_snapshot = build_session_snapshot(&mut app, &manager).expect("disk snapshot");
+    let stale_projection = saved_work_projection(&app, &disk_snapshot);
     manager
         .save_session(&disk_snapshot)
         .expect("save disk snapshot");
-    app.publish_pending_work_state()
-        .expect("publish saved disk state");
+    app.publish_saved_work_state(
+        Some("work-cache-newer-than-disk"),
+        disk_snapshot.work_state.as_ref(),
+    )
+    .expect("publish saved disk state");
 
     let mut desired = crate::tools::todo::TodoList::from_snapshot(
         &app.todos.try_lock().expect("todos lock").snapshot(),
@@ -24173,6 +24184,19 @@ async fn session_snapshot_prefers_newer_memory_over_stale_disk_when_lock_is_busy
         )
         .await
         .expect("graph-backed memory update");
+    assert!(
+        publish_saved_work_projection(&mut app, &stale_projection)
+            .await
+            .expect_err("newer Work must stay pending")
+            .contains("newer Work update")
+    );
+    assert!(
+        app.runtime_services
+            .work
+            .as_ref()
+            .expect("Work Graph runtime")
+            .has_pending_publish()
+    );
     let memory_snapshot = build_session_snapshot(&mut app, &manager).expect("memory snapshot");
     assert_ne!(memory_snapshot.work_state, disk_snapshot.work_state);
 

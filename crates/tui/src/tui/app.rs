@@ -7030,14 +7030,19 @@ impl App {
         true
     }
 
-    /// Publish a validated Work Graph transaction after a synchronous caller
-    /// has completed its atomic session write.
-    pub fn publish_pending_work_state(&mut self) -> Result<bool, String> {
-        let published = self
-            .runtime_services
-            .work
-            .as_ref()
-            .map_or(Ok(false), |work| work.publish_pending_sync())?;
+    pub fn publish_saved_work_state(
+        &mut self,
+        owner: Option<&str>,
+        state: Option<&SessionWorkState>,
+    ) -> Result<bool, String> {
+        let Some(work) = self.runtime_services.work.as_ref() else {
+            return Ok(false);
+        };
+        let published = work
+            .publish_pending_sync_matching(owner, state.and_then(|state| state.graph.as_ref()))?;
+        if !published && work.has_pending_publish() {
+            return Err("a newer Work update remains pending".to_string());
+        }
         Ok(published)
     }
 

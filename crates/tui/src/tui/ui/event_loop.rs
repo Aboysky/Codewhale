@@ -181,6 +181,7 @@ pub(super) fn apply_engine_session_projection(
                 return false;
             }
         };
+        let projection = saved_work_projection(app, &session);
         session.make_storage_compatible();
         if let Err(error) = request.validate_prefix(
             &session.metadata.id,
@@ -198,17 +199,27 @@ pub(super) fn apply_engine_session_projection(
             request.fail("terminal persistence actor is unavailable");
             return false;
         }
-        if app
-            .runtime_services
-            .work
-            .as_ref()
-            .is_some_and(|work| work.has_pending_publish())
-            && let Err(error) = app.publish_pending_work_state()
+        if let Some(work) = app.runtime_services.work.as_ref()
+            && work.has_pending_publish()
         {
-            request.fail(format!(
-                "checkpoint queued but Work projection failed: {error}"
-            ));
-            return false;
+            match work.publish_pending_sync_matching(
+                projection.owner.as_deref(),
+                projection
+                    .state
+                    .as_ref()
+                    .and_then(|state| state.graph.as_ref()),
+            ) {
+                Ok(false) if work.has_pending_publish() => {
+                    app.status_message = Some("A newer Work update remains pending".to_string());
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    request.fail(format!(
+                        "checkpoint queued but Work projection failed: {error}"
+                    ));
+                    return false;
+                }
+            }
         }
         codewhale_util::utils::spawn_supervised(
             "terminal-session-checkpoint",
@@ -235,15 +246,18 @@ pub(super) fn apply_engine_session_projection(
         && let Ok(manager) = SessionManager::default_location()
     {
         if let Ok(session) = build_session_snapshot(app, &manager) {
+            let projection = saved_work_projection(app, &session);
             app.session_title = Some(session.metadata.title.clone());
             // The engine's session id was pinned above, so
             // every checkpoint of this session lands in the
             // same per-session file.
-            if let Err(err) =
-                persist_with_pending_work_boundary(app, PersistRequest::SaveCheckpoint { session })
-            {
+            if let Err(err) = persist_with_pending_work_boundary(
+                app,
+                PersistRequest::SaveCheckpoint { session },
+                &projection,
+            ) {
                 app.status_message = Some(format!(
-                    "To-do list update pending: checkpoint could not be queued ({err})"
+                    "To-do list update pending while saving checkpoint ({err})"
                 ));
             }
         }
@@ -3682,6 +3696,7 @@ pub(crate) async fn run_event_loop(
                         if let Ok(manager) = SessionManager::default_location()
                             && let Ok(session) = build_session_snapshot(app, &manager)
                         {
+                            let projection = saved_work_projection(app, &session);
                             app.current_session_id = Some(session.metadata.id.clone());
                             // Compound completion commit: the actor writes the
                             // completed snapshot and clears this session's
@@ -3693,7 +3708,9 @@ pub(crate) async fn run_event_loop(
                                     session,
                                 });
                             if queued {
-                                if let Err(err) = publish_pending_work_projection(app).await {
+                                if let Err(err) =
+                                    publish_saved_work_projection(app, &projection).await
+                                {
                                     tracing::warn!(
                                         error = %err,
                                         "completed-turn Work projections remain unpublished"

@@ -2141,14 +2141,16 @@ pub(crate) async fn handle_view_events(
                 {
                     match build_session_snapshot(app, &manager) {
                         Ok(session) => {
+                            let projection = saved_work_projection(app, &session);
                             if let Err(err) = persist_with_pending_work_boundary(
                                 app,
                                 PersistRequest::SessionSnapshot(session),
+                                &projection,
                             ) {
                                 tracing::warn!(
                                     session_id = %session_id,
                                     error = %err,
-                                    "Could not queue active session rename Work snapshot"
+                                    "Could not complete active session rename Work boundary"
                                 );
                                 work_snapshot_warning = Some(format!(
                                     "Session renamed, but Work snapshot is pending ({err})"
