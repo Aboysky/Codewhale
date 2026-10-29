@@ -2972,10 +2972,10 @@ fn format_registry_error(prefix: &str, err: &anyhow::Error) -> String {
 
 /// Discover the enabled visible skills for the current App state.
 fn discover_visible(app: &App) -> codewhale_skills::SkillRegistry {
-    codewhale_skills::discover_for_workspace_and_dir_with_mode_and_plugins(
+    codewhale_skills::discover_for_workspace(
         &app.workspace,
-        &app.skills_dir,
-        app.skills_discovery_mode,
+        Some(&app.skills_dir),
+        &app.skills_config,
         Some(app.extension_plugin_view().as_ref()),
     )
     .into_enabled()
@@ -3007,21 +3007,16 @@ fn portable_skill_entry(skill: &codewhale_skills::Skill, app: &App) -> SkillEntr
         description: skill
             .description_for_locale(app.ui_locale.tag())
             .to_string(),
-        index_note: codewhale_skills::description_exceeds_index_cap(
+        index_note: codewhale_skills::description_index_cap_if_shortened(
             skill.description_for_locale(app.ui_locale.tag()),
-            app.skills_listing_config.max_description_chars(),
+            &app.skills_config,
         )
-        .then(|| {
+        .map(|cap| {
             codewhale_localization::tr(
                 app.ui_locale,
                 codewhale_localization::MessageId::SkillsIndexDescriptionLimit,
             )
-            .replace(
-                "{limit}",
-                &app.skills_listing_config
-                    .max_description_chars()
-                    .to_string(),
-            )
+            .replace("{limit}", &cap.to_string())
         }),
         source,
         path,
@@ -3099,7 +3094,7 @@ fn network_denied_message(host: &str) -> String {
 impl CommandSkillGroupContext for SkillGroupAdapter<'_> {
     fn skill_registry_projection(&self) -> SkillRegistryProjection {
         let app = self.host.app.borrow();
-        let mode = app.skills_discovery_mode;
+        let mode = codewhale_skills::SkillDiscoveryMode::from_config(&app.skills_config);
         let dirs = codewhale_skills::skill_directories_for_workspace_and_dir(
             &app.workspace,
             &app.skills_dir,
@@ -3117,6 +3112,9 @@ impl CommandSkillGroupContext for SkillGroupAdapter<'_> {
             workspace: app.workspace.display().to_string(),
             skills_dir: app.skills_dir.display().to_string(),
             mode_label: mode_label.to_string(),
+            bundled_status: codewhale_skills::bundled_skills_status(&app.skills_config, &registry)
+                .map(|status| status.inspection())
+                .unwrap_or_default(),
             dirs: dirs.iter().map(|dir| dir.display().to_string()).collect(),
             entries: registry
                 .list()

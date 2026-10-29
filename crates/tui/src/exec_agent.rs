@@ -710,12 +710,7 @@ pub(crate) async fn run_exec_agent(
         mcp_oauth_callback_port: None,
         mcp_oauth_callback_url: None,
         skills_dir: execution_config.skills_dir(),
-        skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::from_config(
-            &execution_config.skills_config(),
-        ),
-        skills_listing_config: codewhale_skills::SkillListingConfig::from_config(
-            &execution_config.skills_config(),
-        ),
+        skills_config: std::sync::Arc::new(execution_config.skills_config()),
         instructions: {
             let mut instrs: Vec<crate::prompts::InstructionSource> = execution_config
                 .instructions_paths()

@@ -34879,13 +34879,15 @@ fn background_skill_cache_refuses_stale_epoch_workspace_and_plugin_snapshot() {
     stale_dir.skills_dir = app.skills_dir.join("different");
     assert!(!app.install_skill_cache_if_current(&stale_dir, 7, result.clone()));
     let mut stale_mode = current.clone();
-    stale_mode.mode =
-        if app.skills_discovery_mode == codewhale_skills::SkillDiscoveryMode::Compatible {
-            codewhale_skills::SkillDiscoveryMode::CodeWhaleOnly
-        } else {
-            codewhale_skills::SkillDiscoveryMode::Compatible
-        };
+    let mut config = (*app.skills_config).clone();
+    config.scan_codewhale_only = Some(!config.scan_codewhale_only());
+    stale_mode.config = Arc::new(config);
     assert!(!app.install_skill_cache_if_current(&stale_mode, 7, result.clone()));
+    let mut stale_bundle = current.clone();
+    let mut config = (*app.skills_config).clone();
+    config.bundled.disabled = Some(vec!["debug".into()]);
+    stale_bundle.config = Arc::new(config);
+    assert!(!app.install_skill_cache_if_current(&stale_bundle, 7, result.clone()));
     let mut stale_plugins = current.clone();
     stale_plugins.plugins = Arc::new(codewhale_plugins::PluginRegistry::empty(&app.workspace));
     assert!(!app.install_skill_cache_if_current(&stale_plugins, 7, result.clone()));

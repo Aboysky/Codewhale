@@ -277,8 +277,7 @@ pub fn build_context_report(app: &App) -> PromptSourceMap {
         &app.workspace,
         Some(&app.skills_dir),
         app.project_context_pack_enabled,
-        app.skills_discovery_mode,
-        app.skills_listing_config,
+        &app.skills_config,
         app.ui_locale.tag(),
         app.mode,
         Some(app.plugin_registry.as_ref()),
@@ -422,8 +421,7 @@ pub fn build_headless_context_report(config: &Config, workspace: &Path) -> Promp
         workspace,
         Some(&selected_skills_dir),
         config.project_context_pack_enabled(),
-        codewhale_skills::SkillDiscoveryMode::from_config(&config.skills_config()),
-        codewhale_skills::SkillListingConfig::from_config(&config.skills_config()),
+        &config.skills_config(),
         "en",
         AppMode::Agent,
         None,
@@ -500,8 +498,7 @@ fn base_source_entries(
     workspace: &Path,
     skills_dir: Option<&Path>,
     project_pack_enabled: bool,
-    skills_discovery_mode: codewhale_skills::SkillDiscoveryMode,
-    skills_listing_config: codewhale_skills::SkillListingConfig,
+    skills_config: &codewhale_runtime::config::SkillsConfig,
     locale_tag: &str,
     mode: AppMode,
     plugin_registry: Option<&codewhale_plugins::PluginRegistry>,
@@ -664,27 +661,14 @@ fn base_source_entries(
         ));
     }
 
-    let skill_discovery_mode = skills_discovery_mode;
-    let skills_budget = skills_listing_config.budget_chars(context_window_tokens);
-    let skills_block = match skills_dir {
-        Some(dir) => codewhale_skills::render_available_skills_context_for_workspace_and_dir_with_mode_and_plugins(
-            workspace,
-            dir,
-            skill_discovery_mode,
-            locale_tag,
-            plugin_registry,
-            skills_listing_config,
-            skills_budget,
-        ),
-        None => codewhale_skills::render_available_skills_context_for_workspace_with_mode_and_plugins(
-            workspace,
-            skill_discovery_mode,
-            locale_tag,
-            plugin_registry,
-            skills_listing_config,
-            skills_budget,
-        ),
-    };
+    let skills_block = codewhale_skills::render_index(
+        workspace,
+        skills_dir,
+        skills_config,
+        locale_tag,
+        plugin_registry,
+        context_window_tokens,
+    );
     if let Some(block) = skills_block {
         let mut entry = SourceEntry::text(
             SourceKind::SkillsBlock,

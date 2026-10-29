@@ -4919,7 +4919,7 @@ pub(crate) async fn run_event_loop(
                 App::discover_cached_skills(
                     &scan.workspace,
                     &scan.skills_dir,
-                    scan.mode,
+                    &scan.config,
                     &scan.plugins,
                 )
             });
@@ -6398,7 +6398,7 @@ pub(crate) async fn run_event_loop(
                     build_command_palette_entries(
                         app.ui_locale,
                         &app.skills_dir,
-                        app.skills_discovery_mode,
+                        &app.skills_config,
                         &app.workspace,
                         &app.mcp_config_path,
                         app.mcp_snapshot.as_ref(),

@@ -14495,28 +14495,15 @@ fn build_subagent_system_prompt_with_skills(
 /// Every fresh and nested child derives this from its inherited ToolContext;
 /// forked children receive it at system precedence as well.
 fn subagent_skill_catalog(context: &ToolContext) -> String {
-    let budget = context
-        .skills_listing_config
-        .budget_chars(context.route_context_window);
-    match context.skills_dir.as_deref() {
-        Some(skills_dir) => codewhale_skills::render_available_skills_context_for_workspace_and_dir_with_mode_and_plugins(
-            &context.workspace,
-            skills_dir,
-            context.skills_discovery_mode,
-            "en",
-            context.plugin_registry.as_deref(),
-            context.skills_listing_config,
-            budget,
-        ),
-        None => codewhale_skills::render_available_skills_context_for_workspace_with_mode_and_plugins(
-            &context.workspace,
-            context.skills_discovery_mode,
-            "en",
-            context.plugin_registry.as_deref(),
-            context.skills_listing_config,
-            budget,
-        ),
-    }.unwrap_or_default()
+    codewhale_skills::render_index(
+        &context.workspace,
+        context.skills_dir.as_deref(),
+        &context.skills_config,
+        "en",
+        context.plugin_registry.as_deref(),
+        context.route_context_window,
+    )
+    .unwrap_or_default()
 }
 
 fn subagent_request_system_prompt(subagent_system_prompt: &str) -> SystemPrompt {

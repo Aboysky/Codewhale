@@ -22,7 +22,8 @@ pub use roots::{
 #[allow(unused_imports)]
 pub use system::is_exact_bundled_skill;
 pub use system::{
-    BundledSkillTier, bundled_skill_tier, install_system_skills, is_bundled_skill_name,
+    BundledSkillTier, BundledSkillsStatus, bundled_skill_tier, bundled_skills_status,
+    canonical_bundled_skill_name, install_system_skills, is_bundled_copy, is_bundled_skill_name,
     unrecognized_system_skills,
 };
 
@@ -33,7 +34,10 @@ use std::collections::{HashMap, HashSet, hash_map::DefaultHasher};
 use std::hash::{Hash, Hasher};
 use std::sync::{OnceLock, RwLock};
 
-use codewhale_runtime::logging;
+use codewhale_runtime::{
+    config::{BundledSkillsConfig, SkillsConfig},
+    logging,
+};
 
 /// Default per-entry ceiling for a skill's one-line description in the ambient index.
 /// Split between the summary and its `Use when:` trigger when a description
@@ -1025,6 +1029,7 @@ pub fn discover_in_workspace_with_mode(
 }
 
 #[must_use]
+#[cfg(any(test, feature = "test-support"))]
 pub fn discover_in_workspace_with_mode_and_plugins(
     workspace: &Path,
     mode: SkillDiscoveryMode,
@@ -1036,6 +1041,24 @@ pub fn discover_in_workspace_with_mode_and_plugins(
         plugins,
     );
     with_untrusted_project_skills_warning(registry, workspace, None, mode)
+}
+
+pub fn discover_for_workspace(
+    workspace: &Path,
+    skills_dir: Option<&Path>,
+    config: &SkillsConfig,
+    plugins: Option<&codewhale_plugins::PluginRegistry>,
+) -> SkillRegistry {
+    let mode = SkillDiscoveryMode::from_config(config);
+    let dirs = match skills_dir {
+        Some(dir) => skill_directories_for_workspace_and_dir(workspace, dir, mode),
+        None => skills_directories_for_mode(workspace, mode),
+    };
+    let registry = merge_plugin_skills(
+        cached_merged_discovery(dirs, Some(workspace.to_path_buf()), &config.bundled),
+        plugins,
+    );
+    with_untrusted_project_skills_warning(registry, workspace, skills_dir, mode)
 }
 
 /// Name the project skill directories an untrusted workspace kept out, so
@@ -1084,6 +1107,7 @@ pub fn untrusted_project_skills_warning(
 /// outside that set so explicit configuration cannot be buried by large global
 /// libraries.
 #[must_use]
+#[cfg(any(test, feature = "test-support"))]
 pub fn discover_for_workspace_and_dir_with_mode_and_plugins(
     workspace: &Path,
     skills_dir: &Path,
@@ -1151,6 +1175,7 @@ pub fn discover_from_directories_with_plugins(
 /// Discover from `dirs`, confining every directory that lives under
 /// `workspace` to it (see [`SkillRegistry::discover_watched_confined`]).
 /// Directories elsewhere, such as the user's home roots, are read as before.
+#[cfg(any(test, feature = "test-support"))]
 pub fn discover_from_directories_in_workspace(
     dirs: impl IntoIterator<Item = PathBuf>,
     workspace: Option<&Path>,
@@ -1160,7 +1185,11 @@ pub fn discover_from_directories_in_workspace(
     // The watched-validated cache covers the disk-walk merge. Plugin skills
     // merge from the in-memory plugin registry per call, so plugin state
     // changes apply immediately and the cache needs no plugin identity.
-    let merged = cached_merged_discovery(dirs, workspace.map(Path::to_path_buf));
+    let merged = cached_merged_discovery(
+        dirs,
+        workspace.map(Path::to_path_buf),
+        &BundledSkillsConfig::default(),
+    );
     merge_plugin_skills(merged, plugins)
 }
 
@@ -1189,6 +1218,8 @@ fn merge_plugin_skills(
 fn merge_watched_directories(
     dirs: Vec<PathBuf>,
     workspace: Option<&Path>,
+    policy: &BundledSkillsConfig,
+    owned: Option<&Path>,
 ) -> (SkillRegistry, WatchedPaths) {
     let mut merged = SkillRegistry::default();
     let mut watched = WatchedPaths::default();
@@ -1198,7 +1229,23 @@ fn merge_watched_directories(
         let confine_to = workspace.filter(|workspace| dir.starts_with(workspace));
         let (registry, dir_watched) = SkillRegistry::discover_watched_confined(&dir, confine_to);
         watched.extend(dir_watched);
-        for skill in registry.skills {
+        for mut skill in registry.skills {
+            if let Some(owned) = owned.filter(|_| system::is_bundled_skill_name(&skill.name)) {
+                let marker = owned.join(&skill.name).join(".installed-from");
+                watched.push((marker.clone(), watched_path_stamp(&marker)));
+                if system::is_bundled_copy(&skill.path, &skill.name, owned) {
+                    if !system::bundled_enabled(policy, &skill.name) {
+                        continue;
+                    }
+                    if system::bundled_explicit_only(policy, &skill.name) {
+                        skill.invocation = if skill.invocation.user_invocable() {
+                            SkillInvocation::ExplicitOnly
+                        } else {
+                            SkillInvocation::Disabled
+                        };
+                    }
+                }
+            }
             let canonical = fs::canonicalize(&skill.path).unwrap_or_else(|_| skill.path.clone());
             if !seen_files.insert(canonical) {
                 continue;
@@ -1232,7 +1279,12 @@ struct DiscoveryCacheEntry {
 /// limit; a full cache is simply cleared on the next miss.
 const MAX_DISCOVERY_CACHE_ENTRIES: usize = 8;
 
-type DiscoveryCacheKey = (Vec<PathBuf>, Option<PathBuf>);
+type DiscoveryCacheKey = (
+    Vec<PathBuf>,
+    Option<PathBuf>,
+    BundledSkillsConfig,
+    Option<PathBuf>,
+);
 
 fn discovery_cache() -> &'static RwLock<HashMap<DiscoveryCacheKey, DiscoveryCacheEntry>> {
     static CACHE: OnceLock<RwLock<HashMap<DiscoveryCacheKey, DiscoveryCacheEntry>>> =
@@ -1271,8 +1323,18 @@ pub fn discovery_cache_drops() -> u64 {
 /// Merged discovery for one resolved directory set, cached by that set.
 /// A hit re-stats only the watched entries (each visited directory and
 /// parsed `SKILL.md`); any metadata or readability change re-walks fully.
-fn cached_merged_discovery(dirs: Vec<PathBuf>, workspace: Option<PathBuf>) -> SkillRegistry {
-    let key = (dirs, workspace);
+fn cached_merged_discovery(
+    dirs: Vec<PathBuf>,
+    workspace: Option<PathBuf>,
+    policy: &BundledSkillsConfig,
+) -> SkillRegistry {
+    let has_policy = [&policy.selected, &policy.disabled, &policy.explicit_only]
+        .iter()
+        .any(|names| names.as_ref().is_some_and(|names| !names.is_empty()));
+    let owned = has_policy
+        .then(codewhale_runtime::config::owned_skills_dir)
+        .flatten();
+    let key = (dirs, workspace, policy.clone(), owned);
     {
         let read = discovery_cache()
             .read()
@@ -1286,7 +1348,8 @@ fn cached_merged_discovery(dirs: Vec<PathBuf>, workspace: Option<PathBuf>) -> Sk
             return entry.registry.clone();
         }
     }
-    let (merged, watched) = merge_watched_directories(key.0.clone(), key.1.as_deref());
+    let (merged, watched) =
+        merge_watched_directories(key.0.clone(), key.1.as_deref(), &key.2, key.3.as_deref());
     let mut write = discovery_cache()
         .write()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -1450,6 +1513,7 @@ pub fn render_available_skills_context_for_workspace(workspace: &Path) -> Option
 }
 
 #[must_use]
+#[cfg(any(test, feature = "test-support"))]
 pub fn render_available_skills_context_for_workspace_with_mode_and_plugins(
     workspace: &Path,
     mode: SkillDiscoveryMode,
@@ -1488,6 +1552,7 @@ fn render_available_skills_context(skills_dir: &Path) -> Option<String> {
 }
 
 #[must_use]
+#[cfg(any(test, feature = "test-support"))]
 pub fn render_available_skills_context_for_workspace_and_dir_with_mode_and_plugins(
     workspace: &Path,
     skills_dir: &Path,
@@ -1517,6 +1582,41 @@ pub fn render_available_skills_context_for_workspace_and_dir_with_mode_and_plugi
         listing_config,
         budget_chars,
     )
+}
+
+pub fn render_index(
+    workspace: &Path,
+    skills_dir: Option<&Path>,
+    config: &SkillsConfig,
+    locale: &str,
+    plugins: Option<&codewhale_plugins::PluginRegistry>,
+    window_tokens: Option<u32>,
+) -> Option<String> {
+    let registry = discover_for_workspace(workspace, skills_dir, config, plugins).into_enabled();
+    let home = codewhale_paths::user_home();
+    let configured = skills_dir.filter(|dir| {
+        matches!(
+            classify_configured_skills_dir(workspace, home.as_deref(), dir).0,
+            SkillRootKind::Configured
+        )
+    });
+    let listing = SkillListingConfig::from_config(config);
+    render_skills_block_with_configured_root(
+        &registry,
+        locale,
+        workspace,
+        configured,
+        listing,
+        listing.budget_chars(window_tokens),
+    )
+}
+
+pub fn description_index_cap_if_shortened(
+    description: &str,
+    config: &SkillsConfig,
+) -> Option<usize> {
+    let cap = SkillListingConfig::from_config(config).max_description_chars();
+    description_exceeds_index_cap(description, cap).then_some(cap)
 }
 
 /// Replace absolute path prefixes in free-form text (skill load warnings)

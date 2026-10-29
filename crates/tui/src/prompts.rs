@@ -50,10 +50,8 @@ pub struct PromptSessionContext<'a> {
     /// entirely when no interrupted session exists, so clean sessions share
     /// the same prefix bytes.
     pub recovery_hint: Option<&'a str>,
-    /// Restrict skill discovery to Codewhale-owned roots plus explicit
-    /// `skills_dir` configuration.
-    pub skills_discovery_mode: codewhale_skills::SkillDiscoveryMode,
-    pub skills_listing_config: codewhale_skills::SkillListingConfig,
+    /// Session-pinned skill discovery, bundle policy and ambient index limits.
+    pub skills_config: std::sync::Arc<codewhale_runtime::config::SkillsConfig>,
     /// Immutable plugin snapshot owned by this App/Engine workspace context.
     /// Never sourced from process-global mutable state.
     pub plugin_registry: Option<&'a codewhale_plugins::PluginRegistry>,
@@ -75,8 +73,7 @@ impl Default for PromptSessionContext<'_> {
             context_window_override: None,
             verbosity: None,
             recovery_hint: None,
-            skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-            skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+            skills_config: Default::default(),
             plugin_registry: None,
             mode: AppMode::Agent,
         }
@@ -1180,8 +1177,7 @@ pub fn system_prompt_for_mode_with_context_and_skills(
             context_window_override: None,
             verbosity: None,
             recovery_hint: None,
-            skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-            skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+            skills_config: Default::default(),
             plugin_registry: None,
             mode: AppMode::Agent,
         },
@@ -1372,34 +1368,14 @@ pub(crate) fn system_prompt_with_instruction_assembly_for_host(
     // `skills_dir` is configured, union it with the workspace view instead of
     // treating it as a fallback; the workspace view often returns Some and
     // would otherwise shadow the configured directory entirely.
-    let skill_discovery_mode = session_context.skills_discovery_mode;
-    // The index budget follows the configured share of the route's context window,
-    // so a 1M route sees the whole catalogue while a small local window still
-    // keeps every skill name. Session-pinned: the window is fixed per route.
-    let skills_budget = session_context
-        .skills_listing_config
-        .budget_chars(session_context.context_window_override);
-    let skills_block = match skills_dir {
-        Some(dir) => {
-            codewhale_skills::render_available_skills_context_for_workspace_and_dir_with_mode_and_plugins(
-                workspace,
-                dir,
-                skill_discovery_mode,
-                session_context.locale_tag,
-                session_context.plugin_registry,
-                session_context.skills_listing_config,
-                skills_budget,
-            )
-        }
-        None => codewhale_skills::render_available_skills_context_for_workspace_with_mode_and_plugins(
-            workspace,
-            skill_discovery_mode,
-            session_context.locale_tag,
-            session_context.plugin_registry,
-            session_context.skills_listing_config,
-            skills_budget,
-        ),
-    };
+    let skills_block = codewhale_skills::render_index(
+        workspace,
+        skills_dir,
+        &session_context.skills_config,
+        session_context.locale_tag,
+        session_context.plugin_registry,
+        session_context.context_window_override,
+    );
     if let Some(block) = skills_block {
         full_prompt = format!("{full_prompt}\n\n{block}");
     }
@@ -2086,8 +2062,7 @@ mod tests {
                     model_id: "codewhale",
                     context_window_override: None,
                     verbosity: None,
-                    skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-                    skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+                    skills_config: Default::default(),
                     plugin_registry: None,
                     recovery_hint: None,
                     mode: AppMode::Agent,
@@ -2560,8 +2535,7 @@ mod tests {
                     model_id: "codewhale",
                     context_window_override: None,
                     verbosity: None,
-                    skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-                    skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+                    skills_config: Default::default(),
                     plugin_registry: None,
                     recovery_hint: None,
                     mode: AppMode::Agent,
@@ -2687,8 +2661,7 @@ mod tests {
                     model_id: "codewhale",
                     context_window_override: None,
                     verbosity: None,
-                    skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-                    skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+                    skills_config: Default::default(),
                     plugin_registry: None,
                     recovery_hint: None,
                     mode: AppMode::Agent,
@@ -2736,8 +2709,7 @@ mod tests {
                     model_id: "codewhale",
                     context_window_override: None,
                     verbosity: None,
-                    skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-                    skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+                    skills_config: Default::default(),
                     plugin_registry: None,
                     recovery_hint: None,
                     mode: AppMode::Agent,
@@ -2831,8 +2803,7 @@ mod tests {
                     model_id: "codewhale",
                     context_window_override: None,
                     verbosity: None,
-                    skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-                    skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+                    skills_config: Default::default(),
                     plugin_registry: None,
                     recovery_hint: None,
                     mode: AppMode::Agent,
@@ -3003,8 +2974,7 @@ mod tests {
                     model_id: "codewhale",
                     context_window_override: None,
                     verbosity: None,
-                    skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-                    skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+                    skills_config: Default::default(),
                     plugin_registry: None,
                     recovery_hint: None,
                     mode: AppMode::Agent,
@@ -3035,8 +3005,7 @@ mod tests {
                     model_id: "codewhale",
                     context_window_override: None,
                     verbosity: None,
-                    skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-                    skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+                    skills_config: Default::default(),
                     plugin_registry: None,
                     recovery_hint: None,
                     mode: AppMode::Agent,
@@ -3081,8 +3050,7 @@ mod tests {
                     model_id: "codewhale",
                     context_window_override: None,
                     verbosity: None,
-                    skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-                    skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+                    skills_config: Default::default(),
                     plugin_registry: None,
                     recovery_hint: None,
                     mode: AppMode::Agent,
@@ -3212,8 +3180,7 @@ mod tests {
                     model_id: "codewhale",
                     context_window_override: None,
                     verbosity: None,
-                    skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-                    skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+                    skills_config: Default::default(),
                     plugin_registry: None,
                     recovery_hint: None,
                     mode: AppMode::Agent,
@@ -3245,8 +3212,7 @@ mod tests {
                     model_id: "codewhale",
                     context_window_override: None,
                     verbosity: None,
-                    skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-                    skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+                    skills_config: Default::default(),
                     plugin_registry: None,
                     recovery_hint: None,
                     mode: AppMode::Agent,
@@ -3483,8 +3449,7 @@ mod tests {
                     model_id: "codewhale",
                     context_window_override: None,
                     verbosity: None,
-                    skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-                    skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+                    skills_config: Default::default(),
                     plugin_registry: None,
                     recovery_hint: None,
                     mode: AppMode::Agent,
@@ -3519,8 +3484,7 @@ mod tests {
                     model_id: "codewhale",
                     context_window_override: None,
                     verbosity: None,
-                    skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-                    skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+                    skills_config: Default::default(),
                     plugin_registry: None,
                     recovery_hint: None,
                     mode: AppMode::Agent,
@@ -3554,8 +3518,7 @@ mod tests {
                     context_window_override: None,
                     verbosity: None,
                     recovery_hint,
-                    skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-                    skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+                    skills_config: Default::default(),
                     plugin_registry: None,
                     mode: AppMode::Agent,
                 },
@@ -3665,8 +3628,7 @@ mod tests {
                     model_id: "glm-5.2",
                     context_window_override: Some(1_000_000),
                     verbosity: None,
-                    skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-                    skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+                    skills_config: Default::default(),
                     plugin_registry: None,
                     recovery_hint: None,
                     mode: AppMode::Agent,
@@ -4194,8 +4156,7 @@ mod tests {
                     model_id: "codewhale",
                     context_window_override: None,
                     verbosity: Some(" Concise "),
-                    skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-                    skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+                    skills_config: Default::default(),
                     plugin_registry: None,
                     recovery_hint: None,
                     mode: AppMode::Agent,
@@ -4226,8 +4187,7 @@ mod tests {
                 model_id: "deepseek-v4-pro",
                 context_window_override: None,
                 verbosity: Some("concise"),
-                skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-                skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+                skills_config: Default::default(),
                 plugin_registry: None,
                 recovery_hint: None,
                 mode: AppMode::Agent,
@@ -4281,8 +4241,7 @@ mod tests {
             model_id: "codewhale",
             context_window_override: None,
             verbosity: None,
-            skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-            skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+            skills_config: Default::default(),
             plugin_registry: None,
             recovery_hint: None,
             mode: AppMode::Agent,

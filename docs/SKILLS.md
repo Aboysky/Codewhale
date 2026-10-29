@@ -383,6 +383,27 @@ listing_budget_fraction = 0.05
 
 See [CONFIGURATION.md](CONFIGURATION.md) for the full config surface.
 
+
+### Bundled skills
+
+Use `[skills.bundled]` independently of the discovery directory:
+
+```toml
+[skills.bundled]
+install = "auto"
+selected = []
+disabled = ["debug"]
+explicit_only = ["handoff"]
+```
+
+`auto` preserves the generation-marker and deletion-as-opt-out behavior. Setting top-level `skills_dir` disables automatic bundle installation in this mode. `all` installs enabled missing names even with a current marker or a discovery override, writing only to the owned global root (`$CODEWHALE_HOME/skills`, normally `~/.codewhale/skills`). `none` writes no files and leaves the marker untouched. Discovery continues in every mode.
+
+An empty `selected` list enables the whole bundle; a nonempty list limits installation and discovery. `disabled` wins and ignores the bundled copy before name resolution, so a compatible root can supply the same name. `explicit_only` removes an enabled bundled copy from the model index and model `load_skill`, while retaining explicit `/skill <name>` invocation. Canonical names and their compatibility aliases share policy: `documents` maps to `docx`, `presentations` to `pptx`, and `spreadsheets` to `xlsx`.
+
+These lists apply only to recognized shipped copies in the owned global root. Edited files, managed installs with `.installed-from`, project copies and compatible-root copies keep their own behavior. Bundle settings never delete skill files, including retired pack entries. `all` preserves edited and managed bodies. A marker that is a directory or symlink is refused without deleting its contents. Profile fields merge independently; an explicit empty list clears the inherited list.
+
+`codewhale doctor` and its JSON output report mode, marker generation, installed and missing names, disabled and explicit-only counts, shadowing, unknown names and ignored explicit-only entries. `/skills inspect` adds each bundled path and its selection reason. Unknown config names produce a doctor warning; they do not name a write target.
+
 ## Operator checklist
 
 1. Prefer `/skills manage` for day-to-day management; keep `--remote` / `sync` explicit.

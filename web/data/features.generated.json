@@ -2,7 +2,7 @@
   "format": "codewhale.features.v1",
   "source": {
     "path": "docs/features.toml",
-    "sha256": "fbccb73908b32c14317379945a01db61849263856cb5b4c93fcb4410a217675d"
+    "sha256": "befff80905f75bdddabe319b302d3a047c8d1900aa5d10d50bafd50d9c1c8b35"
   },
   "features": [
     {
@@ -591,7 +591,7 @@
     {
       "id": "skills",
       "name": "Skills",
-      "summary": "Trusted instruction packages with owned roots, invocation controls and shared, configurable index limits.",
+      "summary": "Trusted instruction packages with bundle policy, invocation controls and shared, configurable index limits.",
       "status": "stable",
       "surfaces": {
         "tui": "stable",

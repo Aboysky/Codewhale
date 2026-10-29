@@ -5034,6 +5034,21 @@ listing_budget_fraction = 0.01
         let invalid: Config = toml::from_str(&format!("[skills]\n{value}"))?;
         assert!(invalid.validate().is_err(), "accepted {value}");
     }
+
+    for (mode, writes) in [("auto", false), ("all", true), ("none", false)] {
+        let config: Config = toml::from_str(&format!(
+            "skills_dir = '/discovery-only'\n[skills.bundled]\ninstall = '{mode}'\nselected = ['documents']\ndisabled = ['debug']\nexplicit_only = ['pdf']"
+        ))?;
+        assert_eq!(config.bundled_skills_install_dir().is_some(), writes);
+        if writes {
+            assert_eq!(config.bundled_skills_install_dir(), owned_skills_dir());
+        }
+        assert_eq!(
+            config.skills_config().bundled.selected,
+            Some(vec!["documents".into()])
+        );
+    }
+    assert!(toml::from_str::<Config>("[skills.bundled]\ninstall = 'invalid'").is_err());
     Ok(())
 }
 
@@ -6320,6 +6335,16 @@ fn profile_skills_config_merges_individual_fields() {
     assert_eq!(skills.flat_workspace_root, Some(false));
     assert_eq!(skills.listing_max_description_chars, Some(80));
     assert_eq!(skills.listing_budget_fraction, Some(0.01));
+    let base: Config = toml::from_str("[skills.bundled]\ninstall='all'\nselected=['debug']\ndisabled=['pdf']\nexplicit_only=['debug']").unwrap();
+    let override_cfg: Config =
+        toml::from_str("[skills.bundled]\nselected=[]\nexplicit_only=[]").unwrap();
+    let merged = merge_skills_config(base.skills, override_cfg.skills)
+        .unwrap()
+        .bundled;
+    assert_eq!(merged.install, Some(BundledSkillsInstall::All));
+    assert_eq!(merged.selected, Some(vec![]));
+    assert_eq!(merged.explicit_only, Some(vec![]));
+    assert_eq!(merged.disabled, Some(vec!["pdf".into()]));
 }
 
 #[test]

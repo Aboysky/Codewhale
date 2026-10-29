@@ -387,7 +387,7 @@ fn workspace_prompt_omits_disabled_skills_without_configured_directory() {
     let _userprofile = codewhale_runtime::test_support::EnvVarGuard::set("USERPROFILE", &home);
     let _codewhale_home = codewhale_runtime::test_support::EnvVarGuard::set(
         "CODEWHALE_HOME",
-        home.join(".codewhale"),
+        home.join("isolated-product-state"),
     );
     codewhale_runtime::test_support::trust_workspace(&workspace);
 
@@ -407,6 +407,105 @@ fn workspace_prompt_omits_disabled_skills_without_configured_directory() {
 
     assert!(rendered.contains("enabled-skill"));
     assert!(!rendered.contains("disabled-skill"));
+    let owned = codewhale_runtime::config::owned_skills_dir().unwrap();
+    let config = codewhale_runtime::config::SkillsConfig {
+        bundled: codewhale_runtime::config::BundledSkillsConfig {
+            install: Some(codewhale_runtime::config::BundledSkillsInstall::All),
+            selected: Some(vec!["debug".into(), "documents".into(), "pdf".into()]),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    super::install_system_skills(&owned, &config.bundled).unwrap();
+    write_skill(
+        &home.join(".agents/skills"),
+        "debug",
+        "User debug",
+        "from compatible root",
+    );
+    let baseline = super::discover_for_workspace(&workspace, None, &config, None);
+    assert!(baseline.get("debug").unwrap().path.starts_with(&owned));
+    let mut filtered = config.clone();
+    filtered.bundled.disabled = Some(vec!["debug".into(), "docx".into()]);
+    filtered.bundled.explicit_only = Some(vec![
+        "pdf".into(),
+        "debug\n".into(),
+        "unknown-xyz".into(),
+        "odd\n\u{1b}name".into(),
+    ]);
+    let registry = super::discover_for_workspace(&workspace, None, &filtered, None);
+    assert!(
+        registry
+            .get("debug")
+            .unwrap()
+            .body
+            .contains("from compatible root")
+    );
+    assert!(
+        registry
+            .list()
+            .iter()
+            .all(|skill| skill.name != "docx" && skill.name != "documents")
+    );
+    assert_eq!(
+        registry.get("pdf").unwrap().invocation,
+        super::SkillInvocation::ExplicitOnly
+    );
+    assert!(registry.get("pdf").unwrap().invocation.user_invocable());
+    let index = super::render_index(&workspace, None, &filtered, "en", None, None).unwrap();
+    assert!(
+        !index
+            .lines()
+            .any(|line| line == "- pdf" || line.starts_with("- pdf:"))
+    );
+    let status = super::bundled_skills_status(&filtered, &registry).unwrap();
+    assert!(status.disabled.contains(&"debug"));
+    assert!(status.disabled.contains(&"documents"));
+    assert!(status.explicit_only.contains(&"pdf"));
+    assert_eq!(
+        status.unknown,
+        vec![
+            "explicit_only=unknown-xyz".to_string(),
+            format!("explicit_only={}", "odd\n\u{1b}name".escape_debug())
+        ]
+    );
+    assert_eq!(status.ignored, vec![r"debug\n"]);
+    assert!(status.unknown.iter().all(|name| !name.contains('\n')));
+    assert!(!status.inspection().join("\n").contains('\u{1b}'));
+    assert!(
+        status
+            .inspection()
+            .iter()
+            .any(|line| line.contains("disabled by config"))
+    );
+    assert!(
+        super::discover_for_workspace(&workspace, None, &config, None)
+            .get("debug")
+            .unwrap()
+            .path
+            .starts_with(&owned)
+    );
+    std::fs::write(owned.join("debug/.installed-from"), "managed-marker").unwrap();
+    assert!(
+        super::discover_for_workspace(&workspace, None, &filtered, None)
+            .get("debug")
+            .unwrap()
+            .path
+            .starts_with(&owned)
+    );
+    std::fs::remove_file(owned.join("debug/.installed-from")).unwrap();
+    std::fs::write(
+        owned.join("debug/SKILL.md"),
+        "---\nname: debug\ndescription: manual\n---\nuser owned\n",
+    )
+    .unwrap();
+    assert!(
+        super::discover_for_workspace(&workspace, None, &filtered, None)
+            .get("debug")
+            .unwrap()
+            .body
+            .contains("user owned")
+    );
 }
 
 #[test]

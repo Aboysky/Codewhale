@@ -1091,6 +1091,7 @@ pub struct SkillRegistryProjection {
     pub workspace: String,
     pub skills_dir: String,
     pub mode_label: String,
+    pub bundled_status: Vec<String>,
     pub dirs: Vec<String>,
     pub entries: Vec<SkillEntry>,
     pub warnings: Vec<String>,

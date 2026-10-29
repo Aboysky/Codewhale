@@ -285,6 +285,27 @@ flat_workspace_root = false
 
 完整配置面参见 [CONFIGURATION.md](CONFIGURATION.md)。
 
+
+### 捆绑技能
+
+`[skills.bundled]` 与发现目录独立配置：
+
+```toml
+[skills.bundled]
+install = "auto"
+selected = []
+disabled = ["debug"]
+explicit_only = ["handoff"]
+```
+
+`auto` 保留版本标记及删除目录即退出安装的规则；设置顶层 `skills_dir` 后，此模式不会安装捆绑技能。`all` 会补装已启用但缺失的名称，即使版本标记已是当前版本或配置了发现目录，也只写入全局自有目录（`$CODEWHALE_HOME/skills`，通常为 `~/.codewhale/skills`）。`none` 不写入文件，也不修改版本标记。三种模式均保留发现过程。
+
+空 `selected` 表示整个安装包，非空列表同时限制安装和发现。`disabled` 优先，在名称合并之前跳过捆绑副本，因此兼容目录的同名技能仍可生效。`explicit_only` 使已启用的捆绑副本退出模型索引和模型 `load_skill`，但保留用户显式 `/skill <name>` 调用。别名沿用规范名称的策略：`documents` 对应 `docx`，`presentations` 对应 `pptx`，`spreadsheets` 对应 `xlsx`。
+
+列表仅影响全局自有目录中可识别的发行副本。用户修改的文件、带 `.installed-from` 的托管安装、项目副本及兼容目录副本保留原有行为。配置不会删除任何技能文件，已退出安装包的旧技能也保留在磁盘上。`all` 不覆盖修改版或托管正文。目录或符号链接形式的版本标记会被拒绝，不会清除其中内容。配置档逐字段合并，显式空列表清空继承列表。
+
+`codewhale doctor` 及其 JSON 输出显示模式、标记版本、安装和缺失名称、禁用与显式调用数量、遮蔽、未知名称及被忽略的显式调用条目。`/skills inspect` 还显示每个捆绑路径和选择原因。未知配置名称会产生 doctor 警告，不会成为写入路径。
+
 ## 操作员清单
 
 1. 日常管理优先使用 `/skills manage`；把 `--remote` / `sync` 保持显式。

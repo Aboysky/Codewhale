@@ -191,19 +191,21 @@ impl SkillRootCatalog {
             "project-codex",
         );
 
-        if let Some(home) = home_dir {
+        if let Some(global_owned) = owned_global_skills_dir(home_dir) {
             push_descriptor(
                 &mut roots,
                 &mut precedence,
                 SkillRootKind::CodeWhaleGlobal,
                 SkillRootAccess::WritableOwned,
                 SkillScope::Global,
-                home.join(".codewhale/skills"),
+                global_owned,
                 true,
                 true,
                 "global-codewhale",
                 true,
             );
+        }
+        if let Some(home) = home_dir {
             for (harness, directory, id) in [
                 (CompatibleHarness::Agents, ".agents", "global-agents"),
                 (CompatibleHarness::Claude, ".claude", "global-claude"),
@@ -478,8 +480,7 @@ pub fn classify_configured_skills_dir(
             SkillScope::Project,
         );
     }
-    if let Some(home) = home_dir {
-        let global_owned = home.join(".codewhale").join("skills");
+    if let Some(global_owned) = owned_global_skills_dir(home_dir) {
         if paths_refer_to_same_dir(&global_owned, skills_dir) {
             return (
                 SkillRootKind::CodeWhaleGlobal,
@@ -740,6 +741,14 @@ fn insert_configured_root(
         root.precedence = Some(idx);
     }
     *precedence = roots.len();
+}
+
+fn owned_global_skills_dir(home: Option<&Path>) -> Option<PathBuf> {
+    if home == codewhale_paths::user_home().as_deref() {
+        codewhale_runtime::config::owned_skills_dir()
+    } else {
+        home.map(|home| home.join(".codewhale/skills"))
+    }
 }
 
 #[cfg(test)]

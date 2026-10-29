@@ -322,10 +322,8 @@ pub struct EngineConfig {
     pub mcp_oauth_callback_url: Option<String>,
     /// Directory containing discoverable skills.
     pub skills_dir: PathBuf,
-    /// Restrict skill discovery to CodeWhale-owned roots plus explicit
-    /// `skills_dir` configuration.
-    pub skills_discovery_mode: codewhale_skills::SkillDiscoveryMode,
-    pub skills_listing_config: codewhale_skills::SkillListingConfig,
+    /// Session-pinned skill discovery, bundle policy and ambient index limits.
+    pub skills_config: std::sync::Arc<codewhale_runtime::config::SkillsConfig>,
     /// Immutable plugin authority snapshot scoped to `workspace`. Normal App
     /// hosts provide this explicitly; headless/embed callers that leave it
     /// unset receive a fresh workspace-specific snapshot in [`Engine::new`].
@@ -602,8 +600,7 @@ impl Default for EngineConfig {
             mcp_oauth_callback_port: None,
             mcp_oauth_callback_url: None,
             skills_dir: codewhale_skills::default_skills_dir(),
-            skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::Compatible,
-            skills_listing_config: codewhale_skills::SkillListingConfig::default(),
+            skills_config: Default::default(),
             plugin_registry: None,
             instructions: Vec::new(),
             project_context_pack_enabled: false,
@@ -2364,8 +2361,7 @@ impl Engine {
                     ),
                     verbosity: config.verbosity.as_deref(),
                     recovery_hint: recovery_hint.as_deref(),
-                    skills_discovery_mode: config.skills_discovery_mode,
-                    skills_listing_config: config.skills_listing_config,
+                    skills_config: config.skills_config.clone(),
                     plugin_registry: Some(plugin_registry.as_ref()),
                     // Matches `current_mode`'s initial value below; a later
                     // `/mode` switch re-runs `refresh_system_prompt`.
@@ -8008,8 +8004,7 @@ impl Engine {
         .with_runtime_services(self.config.runtime_services.clone())
         .with_skills_config(
             self.config.skills_dir.clone(),
-            self.config.skills_discovery_mode,
-            self.config.skills_listing_config,
+            self.config.skills_config.clone(),
         )
         .with_plugin_registry(Arc::clone(&self.plugin_registry))
         .with_session_objects(crate::rlm::session::SessionObjectSnapshot::new(
@@ -9212,7 +9207,7 @@ impl Engine {
         let warning = codewhale_skills::untrusted_project_skills_warning(
             &self.session.workspace,
             Some(&self.config.skills_dir),
-            self.config.skills_discovery_mode,
+            codewhale_skills::SkillDiscoveryMode::from_config(&self.config.skills_config),
         );
         let previous = self
             .session
@@ -9722,8 +9717,7 @@ impl Engine {
                 )),
                 verbosity: context.verbosity.as_deref(),
                 recovery_hint: recovery_hint.as_deref(),
-                skills_discovery_mode: self.config.skills_discovery_mode,
-                skills_listing_config: self.config.skills_listing_config,
+                skills_config: self.config.skills_config.clone(),
                 plugin_registry: Some(self.plugin_registry.as_ref()),
                 mode: context.mode,
             },

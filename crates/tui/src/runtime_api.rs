@@ -1707,7 +1707,8 @@ pub(crate) fn open_runtime_threads_for_host(
         binding,
     )?);
     if let Some(skills_dir) = config.bundled_skills_install_dir()
-        && let Err(error) = codewhale_skills::install_system_skills(&skills_dir)
+        && let Err(error) =
+            codewhale_skills::install_system_skills(&skills_dir, &config.skills_config().bundled)
     {
         codewhale_runtime::logging::warn(format!("Failed to install system skills: {error}"));
     }
@@ -5542,11 +5543,11 @@ async fn list_hooks(
 async fn list_skills(
     State(state): State<RuntimeApiState>,
 ) -> Result<Json<SkillsResponse>, ApiError> {
-    let (skills_dir, mode) = {
+    let (skills_dir, skills_config) = {
         let config = state.config.read();
         let skills_dir = resolve_skills_dir(&config, &state.workspace);
-        let mode = codewhale_skills::SkillDiscoveryMode::from_config(&config.skills_config());
-        (skills_dir, mode)
+        let skills_config = config.skills_config();
+        (skills_dir, skills_config)
     };
     let plugin_registry = state
         .plugin_discovery
@@ -5554,7 +5555,7 @@ async fn list_skills(
     let (registry, directories) = discover_skills_for_runtime_api(
         &state.workspace,
         &skills_dir,
-        mode,
+        &skills_config,
         Some(plugin_registry.as_ref()),
     );
     let mut skill_state = state.skill_state.lock().await;
@@ -5583,11 +5584,11 @@ async fn set_skill_enabled(
     Path(name): Path<String>,
     Json(req): Json<SetSkillEnabledRequest>,
 ) -> Result<Json<SetSkillEnabledResponse>, ApiError> {
-    let (skills_dir, mode) = {
+    let (skills_dir, skills_config) = {
         let config = state.config.read();
         let skills_dir = resolve_skills_dir(&config, &state.workspace);
-        let mode = codewhale_skills::SkillDiscoveryMode::from_config(&config.skills_config());
-        (skills_dir, mode)
+        let skills_config = config.skills_config();
+        (skills_dir, skills_config)
     };
     let plugin_registry = state
         .plugin_discovery
@@ -5595,7 +5596,7 @@ async fn set_skill_enabled(
     let (registry, directories) = discover_skills_for_runtime_api(
         &state.workspace,
         &skills_dir,
-        mode,
+        &skills_config,
         Some(plugin_registry.as_ref()),
     );
     let exists = registry.list().iter().any(|skill| skill.name == name);
@@ -5636,11 +5637,11 @@ async fn get_skill_detail(
     tokio::task::spawn_blocking(move || {
         #[cfg(test)]
         let _membership = crate::test_support::join_env_scope(env_ticket);
-        let (skills_dir, mode) = {
+        let (skills_dir, skills_config) = {
             let config = state.config.read();
             let skills_dir = resolve_skills_dir(&config, &state.workspace);
-            let mode = codewhale_skills::SkillDiscoveryMode::from_config(&config.skills_config());
-            (skills_dir, mode)
+            let skills_config = config.skills_config();
+            (skills_dir, skills_config)
         };
         let plugin_registry = state
             .plugin_discovery
@@ -5648,7 +5649,7 @@ async fn get_skill_detail(
         let (registry, directories) = discover_skills_for_runtime_api(
             &state.workspace,
             &skills_dir,
-            mode,
+            &skills_config,
             Some(plugin_registry.as_ref()),
         );
         let Some(skill) = registry.get(&name) else {
@@ -10777,15 +10778,16 @@ fn skills_search_directories(
 fn discover_skills_for_runtime_api(
     workspace: &FsPath,
     skills_dir: &FsPath,
-    mode: codewhale_skills::SkillDiscoveryMode,
+    config: &codewhale_runtime::config::SkillsConfig,
     plugins: Option<&codewhale_plugins::PluginRegistry>,
 ) -> (codewhale_skills::SkillRegistry, Vec<PathBuf>) {
-    let directories = skills_search_directories(workspace, skills_dir, mode);
-    let registry = codewhale_skills::discover_from_directories_in_workspace(
-        directories.clone(),
-        Some(workspace),
-        plugins,
+    let directories = skills_search_directories(
+        workspace,
+        skills_dir,
+        codewhale_skills::SkillDiscoveryMode::from_config(config),
     );
+    let registry =
+        codewhale_skills::discover_for_workspace(workspace, Some(skills_dir), config, plugins);
     (registry, directories)
 }
 

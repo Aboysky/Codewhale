@@ -11976,11 +11976,8 @@ async fn unicode_skill_activation_matches_api_load_and_owned_lifecycle() -> Resu
     .await?
     .context("isolated skill API fixture requires loopback")?;
     let client = codewhale_release::tls::reqwest_client();
-    let context = ToolContext::new(&workspace).with_skills_config(
-        workspace.join(".codewhale/skills"),
-        codewhale_skills::SkillDiscoveryMode::Compatible,
-        codewhale_skills::SkillListingConfig::default(),
-    );
+    let context = ToolContext::new(&workspace)
+        .with_skills_config(workspace.join(".codewhale/skills"), Default::default());
     let tool = crate::tools::skill::LoadSkillTool;
 
     let before: serde_json::Value = client

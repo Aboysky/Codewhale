@@ -763,7 +763,6 @@ mod tests {
     use crate::tui::app::{App, TuiOptions};
     use codewhale_runtime::config::Config;
     use crossterm::event::{KeyEventKind, KeyModifiers};
-    use std::ffi::OsString;
     use std::fs;
     use tempfile::TempDir;
 
@@ -777,9 +776,10 @@ mod tests {
     }
 
     struct IsolatedHome {
+        _home: crate::test_support::EnvVarGuard,
+        _userprofile: crate::test_support::EnvVarGuard,
+        _codewhale_home: crate::test_support::EnvVarGuard,
         _lock: crate::test_support::TestEnvLock,
-        home_prev: Option<OsString>,
-        userprofile_prev: Option<OsString>,
     }
 
     impl IsolatedHome {
@@ -787,32 +787,14 @@ mod tests {
             let lock = crate::test_support::lock_test_env();
             let home = tmpdir.path().join("home");
             fs::create_dir_all(&home).unwrap();
-            let home_prev = std::env::var_os("HOME");
-            let userprofile_prev = std::env::var_os("USERPROFILE");
-            // SAFETY: serialized by TestEnvLock in this crate's tests.
-            unsafe {
-                std::env::set_var("HOME", &home);
-                std::env::set_var("USERPROFILE", &home);
-            }
             Self {
+                _home: crate::test_support::EnvVarGuard::set("HOME", &home),
+                _userprofile: crate::test_support::EnvVarGuard::set("USERPROFILE", &home),
+                _codewhale_home: crate::test_support::EnvVarGuard::set(
+                    "CODEWHALE_HOME",
+                    home.join(".codewhale"),
+                ),
                 _lock: lock,
-                home_prev,
-                userprofile_prev,
-            }
-        }
-    }
-
-    impl Drop for IsolatedHome {
-        fn drop(&mut self) {
-            unsafe {
-                match &self.home_prev {
-                    Some(v) => std::env::set_var("HOME", v),
-                    None => std::env::remove_var("HOME"),
-                }
-                match &self.userprofile_prev {
-                    Some(v) => std::env::set_var("USERPROFILE", v),
-                    None => std::env::remove_var("USERPROFILE"),
-                }
             }
         }
     }
@@ -916,7 +898,8 @@ mod tests {
         let _home = IsolatedHome::new(&tmp);
         let mut app = app_in(&tmp);
         app.skills_dir = tmp.path().join("home").join(".codewhale").join("skills");
-        codewhale_skills::install_system_skills(&app.skills_dir).unwrap();
+        codewhale_skills::install_system_skills(&app.skills_dir, &app.skills_config.bundled)
+            .unwrap();
 
         let view = SkillsManagerView::new(&app);
         assert!(!view.skills.is_empty());
@@ -947,7 +930,8 @@ mod tests {
         let _home = IsolatedHome::new(&tmp);
         let mut app = app_in(&tmp);
         app.skills_dir = tmp.path().join("home").join(".codewhale").join("skills");
-        codewhale_skills::install_system_skills(&app.skills_dir).unwrap();
+        codewhale_skills::install_system_skills(&app.skills_dir, &app.skills_config.bundled)
+            .unwrap();
         write_skill_pkg(&app.skills_dir.join("my-workflow"), "my-workflow", "mine");
 
         let view = SkillsManagerView::new(&app);

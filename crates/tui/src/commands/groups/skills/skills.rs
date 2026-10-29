@@ -29,10 +29,10 @@ use crate::tui::app::AppAction;
 /// dispatcher fallback (`run_skill_by_name`) and the host activation helper;
 /// kept co-located for FEAT-042.
 fn discover_visible_skills(app: &crate::tui::app::App) -> codewhale_skills::SkillRegistry {
-    codewhale_skills::discover_for_workspace_and_dir_with_mode_and_plugins(
+    codewhale_skills::discover_for_workspace(
         &app.workspace,
-        &app.skills_dir,
-        app.skills_discovery_mode,
+        Some(&app.skills_dir),
+        &app.skills_config,
         Some(app.extension_plugin_view().as_ref()),
     )
     .into_enabled()
@@ -133,7 +133,7 @@ fn activate_skill(app: &mut crate::tui::app::App, name: &str) -> CommandResult {
 }
 
 // ---------------------------------------------------------------------------
-// Portable rendering helpers (byte-identical to the pre-migration handlers)
+// Portable rendering helpers for the shared skill registry projection
 // ---------------------------------------------------------------------------
 
 /// Render registry warnings as the baseline suffix block.
@@ -451,6 +451,9 @@ fn inspect_skills(group: &mut dyn CommandSkillGroupContext) -> CommandResult {
     let _ = writeln!(output, "Discovery mode: {}", projection.mode_label);
     let _ = writeln!(output, "Workspace: {}", projection.workspace);
     let _ = writeln!(output, "Configured skills dir: {}", projection.skills_dir);
+    for line in &projection.bundled_status {
+        let _ = writeln!(output, "{line}");
+    }
 
     if projection.dirs.is_empty() {
         output.push_str("\nSearched directories: none found\n");
@@ -913,6 +916,7 @@ mod tests {
                     workspace: "/ws".to_string(),
                     skills_dir: "/ws/.codewhale/skills".to_string(),
                     mode_label: "compatible".to_string(),
+                    bundled_status: vec![],
                     dirs: vec!["/ws/.codewhale/skills".to_string()],
                     entries,
                     warnings: vec![],
@@ -1172,6 +1176,10 @@ mod tests {
         let mut entry = demo_entry();
         entry.index_note = Some("Indice limité à 80 caractères".to_string());
         let mut group = FakeSkillGroup::new(vec![entry]);
+        group.projection.bundled_status = vec![
+            "Bundled skills: install=none".into(),
+            "pdf: explicit-only by config (/owned/pdf/SKILL.md)".into(),
+        ];
         let result = list_skills(&mut group, Some("inspect"));
         let msg = result.message.expect("expected message");
         assert!(msg.starts_with("Skills Inspect\n"), "{msg}");
@@ -1183,6 +1191,8 @@ mod tests {
         assert!(msg.contains("source: native"));
         assert!(msg.contains("path: /ws/.codewhale/skills/demo"));
         assert!(msg.contains("Indice limité à 80 caractères"));
+        assert!(msg.contains("Bundled skills: install=none"));
+        assert!(msg.contains("pdf: explicit-only by config (/owned/pdf/SKILL.md)"));
     }
 
     #[test]

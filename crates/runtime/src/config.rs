@@ -2579,9 +2579,11 @@ pub struct RuntimeApiConfig {
     pub cors_origins: Option<Vec<String>>,
 }
 
-/// `[skills]` table — knobs for the community-skill installer.
+/// `[skills]` table — discovery, ambient index and installer configuration.
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct SkillsConfig {
+    #[serde(default)]
+    pub bundled: BundledSkillsConfig,
     #[serde(default)]
     pub listing_max_description_chars: Option<usize>,
     #[serde(default)]
@@ -2603,6 +2605,23 @@ pub struct SkillsConfig {
     /// Otherwise the flat root is visible only to compatible audit.
     #[serde(default)]
     pub flat_workspace_root: Option<bool>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Default, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BundledSkillsInstall {
+    #[default]
+    Auto,
+    All,
+    None,
+}
+
+#[derive(Debug, Clone, Deserialize, Default, PartialEq, Eq, Hash, Serialize)]
+pub struct BundledSkillsConfig {
+    pub install: Option<BundledSkillsInstall>,
+    pub selected: Option<Vec<String>>,
+    pub disabled: Option<Vec<String>>,
+    pub explicit_only: Option<Vec<String>>,
 }
 
 impl SkillsConfig {
@@ -6572,20 +6591,14 @@ impl Config {
 
     #[must_use]
     pub fn bundled_skills_install_dir(&self) -> Option<PathBuf> {
-        if self.skills_dir.is_some() {
-            return None;
+        match self.skills_config().bundled.install.unwrap_or_default() {
+            BundledSkillsInstall::None => return None,
+            BundledSkillsInstall::All => return owned_skills_dir(),
+            BundledSkillsInstall::Auto if self.skills_dir.is_some() => return None,
+            BundledSkillsInstall::Auto => {}
         }
         let directory = default_skills_dir()?;
-        #[cfg(any(test, all(feature = "test-thread-scoped-state", debug_assertions)))]
-        if !crate::test_support::guarded_environment_provides_state_paths() {
-            return Some(directory);
-        }
-        let owned = match codewhale_home_dir().ok()? {
-            Some(home) => home.join("skills"),
-            None => codewhale_paths::user_home()?
-                .join(".codewhale")
-                .join("skills"),
-        };
+        let owned = owned_skills_dir()?;
         (directory == owned).then_some(directory)
     }
 
@@ -7688,7 +7701,9 @@ use paths::{
     default_skills_dir, env_config_path, expand_pathbuf, try_default_config_path,
     workspace_config_key,
 };
-pub use paths::{clipboard_images_dir, expand_path, home_config_path, is_home_config_path};
+pub use paths::{
+    clipboard_images_dir, expand_path, home_config_path, is_home_config_path, owned_skills_dir,
+};
 
 /// Activate facts only at accepted inference runtime settings boundaries.
 /// Identical settings preserve the shared ticket; readers track its generation.
@@ -10114,6 +10129,15 @@ fn merge_skills_config(
         (Some(base), None) => Some(base),
         (None, Some(override_cfg)) => Some(override_cfg),
         (Some(base), Some(override_cfg)) => Some(SkillsConfig {
+            bundled: BundledSkillsConfig {
+                install: override_cfg.bundled.install.or(base.bundled.install),
+                selected: override_cfg.bundled.selected.or(base.bundled.selected),
+                disabled: override_cfg.bundled.disabled.or(base.bundled.disabled),
+                explicit_only: override_cfg
+                    .bundled
+                    .explicit_only
+                    .or(base.bundled.explicit_only),
+            },
             listing_max_description_chars: override_cfg
                 .listing_max_description_chars
                 .or(base.listing_max_description_chars),

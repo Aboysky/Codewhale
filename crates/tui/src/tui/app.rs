@@ -1551,7 +1551,7 @@ pub(crate) struct SkillCacheScope {
     pub(crate) epoch: u64,
     pub(crate) workspace: std::path::PathBuf,
     pub(crate) skills_dir: std::path::PathBuf,
-    pub(crate) mode: codewhale_skills::SkillDiscoveryMode,
+    pub(crate) config: std::sync::Arc<codewhale_runtime::config::SkillsConfig>,
     pub(crate) plugins: std::sync::Arc<codewhale_plugins::PluginRegistry>,
 }
 
@@ -1825,8 +1825,7 @@ pub struct App {
     pub legacy_plugin_tools_dir: Option<PathBuf>,
     pub mcp_config_path: PathBuf,
     pub skills_dir: PathBuf,
-    pub skills_discovery_mode: codewhale_skills::SkillDiscoveryMode,
-    pub skills_listing_config: codewhale_skills::SkillListingConfig,
+    pub skills_config: std::sync::Arc<codewhale_runtime::config::SkillsConfig>,
     /// Whether the optional project context pack was enabled when this
     /// session loaded its configuration. Context diagnostics consult this
     /// source of truth even before the first system prompt is assembled.
@@ -3256,21 +3255,16 @@ impl App {
     pub(crate) fn discover_cached_skills(
         workspace: &std::path::Path,
         skills_dir: &std::path::Path,
-        discovery_mode: codewhale_skills::SkillDiscoveryMode,
+        config: &codewhale_runtime::config::SkillsConfig,
         plugins: &codewhale_plugins::PluginRegistry,
     ) -> Vec<(String, String)> {
-        codewhale_skills::discover_for_workspace_and_dir_with_mode_and_plugins(
-            workspace,
-            skills_dir,
-            discovery_mode,
-            Some(plugins),
-        )
-        .into_enabled()
-        .list()
-        .iter()
-        .filter(|s| s.invocation.user_invocable())
-        .map(|s| (s.name.clone(), s.user_menu_description()))
-        .collect()
+        codewhale_skills::discover_for_workspace(workspace, Some(skills_dir), config, Some(plugins))
+            .into_enabled()
+            .list()
+            .iter()
+            .filter(|s| s.invocation.user_invocable())
+            .map(|s| (s.name.clone(), s.user_menu_description()))
+            .collect()
     }
 
     pub(crate) fn extension_plugin_view(
@@ -3292,7 +3286,7 @@ impl App {
         let cached_skills = Self::discover_cached_skills(
             &self.workspace,
             &skills_dir,
-            self.skills_discovery_mode,
+            &self.skills_config,
             self.extension_plugin_view().as_ref(),
         );
         self.install_skill_cache(cached_skills);
@@ -3303,7 +3297,7 @@ impl App {
             epoch,
             workspace: self.workspace.clone(),
             skills_dir: self.skills_dir.clone(),
-            mode: self.skills_discovery_mode,
+            config: self.skills_config.clone(),
             plugins: self.extension_plugin_view(),
         }
     }
@@ -3317,7 +3311,7 @@ impl App {
         if scope.epoch != epoch
             || scope.workspace != self.workspace
             || scope.skills_dir != self.skills_dir
-            || scope.mode != self.skills_discovery_mode
+            || !std::sync::Arc::ptr_eq(&scope.config, &self.skills_config)
             || !std::sync::Arc::ptr_eq(&scope.plugins, &self.extension_plugin_view())
         {
             return false;

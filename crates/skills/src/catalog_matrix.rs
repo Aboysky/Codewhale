@@ -53,7 +53,7 @@ fn fixture() -> MatrixFixture {
 /// fresh user install would. No network, no provider, no ambient home.
 fn installed_registry() -> (TempDir, SkillRegistry) {
     let tmp = TempDir::new().expect("temp dir");
-    install_system_skills(tmp.path()).expect("bundled install");
+    install_system_skills(tmp.path(), &Default::default()).expect("bundled install");
     let registry = SkillRegistry::discover(tmp.path());
     assert!(
         registry.warnings().is_empty(),

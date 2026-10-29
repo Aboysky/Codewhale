@@ -18,9 +18,8 @@ use async_trait::async_trait;
 use serde_json::{Value, json};
 
 use codewhale_skills::{
-    Skill, SkillDiscoveryMode, SkillSource, discover_for_workspace_and_dir_with_mode_and_plugins,
-    discover_in_workspace_with_mode_and_plugins, skill_directories_for_workspace_and_dir,
-    skills_directories_for_mode,
+    Skill, SkillDiscoveryMode, SkillSource, discover_for_workspace,
+    skill_directories_for_workspace_and_dir, skills_directories_for_mode,
 };
 
 use super::spec::{
@@ -86,21 +85,14 @@ impl ToolSpec for LoadSkillTool {
         // tool's lookup mirrors what the system-prompt skills block
         // already lists, so the model never asks for a name it
         // can't find.
-        let discovery_mode = context.skills_discovery_mode;
-        let registry = if let Some(skills_dir) = context.skills_dir.as_deref() {
-            discover_for_workspace_and_dir_with_mode_and_plugins(
-                &context.workspace,
-                skills_dir,
-                discovery_mode,
-                context.plugin_registry.as_deref(),
-            )
-        } else {
-            discover_in_workspace_with_mode_and_plugins(
-                &context.workspace,
-                discovery_mode,
-                context.plugin_registry.as_deref(),
-            )
-        }
+        let discovery_mode =
+            codewhale_skills::SkillDiscoveryMode::from_config(&context.skills_config);
+        let registry = discover_for_workspace(
+            &context.workspace,
+            context.skills_dir.as_deref(),
+            &context.skills_config,
+            context.plugin_registry.as_deref(),
+        )
         .into_enabled();
 
         // Listing mode: empty name, "*", or "list" returns the full registry (#4651).
@@ -171,7 +163,9 @@ impl ToolSpec for LoadSkillTool {
                     .map(|p| p.display().to_string())
                     .collect();
                 if dirs.is_empty() {
-                    if context.skills_discovery_mode == SkillDiscoveryMode::CodeWhaleOnly {
+                    if codewhale_skills::SkillDiscoveryMode::from_config(&context.skills_config)
+                        == SkillDiscoveryMode::CodeWhaleOnly
+                    {
                         "no skills directories found; install skills under `<workspace>/.codewhale/skills/<name>/SKILL.md` or `~/.codewhale/skills/<name>/SKILL.md`"
                             .to_string()
                     } else {
@@ -745,8 +739,10 @@ mod tests {
 
         let context = ToolContext::new(workspace).with_skills_config(
             codewhale_dir,
-            codewhale_skills::SkillDiscoveryMode::CodeWhaleOnly,
-            codewhale_skills::SkillListingConfig::default(),
+            std::sync::Arc::new(codewhale_runtime::config::SkillsConfig {
+                scan_codewhale_only: Some(true),
+                ..Default::default()
+            }),
         );
         let tool = LoadSkillTool;
 
@@ -785,11 +781,8 @@ mod tests {
         // `codewhale_paths::user_home()` cannot be redirected reliably after process start
         // on Windows. The injected-home discovery test in `codewhale_skills::tests`
         // separately proves that ~/.codewhale/skills enters the default catalog.
-        let context = ToolContext::new(&workspace).with_skills_config(
-            global_skills.clone(),
-            codewhale_skills::SkillDiscoveryMode::Compatible,
-            codewhale_skills::SkillListingConfig::default(),
-        );
+        let context = ToolContext::new(&workspace)
+            .with_skills_config(global_skills.clone(), Default::default());
         assert!(!context.trust_mode);
         assert!(
             context
@@ -856,8 +849,10 @@ mod tests {
         }
         let context = ToolContext::new(&workspace).with_skills_config(
             &root,
-            SkillDiscoveryMode::CodeWhaleOnly,
-            codewhale_skills::SkillListingConfig::default(),
+            std::sync::Arc::new(codewhale_runtime::config::SkillsConfig {
+                scan_codewhale_only: Some(true),
+                ..Default::default()
+            }),
         );
         let tool = LoadSkillTool;
         for name in ["explicit", "disabled"] {

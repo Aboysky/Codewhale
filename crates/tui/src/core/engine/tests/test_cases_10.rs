@@ -749,7 +749,7 @@ fn representative_prompt(
         PromptSessionContext {
             user_memory_block,
             goal_objective,
-            skills_discovery_mode: codewhale_skills::SkillDiscoveryMode::CodeWhaleOnly,
+            skills_config: std::sync::Arc::new(codewhale_runtime::config::SkillsConfig { scan_codewhale_only: Some(true), ..Default::default() }),
             mode: AppMode::Agent,
             ..PromptSessionContext::default()
         },

@@ -3028,9 +3028,8 @@ async fn run_async_main_dispatch(
                 if args.mcp {
                     let config = load_structural_config_from_cli(&cli)?;
                     let skills_dir = config.skills_dir();
-                    let skills_mode =
-                        codewhale_skills::SkillDiscoveryMode::from_config(&config.skills_config());
-                    mcp_server::run_mcp_server(workspace, skills_dir, skills_mode).await
+                    let skills_config = std::sync::Arc::new(config.skills_config());
+                    mcp_server::run_mcp_server(workspace, skills_dir, skills_config).await
                 } else if http_selected {
                     let (mut config, config_profile) =
                         load_config_from_cli_with_effective_profile(&cli)?;
@@ -5708,6 +5707,32 @@ async fn run_doctor(
     println!();
     println!("{}", "Skills:".bold());
     let global_skills_dir = config.skills_dir();
+    let skills_config = config.skills_config();
+    let skill_registry = codewhale_skills::discover_for_workspace(
+        workspace,
+        Some(&global_skills_dir),
+        &skills_config,
+        None,
+    );
+    if let Some(status) = codewhale_skills::bundled_skills_status(&skills_config, &skill_registry) {
+        println!("  {}", status.summary());
+        if !status.unknown.is_empty() {
+            println!("  ⚠ Unknown bundled names: {}", status.unknown.join(", "));
+        }
+        if !status.ignored.is_empty() {
+            println!(
+                "  ⚠ Ignored explicit_only entries: {}",
+                status.ignored.join(", ")
+            );
+        }
+        if !status.selected_missing.is_empty() {
+            println!(
+                "  Selected but not installed: {}",
+                status.selected_missing.join(", ")
+            );
+        }
+    }
+
     let agents_skills_dir = workspace.join(".agents").join("skills");
     let local_skills_dir = workspace.join("skills");
     let agents_global_skills_dir = codewhale_skills::agents_global_skills_dir();
@@ -5814,14 +5839,16 @@ async fn run_doctor(
         "·".dimmed(),
         codewhale_util::utils::display_path(&selected_skills_dir)
     );
-    let unrecognized_system_skills =
-        codewhale_skills::unrecognized_system_skills(&global_skills_dir);
+    let unrecognized_system_skills = codewhale_runtime::config::owned_skills_dir()
+        .map(|dir| {
+            codewhale_skills::unrecognized_system_skills(&dir, &config.skills_config().bundled)
+        })
+        .unwrap_or_default();
     if !unrecognized_system_skills.is_empty() {
         println!(
-            "  {} {} bundled skill(s) in {} are customized or from an unknown generation and are never refreshed: {}",
+            "  {} {} bundled skill(s) in the owned global root are customized or from an unknown generation and are never refreshed: {}",
             "!".truecolor(sky_r, sky_g, sky_b),
             unrecognized_system_skills.len(),
-            codewhale_util::utils::display_path(&global_skills_dir),
             unrecognized_system_skills.join(", ")
         );
     }
@@ -8388,8 +8415,9 @@ fn run_doctor_json(
         "memory": memory_summary,
         "mcp": mcp_summary,
         "skills": {
+            "bundled": codewhale_skills::bundled_skills_status(&config.skills_config(), &codewhale_skills::discover_for_workspace(workspace, Some(&selected_skills_dir), &config.skills_config(), None)),
             "selected": selected_skills_dir.display().to_string(),
-            "unrecognized_system_skills": codewhale_skills::unrecognized_system_skills(&global_skills_dir),
+            "unrecognized_system_skills": codewhale_runtime::config::owned_skills_dir().map(|dir| codewhale_skills::unrecognized_system_skills(&dir, &config.skills_config().bundled)).unwrap_or_default(),
             "global": {
                 "path": global_skills_dir.display().to_string(),
                 "present": global_skills_dir.exists(),
@@ -13808,7 +13836,8 @@ async fn run_interactive_prepared(
     // Errors are non-fatal: log a warning and continue.
     let skills_dir = config.skills_dir();
     if let Some(install_dir) = config.bundled_skills_install_dir()
-        && let Err(e) = codewhale_skills::install_system_skills(&install_dir)
+        && let Err(e) =
+            codewhale_skills::install_system_skills(&install_dir, &config.skills_config().bundled)
     {
         logging::warn(format!("Failed to install system skills: {e}"));
     }
@@ -14806,8 +14835,7 @@ async fn build_direct_workflow_tool(
     .with_features(config.features())
     .with_skills_config(
         config.skills_dir(),
-        codewhale_skills::SkillDiscoveryMode::from_config(&config.skills_config()),
-        codewhale_skills::SkillListingConfig::from_config(&config.skills_config()),
+        std::sync::Arc::new(config.skills_config()),
     )
     .with_plugin_registry(std::sync::Arc::clone(&plugin_registry))
     .with_shell_policy(shell_policy)

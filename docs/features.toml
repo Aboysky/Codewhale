@@ -475,7 +475,7 @@ owner = "crates/memory"
 [[feature]]
 id = "skills"
 name = "Skills"
-summary = "Trusted instruction packages with owned roots, invocation controls and shared, configurable index limits."
+summary = "Trusted instruction packages with bundle policy, invocation controls and shared, configurable index limits."
 status = "stable"
 surfaces = { tui = "stable", api = "stable" }
 docs = "docs/SKILLS.md"
