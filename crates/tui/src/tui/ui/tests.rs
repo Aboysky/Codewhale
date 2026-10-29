@@ -1656,7 +1656,10 @@ fn canonical_file_mutations_attach_receipts_only_to_successful_outcomes() {
             );
             assert!(cell.receipt.is_some(), "{approval_mode:?} File.{action}");
             assert_eq!(
-                cell.receipt.as_ref().unwrap().outcome_label(),
+                cell.receipt
+                    .as_ref()
+                    .unwrap()
+                    .outcome_label(codewhale_localization::Locale::En),
                 "Updated src/lib.rs",
                 "{approval_mode:?} File.{action}"
             );
@@ -26150,7 +26153,9 @@ fn orphan_success_with_mutation_metadata_keeps_the_file_receipt() {
     };
     assert_eq!(cell.status, ToolStatus::Success);
     assert_eq!(
-        cell.receipt.as_ref().map(|receipt| receipt.outcome_label()),
+        cell.receipt
+            .as_ref()
+            .map(|receipt| receipt.outcome_label(codewhale_localization::Locale::En)),
         Some("Updated src/lib.rs".to_string())
     );
     assert_eq!(app.tool_details_by_cell[&0].tool_name, "File");
@@ -27455,7 +27460,9 @@ fn patch_approval_modal_does_not_displace_the_active_file_receipt() {
     };
     assert_eq!(cell.status, ToolStatus::Success);
     assert_eq!(
-        cell.receipt.as_ref().map(|receipt| receipt.outcome_label()),
+        cell.receipt
+            .as_ref()
+            .map(|receipt| receipt.outcome_label(codewhale_localization::Locale::En)),
         Some("Updated src/lib.rs".to_string())
     );
 }

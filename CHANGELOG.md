@@ -122,6 +122,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Localized activity and file receipts:** grouped tool activity, file counts, patch outcomes and tool status use the shared 15-language catalog. Language changes refresh cached summaries; filenames, diffs and execution receipts keep their original data.
 - **Automatic compaction stays off when disabled:** preflight and provider context-overflow recovery preserve the conversation and report the setting instead of forcing a summary. Manual compaction remains available, and a rejected recovery request retains its actual cause in both paths. (#7142)
 
 - **VS Code packaging security:** use patched MSAL Node in the extension packager, addressing [GHSA-xcx6-jx8p-x3h5](https://github.com/AzureAD/microsoft-authentication-library-for-js/security/advisories/GHSA-xcx6-jx8p-x3h5).

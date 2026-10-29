@@ -651,7 +651,7 @@ owner = "crates/tui/src/commands/groups/session/color.rs"
 [[feature]]
 id = "localization"
 name = "Localization"
-summary = "Interface text in 15 locales."
+summary = "Interface text in 15 locales, including tool activity, file receipts and language-aware transcript caches."
 status = "stable"
 surfaces = { tui = "stable" }
 docs = "docs/LOCALIZATION.md"

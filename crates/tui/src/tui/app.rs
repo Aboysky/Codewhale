@@ -2710,6 +2710,7 @@ pub(crate) struct ToolRunCache {
     pub(crate) threshold: usize,
     pub(crate) mode: ToolCollapseMode,
     pub(crate) calm_mode: bool,
+    pub(crate) locale: Locale,
     #[cfg(test)]
     pub(crate) projection_builds: usize,
     pub(crate) history_len: usize,
@@ -2778,6 +2779,7 @@ impl Default for ToolRunCache {
             threshold: usize::MAX,
             mode: ToolCollapseMode::Expanded,
             calm_mode: false,
+            locale: Locale::En,
             #[cfg(test)]
             projection_builds: 0,
             history_len: usize::MAX,

@@ -2,7 +2,7 @@
   "format": "codewhale.features.v1",
   "source": {
     "path": "docs/features.toml",
-    "sha256": "0b7740404421a766df45a7e5787b2e2dbf6f9ee6361ad3a479044d9c972ea3d5"
+    "sha256": "5e18921ce90014e26473bc496fc80a29abf1a288144f59c25fcea5b6939d38e1"
   },
   "features": [
     {
@@ -844,7 +844,7 @@
     {
       "id": "localization",
       "name": "Localization",
-      "summary": "Interface text in 15 locales.",
+      "summary": "Interface text in 15 locales, including tool activity, file receipts and language-aware transcript caches.",
       "status": "stable",
       "surfaces": {
         "tui": "stable"
