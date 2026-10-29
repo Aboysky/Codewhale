@@ -35,12 +35,13 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: '22'
-      - uses: codewhale-hq/Codewhale@f4c2ce3a6e37eeccd404242c3c2b867601951ca5
+      - uses: codewhale-hq/Codewhale@9032b4f9315aa448536af4ed8b8777eddbfd5b7d
         id: review
         with:
           version: 'v0.10.2'
           provider: 'deepseek'
           model: 'deepseek-flash'
+          reasoning-effort: 'off'
           max-output-tokens: '16384'
           pr-number: ${{ inputs.pr-number }}
           trigger-phrase: '@codewhale'
@@ -85,7 +86,7 @@ jobs:
           private-key: ${{ secrets.CODEWHALE_APP_PRIVATE_KEY }}
           permission-contents: read
           permission-pull-requests: write
-      - uses: codewhale-hq/Codewhale/scripts/github-action/publish@f4c2ce3a6e37eeccd404242c3c2b867601951ca5
+      - uses: codewhale-hq/Codewhale/scripts/github-action/publish@9032b4f9315aa448536af4ed8b8777eddbfd5b7d
         id: publish
         with:
           findings: findings/findings.json
