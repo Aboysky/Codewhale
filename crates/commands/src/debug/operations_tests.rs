@@ -9,6 +9,34 @@ use codewhale_command_contract::handler::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
+struct UndoPresentation;
+impl CommandPresentationContext for UndoPresentation {
+    fn translate(&self, key: &str, replacements: &[(&str, &str)]) -> Result<String, String> {
+        let catalog: serde_json::Value =
+            serde_json::from_str(include_str!("../../../localization/locales/en.json")).unwrap();
+        let id: String = key
+            .split('_')
+            .map(|word| {
+                let mut chars = word.chars();
+                chars
+                    .next()
+                    .unwrap()
+                    .to_uppercase()
+                    .chain(chars)
+                    .collect::<String>()
+            })
+            .collect();
+        let mut text = catalog[&id]
+            .as_str()
+            .ok_or_else(|| format!("unknown test key {key}"))?
+            .to_string();
+        for (name, value) in replacements {
+            text = text.replace(&format!("{{{name}}}"), value);
+        }
+        Ok(text)
+    }
+}
+
 #[test]
 fn diff_formats_and_localizes_observations_without_host_state_or_actions() {
     struct Diff(DebugDiffObservation);
@@ -184,7 +212,10 @@ fn whole_group_has_exact_authority_and_safe_missing_facets() {
         ("context", Caps::DEBUG_DIAGNOSTICS),
         ("edit", Caps::DEBUG_HISTORY),
         ("diff", Caps::DEBUG_DIFF | Caps::PRESENTATION),
-        ("undo", Caps::DEBUG_UNDO | Caps::DEBUG_HISTORY),
+        (
+            "undo",
+            Caps::DEBUG_UNDO | Caps::DEBUG_HISTORY | Caps::PRESENTATION,
+        ),
         ("retry", Caps::DEBUG_HISTORY),
     ];
     for ((info, handler), (name, expected)) in portable_handlers().into_iter().zip(expected) {
@@ -426,7 +457,8 @@ fn undo_passes_force_to_the_host_and_rejects_any_other_option() {
         let result = undo::undo(
             CommandContexts::empty()
                 .with_debug_undo(&mut facet)
-                .with_debug_history(&mut history),
+                .with_debug_history(&mut history)
+                .with_presentation(&mut UndoPresentation),
             arg,
         );
         assert_eq!(&*events.borrow(), &[expected], "{arg:?}");
@@ -443,7 +475,8 @@ fn undo_passes_force_to_the_host_and_rejects_any_other_option() {
     let result = undo::undo(
         CommandContexts::empty()
             .with_debug_undo(&mut facet)
-            .with_debug_history(&mut history),
+            .with_debug_history(&mut history)
+            .with_presentation(&mut UndoPresentation),
         Some("everything"),
     );
     assert!(result.is_error);
@@ -483,7 +516,10 @@ fn undo_reports_the_request_each_file_and_the_conversation() {
         skipped: Vec::new(),
         sync: synced_conversation(),
     };
-    let result = undo::patch_result(DebugUndoOutcome::Restored(restored(false, true)));
+    let result = undo::patch_result(
+        DebugUndoOutcome::Restored(restored(false, true)),
+        &UndoPresentation,
+    );
     assert_eq!(
         result.message.as_deref(),
         Some(
@@ -492,7 +528,10 @@ fn undo_reports_the_request_each_file_and_the_conversation() {
     );
     assert!(matches!(result.action, Some(DebugAction::SyncSession(_))));
 
-    let forced = undo::patch_result(DebugUndoOutcome::Restored(restored(true, false)));
+    let forced = undo::patch_result(
+        DebugUndoOutcome::Restored(restored(true, false)),
+        &UndoPresentation,
+    );
     assert!(
         forced.message.as_deref().is_some_and(|message| message.ends_with(
             "\nThe end of this request was not recorded, so edits made to these files since it started were also put back.\nThe conversation was not changed."
@@ -504,7 +543,7 @@ fn undo_reports_the_request_each_file_and_the_conversation() {
     let mut one = restored(false, true);
     one.request = None;
     one.files.truncate(1);
-    let result = undo::patch_result(DebugUndoOutcome::Restored(one));
+    let result = undo::patch_result(DebugUndoOutcome::Restored(one), &UndoPresentation);
     assert!(
         result.message.as_deref().is_some_and(|message| message.starts_with(
             "Undid your last request. 1 file is back as it was before it:\n  restored duration.mjs\n"
@@ -542,7 +581,8 @@ fn undo_refusals_never_fall_back_to_history_or_parse_backend_text() {
         let result = undo::undo(
             CommandContexts::empty()
                 .with_debug_undo(&mut facet)
-                .with_debug_history(&mut history),
+                .with_debug_history(&mut history)
+                .with_presentation(&mut UndoPresentation),
             None,
         );
         assert!(result.action.is_none());
@@ -574,7 +614,8 @@ fn undo_fallback_requires_both_facets_and_keeps_file_warning() {
     let result = undo::undo(
         CommandContexts::empty()
             .with_debug_undo(&mut facet)
-            .with_debug_history(&mut history),
+            .with_debug_history(&mut history)
+            .with_presentation(&mut UndoPresentation),
         None,
     );
     assert_eq!(
@@ -586,20 +627,27 @@ fn undo_fallback_requires_both_facets_and_keeps_file_warning() {
     assert_eq!(&*events.borrow(), &["undo_files", "undo_chat"]);
     // A conversation-only undo always says what happened to the files.
     for (outcome, files_note) in [
-        (DebugUndoOutcome::NoSnapshots, undo::FILES_NOT_REVERTED_NOTE),
-        (DebugUndoOutcome::NoSession, undo::FILES_NOT_REVERTED_NOTE),
+        (
+            DebugUndoOutcome::NoSnapshots,
+            "Workspace files were NOT reverted — only the conversation was rolled back.",
+        ),
+        (
+            DebugUndoOutcome::NoSession,
+            "Workspace files were NOT reverted — only the conversation was rolled back.",
+        ),
         (
             DebugUndoOutcome::NoOwnedSteps,
-            undo::FILES_NOT_REVERTED_NOTE,
+            "Workspace files were NOT reverted — only the conversation was rolled back.",
         ),
-        (DebugUndoOutcome::NoDifference, undo::NO_FILE_CHANGES_NOTE),
+        (DebugUndoOutcome::NoDifference, "No file changes to undo."),
     ] {
         facet.outcome = outcome;
         events.borrow_mut().clear();
         let result = undo::undo(
             CommandContexts::empty()
                 .with_debug_undo(&mut facet)
-                .with_debug_history(&mut history),
+                .with_debug_history(&mut history)
+                .with_presentation(&mut UndoPresentation),
             None,
         );
         assert_eq!(
