@@ -662,8 +662,18 @@ pub(super) fn flush_paste_burst_before_composer(app: &mut App, now: Instant) -> 
         {
             true
         }
+        crate::tui::paste_burst::FlushResult::Typed(_) if app.vim_is_visual_mode() => true,
         crate::tui::paste_burst::FlushResult::Typed(ch) => {
-            app.insert_char(ch);
+            let mention_menu_limit = app.mention_menu_limit;
+            if app.vim_is_normal_mode()
+                && visible_slash_menu_entries(app, SLASH_MENU_LIMIT).is_empty()
+                && crate::tui::file_mention::visible_mention_menu_entries(app, mention_menu_limit)
+                    .is_empty()
+            {
+                vim_mode::handle_vim_normal_key(app, ch);
+            } else {
+                app.insert_char(ch);
+            }
             true
         }
         crate::tui::paste_burst::FlushResult::SuppressionExpired => {
