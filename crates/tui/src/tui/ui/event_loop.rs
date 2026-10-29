@@ -3094,10 +3094,10 @@ pub(crate) async fn run_event_loop(
                             tracing::warn!(
                                 tool = %name,
                                 error = %err,
-                                "Work Graph checkpoint was not enqueued; projections remain unpublished"
+                                "Work Graph checkpoint did not complete; projections remain unpublished"
                             );
                             app.status_message = Some(format!(
-                                "To-do list update pending: checkpoint could not be queued ({err})"
+                                "To-do list update pending: checkpoint or Work update did not complete ({err})"
                             ));
                         }
 

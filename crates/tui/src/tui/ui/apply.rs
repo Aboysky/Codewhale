@@ -1875,8 +1875,13 @@ async fn apply_command_result_inner(
                     }
                 };
                 if let Some(error) = persistence_error {
+                    let mut retry_note = "";
                     let mut recovery = "";
+                    if let Some(message) = conversation_message {
+                        app.add_message(HistoryCell::System { content: message });
+                    }
                     if let Some(content) = retry_input {
+                        retry_note = "; retry was not sent";
                         if edit_replacement {
                             let restored = build_queued_message(app, content);
                             restore_failed_immediate_submit(app, restored, &error);
@@ -1890,7 +1895,7 @@ async fn apply_command_result_inner(
                         }
                     }
                     app.push_status_toast(
-                        format!("Conversation was rewound, but its save or Work update needs attention; retry was not sent: {error:#}.{recovery}"),
+                        format!("Conversation was rewound, but its save or Work update needs attention{retry_note}: {error:#}.{recovery}"),
                         StatusToastLevel::Error,
                         None,
                     );
