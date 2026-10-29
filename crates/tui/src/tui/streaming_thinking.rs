@@ -242,8 +242,6 @@ fn flush_pending_text_tail(app: &mut App) {
 /// Finalize the currently-streaming thinking entry: drain the pending
 /// state buffer, compute elapsed duration, stop the spinner.
 pub(super) fn finalize_current(app: &mut App) -> bool {
-    // #7123: with no live entry there is no cell to deliver into. Taking the
-    // buffer anyway would discard it, so leave it for the next owner.
     if app.streaming_thinking_active_entry.is_none() {
         app.thinking_started_at = None;
         return false;
@@ -292,7 +290,7 @@ pub(super) fn finalize_active_entry(app: &mut App, duration: Option<f32>, remain
     let Some(entry_idx) = app.streaming_thinking_active_entry.take() else {
         return false;
     };
-    if !remaining.is_empty() {
+    if !remaining.is_empty() && !app.translation_enabled {
         append(app, entry_idx, remaining);
     }
     if let Some(active) = app.active_cell.as_mut()
@@ -499,6 +497,25 @@ mod tests {
         assert!(
             app.streaming_thinking_active_entry.is_none(),
             "flush_active_cell clears the pointer"
+        );
+
+        let mut translated = test_app();
+        translated.translation_enabled = true;
+        translated.thinking_started_at = Some(Instant::now());
+        let entry = ensure_active_entry(&mut translated);
+        set_placeholder(&mut translated, entry);
+        let placeholder = thinking_content(&translated, entry);
+        translated.streaming_state.start_thinking(0);
+        translated
+            .streaming_state
+            .push_content(0, "untranslated tail");
+        translated.reasoning_buffer.push_str("untranslated tail");
+        assert!(finalize_current(&mut translated));
+        assert_eq!(thinking_content(&translated, entry), placeholder);
+        stash_reasoning_buffer_into_last_reasoning(&mut translated);
+        assert_eq!(
+            translated.last_reasoning.as_deref(),
+            Some("untranslated tail")
         );
     }
 
