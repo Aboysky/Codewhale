@@ -187,7 +187,7 @@ owner = "crates/tui/src/tools/codemode.rs"
 [[feature]]
 id = "extension-host"
 name = "Extension host"
-summary = "Runs reviewed plugins' native TypeScript/JavaScript tool and slash-command code in a Bun or Node sidecar."
+summary = "Runs reviewed TypeScript/JavaScript tools, commands and bounded Git review scopes through Engine approvals in a sidecar."
 status = "flagged"
 surfaces = { tui = "preview", web = "none", api = "preview" }
 since = "0.10.1"
