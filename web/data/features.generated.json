@@ -2,7 +2,7 @@
   "format": "codewhale.features.v1",
   "source": {
     "path": "docs/features.toml",
-    "sha256": "befff80905f75bdddabe319b302d3a047c8d1900aa5d10d50bafd50d9c1c8b35"
+    "sha256": "0b7740404421a766df45a7e5787b2e2dbf6f9ee6361ad3a479044d9c972ea3d5"
   },
   "features": [
     {
@@ -126,7 +126,7 @@
     {
       "id": "mcp-client",
       "name": "MCP client",
-      "summary": "Connects local stdio and remote HTTP MCP servers and exposes their tools.",
+      "summary": "Connects MCP servers, exposes permitted tools and records connection status for the model.",
       "status": "stable",
       "surfaces": {
         "tui": "stable",

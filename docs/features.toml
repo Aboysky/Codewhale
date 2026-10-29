@@ -132,7 +132,7 @@ owner = "crates/tui/src/tools/apply_patch.rs"
 [[feature]]
 id = "mcp-client"
 name = "MCP client"
-summary = "Connects local stdio and remote HTTP MCP servers and exposes their tools."
+summary = "Connects MCP servers, exposes permitted tools and records connection status for the model."
 status = "stable"
 surfaces = { tui = "stable", api = "stable" }
 since = "0.1.0"

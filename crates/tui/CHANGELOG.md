@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **MCP connection status reaches the model:** one existing history snapshot now records permitted configured, connecting, failed, authorization-required, unknown and connected servers, with bounded inert names and no raw errors. Stale status and server guidance are withdrawn on contention, configuration/scope changes and restore; observation does not connect servers or promise callable tools. (#6866)
 - **Bundled-skill policy:** `[skills.bundled]` separates automatic, authoritative and disabled installation from discovery, with per-name selection, disable and explicit-only controls. Aliases share policy; disabled shipped copies reveal user alternatives. Modified and managed files remain intact, and doctor plus `/skills inspect` show the effective policy. (#7066)
 - **Configurable skill routing index:** `[skills] listing_max_description_chars` and `listing_budget_fraction` control the shared parent/child catalogue. Defaults stay 400 characters and 5% of the route window, within the existing total bounds. Load warnings, localized inspect notes and `/context` explain shortening; full skill loading stays available. (#7073)
 

@@ -1129,8 +1129,9 @@ impl Engine {
             })?;
             pool.validate_native_caller(context.plugin_registry.as_deref())
                 .map_err(|error| ToolError::not_available(error.to_string()))?;
+            let permitted = policy.mcp_discovery_filter();
             pool.configured_servers_for_search(query, match_kind, |server| {
-                policy.permits_mcp_discovery(server)
+                permitted(server)
                     // A child cannot discover past its frozen registered surface.
                     && (self.child_host.is_none() || policy.registry.names().iter()
                         .any(|name| name.starts_with(&format!("mcp_{server}_"))))
