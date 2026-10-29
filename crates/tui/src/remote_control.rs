@@ -276,7 +276,7 @@ enum WorkerCommand {
 
 struct PendingRuntimeChatConfiguration {
     config: codewhale_runtime::config::Config,
-    plugin_registry: std::sync::Arc<crate::plugins::PluginRegistry>,
+    plugin_registry: std::sync::Arc<codewhale_plugins::PluginRegistry>,
     private_root: PathBuf,
     target_ref: String,
     session_id: String,
@@ -939,7 +939,7 @@ impl RemoteControlController {
     pub(crate) fn configure_runtime_chat(
         &mut self,
         config: codewhale_runtime::config::Config,
-        plugin_registry: std::sync::Arc<crate::plugins::PluginRegistry>,
+        plugin_registry: std::sync::Arc<codewhale_plugins::PluginRegistry>,
         private_root: PathBuf,
         target_ref: String,
         session_id: String,
@@ -1299,9 +1299,9 @@ impl RemoteControlController {
     pub(crate) fn block_runtime_chat_dispatch_for_tests(&mut self) {
         self.pending_runtime_chat_configuration = Some(PendingRuntimeChatConfiguration {
             config: codewhale_runtime::config::Config::default(),
-            plugin_registry: std::sync::Arc::new(crate::plugins::PluginRegistry::empty(Path::new(
-                ".",
-            ))),
+            plugin_registry: std::sync::Arc::new(codewhale_plugins::PluginRegistry::empty(
+                Path::new("."),
+            )),
             private_root: PathBuf::from("runtime-chat-test-block"),
             target_ref: "target_test_block".to_string(),
             session_id: "session_test_block".to_string(),
@@ -4640,6 +4640,7 @@ async fn public_request(
 /// control plane cannot force an unbounded in-memory read through the
 /// rejection-excerpt path.
 async fn rejection_excerpt(response: reqwest::Response) -> Option<String> {
+    let status = response.status();
     if response
         .content_length()
         .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
@@ -4654,28 +4655,26 @@ async fn rejection_excerpt(response: reqwest::Response) -> Option<String> {
             return None;
         }
     }
-    sanitized_rejection_excerpt(&body)
+    sanitized_rejection_excerpt(&body, status)
 }
 
-/// Sanitized, bounded reason excerpt from a rejection body. Only the
-/// conventional error fields are read, control characters are stripped, and
-/// the excerpt is capped — raw server bytes are never echoed further.
-fn sanitized_rejection_excerpt(body: &[u8]) -> Option<String> {
+fn sanitized_rejection_excerpt(body: &[u8], status: StatusCode) -> Option<String> {
     let parsed: Value = serde_json::from_slice(body).ok()?;
-    for field in ["error", "message", "title"] {
-        if let Some(text) = parsed.get(field).and_then(Value::as_str) {
-            let cleaned: String = text
-                .chars()
-                .filter(|character| !character.is_control())
-                .take(140)
-                .collect();
-            let trimmed = cleaned.trim();
-            if !trimmed.is_empty() {
-                return Some(trimmed.to_string());
-            }
+    match (
+        status,
+        parsed
+            .get("code")
+            .or_else(|| parsed.pointer("/details/code"))
+            .and_then(Value::as_str),
+    ) {
+        (StatusCode::SERVICE_UNAVAILABLE, Some("runner_runtime_identity_unavailable")) => {
+            Some("Remote control is temporarily unavailable because this service has not been configured for a Codewhale build. Try again later".to_string())
         }
+        (StatusCode::UNPROCESSABLE_ENTITY, Some("runner_runtime_identity_unsupported")) => {
+            Some("This Codewhale build is not accepted by the remote-control service. Check your installed version or contact the service administrator".to_string())
+        }
+        _ => None,
     }
-    None
 }
 
 async fn read_bounded_json(response: reqwest::Response) -> Result<Value, String> {
@@ -5220,7 +5219,7 @@ mod tests {
     #[test]
     fn runtime_chat_same_session_reconfigure_releases_then_reacquires_owner_lock() {
         let root = tempfile::tempdir().unwrap();
-        let registry = Arc::new(crate::plugins::PluginRegistry::empty(root.path()));
+        let registry = Arc::new(codewhale_plugins::PluginRegistry::empty(root.path()));
         let mut controller = RemoteControlController::default();
         let old_config = {
             let __cw_config_init_0_0 = Some("ollama".to_string());
@@ -5304,7 +5303,7 @@ mod tests {
     #[test]
     fn runtime_chat_backlog_refreshes_immutable_config_before_new_catalog_or_prompt() {
         let root = tempfile::tempdir().unwrap();
-        let registry = Arc::new(crate::plugins::PluginRegistry::empty(root.path()));
+        let registry = Arc::new(codewhale_plugins::PluginRegistry::empty(root.path()));
         let mut controller = RemoteControlController::default();
         let old_config = {
             let __cw_config_init_2_0 = Some("ollama".to_string());
@@ -5450,7 +5449,7 @@ mod tests {
         controller
             .configure_runtime_chat(
                 codewhale_runtime::config::Config::default(),
-                Arc::new(crate::plugins::PluginRegistry::empty(root.path())),
+                Arc::new(codewhale_plugins::PluginRegistry::empty(root.path())),
                 root.path().join("runtime-chat"),
                 "target_fixture".to_string(),
                 "session_fixture".to_string(),
@@ -5516,7 +5515,7 @@ mod tests {
             first
                 .configure_runtime_chat(
                     codewhale_runtime::config::Config::default(),
-                    Arc::new(crate::plugins::PluginRegistry::empty(root.path())),
+                    Arc::new(codewhale_plugins::PluginRegistry::empty(root.path())),
                     runtime_root.clone(),
                     "target_fixture".to_string(),
                     "session_fixture".to_string(),
@@ -5562,7 +5561,7 @@ mod tests {
         reopened
             .configure_runtime_chat(
                 codewhale_runtime::config::Config::default(),
-                Arc::new(crate::plugins::PluginRegistry::empty(root.path())),
+                Arc::new(codewhale_plugins::PluginRegistry::empty(root.path())),
                 runtime_root,
                 "target_fixture".to_string(),
                 "session_fixture".to_string(),
@@ -5605,7 +5604,7 @@ mod tests {
             first
                 .configure_runtime_chat(
                     codewhale_runtime::config::Config::default(),
-                    Arc::new(crate::plugins::PluginRegistry::empty(root.path())),
+                    Arc::new(codewhale_plugins::PluginRegistry::empty(root.path())),
                     runtime_root.clone(),
                     "target_fixture".to_string(),
                     "session_fixture".to_string(),
@@ -5627,7 +5626,7 @@ mod tests {
         reopened
             .configure_runtime_chat(
                 codewhale_runtime::config::Config::default(),
-                Arc::new(crate::plugins::PluginRegistry::empty(root.path())),
+                Arc::new(codewhale_plugins::PluginRegistry::empty(root.path())),
                 runtime_root,
                 "target_fixture".to_string(),
                 "session_fixture".to_string(),
@@ -5686,7 +5685,7 @@ mod tests {
             first
                 .configure_runtime_chat(
                     codewhale_runtime::config::Config::default(),
-                    Arc::new(crate::plugins::PluginRegistry::empty(root.path())),
+                    Arc::new(codewhale_plugins::PluginRegistry::empty(root.path())),
                     runtime_root.clone(),
                     "target_fixture".to_string(),
                     "session_fixture".to_string(),
@@ -5722,7 +5721,7 @@ mod tests {
         reopened
             .configure_runtime_chat(
                 codewhale_runtime::config::Config::default(),
-                Arc::new(crate::plugins::PluginRegistry::empty(root.path())),
+                Arc::new(codewhale_plugins::PluginRegistry::empty(root.path())),
                 runtime_root,
                 "target_fixture".to_string(),
                 "session_fixture".to_string(),
@@ -5762,7 +5761,7 @@ mod tests {
         controller
             .configure_runtime_chat(
                 codewhale_runtime::config::Config::default(),
-                Arc::new(crate::plugins::PluginRegistry::empty(root.path())),
+                Arc::new(codewhale_plugins::PluginRegistry::empty(root.path())),
                 root.path().join("runtime-chat"),
                 "target_fixture".to_string(),
                 "session_fixture".to_string(),
@@ -5830,7 +5829,9 @@ mod tests {
         let runtime_root = tempfile::tempdir().expect("idle Runtime Chat host");
         let host = RuntimeChatRelayHost::open(
             codewhale_runtime::config::Config::default(),
-            Arc::new(crate::plugins::PluginRegistry::empty(runtime_root.path())),
+            Arc::new(codewhale_plugins::PluginRegistry::empty(
+                runtime_root.path(),
+            )),
             runtime_root.path().to_path_buf(),
             "target_fixture".to_string(),
             "session_fixture".to_string(),
@@ -5881,7 +5882,7 @@ mod tests {
     #[test]
     fn preattachment_failure_cannot_release_a_recovered_unsettled_turn() {
         let root = tempfile::tempdir().unwrap();
-        let registry = Arc::new(crate::plugins::PluginRegistry::empty(root.path()));
+        let registry = Arc::new(codewhale_plugins::PluginRegistry::empty(root.path()));
         let mut controller = RemoteControlController::default();
         controller
             .configure_runtime_chat(
@@ -5951,7 +5952,7 @@ mod tests {
     #[test]
     fn runtime_chat_reenrollment_rejects_attachment_from_a_different_account() {
         let root = tempfile::tempdir().unwrap();
-        let registry = Arc::new(crate::plugins::PluginRegistry::empty(root.path()));
+        let registry = Arc::new(codewhale_plugins::PluginRegistry::empty(root.path()));
         let (mut controller, _worker_rx, event_tx, _journal_root) = wired_controller();
         controller
             .configure_runtime_chat(
@@ -7276,7 +7277,7 @@ mod tests {
             first
                 .configure_runtime_chat(
                     codewhale_runtime::config::Config::default(),
-                    Arc::new(crate::plugins::PluginRegistry::empty(root.path())),
+                    Arc::new(codewhale_plugins::PluginRegistry::empty(root.path())),
                     runtime_root.clone(),
                     "target-1".to_string(),
                     "session_fixture".to_string(),
@@ -7293,7 +7294,7 @@ mod tests {
         controller
             .configure_runtime_chat(
                 codewhale_runtime::config::Config::default(),
-                Arc::new(crate::plugins::PluginRegistry::empty(root.path())),
+                Arc::new(codewhale_plugins::PluginRegistry::empty(root.path())),
                 runtime_root.clone(),
                 "target-1".to_string(),
                 "session_fixture".to_string(),
@@ -7342,7 +7343,7 @@ mod tests {
         controller
             .configure_runtime_chat(
                 changed_config,
-                Arc::new(crate::plugins::PluginRegistry::empty(root.path())),
+                Arc::new(codewhale_plugins::PluginRegistry::empty(root.path())),
                 runtime_root,
                 "target-1".to_string(),
                 "session_fixture".to_string(),
@@ -7411,33 +7412,41 @@ mod tests {
     #[test]
     fn sanitized_rejection_excerpt_reads_only_bounded_error_fields() {
         assert_eq!(
+            sanitized_rejection_excerpt(br#"{"error":"RunnerEnrollmentError","details":{"code":"runner_runtime_identity_unavailable"},"message":"private server detail"}"#, StatusCode::SERVICE_UNAVAILABLE).as_deref(),
+            Some("Remote control is temporarily unavailable because this service has not been configured for a Codewhale build. Try again later")
+        );
+        assert_eq!(
+            sanitized_rejection_excerpt(br#"{"error":"RunnerEnrollmentError","details":{"code":"runner_runtime_identity_unsupported"}}"#, StatusCode::UNPROCESSABLE_ENTITY).as_deref(),
+            Some("This Codewhale build is not accepted by the remote-control service. Check your installed version or contact the service administrator")
+        );
+        assert_eq!(
             sanitized_rejection_excerpt(
-                br#"{"error":"client version not accepted","details":"noise"}"#
+                br#"{"code":"runner_runtime_identity_unavailable"}"#,
+                StatusCode::SERVICE_UNAVAILABLE
             )
             .as_deref(),
-            Some("client version not accepted")
+            Some(
+                "Remote control is temporarily unavailable because this service has not been configured for a Codewhale build. Try again later"
+            )
         );
-        assert_eq!(
-            sanitized_rejection_excerpt(br#"{"message":"enrollment closed"}"#).as_deref(),
-            Some("enrollment closed")
-        );
-        // Control characters are stripped, never echoed. A JSON-escaped NUL
-        // parses into the value; the strip must remove it. A raw NUL byte
-        // makes serde_json reject the body outright, which is also safe
-        // (no excerpt) — assert both directions.
-        let with_control = "{\"error\":\"bad\\u0000opaque\"}".to_string();
-        assert_eq!(
-            sanitized_rejection_excerpt(with_control.as_bytes()).as_deref(),
-            Some("badopaque")
-        );
-        let raw_nul = "{\"error\":\"bad\u{0}opaque\"}".to_string();
-        assert_eq!(sanitized_rejection_excerpt(raw_nul.as_bytes()), None);
-        // Non-JSON bodies yield no excerpt.
-        assert_eq!(sanitized_rejection_excerpt(b"<html>403</html>"), None);
-        // Overlong reasons are capped.
+        for body in [
+            br#"{"error":"opaque-synthetic-value"}"#.as_slice(),
+            br#"{"message":"https://example.test/?token=synthetic"}"#,
+            br#"{"title":"bad\u0000opaque"}"#,
+            br#"{"details":{"code":"runner_runtime_identity_unavailable"}}"#,
+            b"<html>403</html>",
+            b"{\"error\":\"bad\0opaque\"}",
+        ] {
+            assert_eq!(
+                sanitized_rejection_excerpt(body, StatusCode::BAD_REQUEST),
+                None
+            );
+        }
         let long = format!("{{\"error\":\"{}\"}}", "x".repeat(400));
-        let excerpt = sanitized_rejection_excerpt(long.as_bytes()).expect("capped excerpt");
-        assert!(excerpt.chars().count() <= 140);
+        assert_eq!(
+            sanitized_rejection_excerpt(long.as_bytes(), StatusCode::BAD_REQUEST),
+            None
+        );
     }
 
     #[test]
@@ -7502,11 +7511,30 @@ mod tests {
         .await
         .expect_err("403 must fail");
         assert!(error.contains("403"), "{error}");
-        assert!(error.contains("client version not accepted"), "{error}");
-        assert!(
-            !error.contains("documentation"),
-            "only the conventional error fields may surface: {error}"
-        );
+        assert!(!error.contains("client version not accepted"), "{error}");
+        assert!(!error.contains("example.test"), "{error}");
+        Mock::given(method("POST"))
+            .and(path("/oauth/known"))
+            .respond_with(ResponseTemplate::new(503).set_body_json(json!({
+                "code": "runner_runtime_identity_unavailable",
+                "message": "opaque-synthetic-value"
+            })))
+            .mount(&server)
+            .await;
+        let known = public_request(
+            &client,
+            Method::POST,
+            Url::parse(&format!(
+                "{}/oauth/known",
+                server.uri().trim_end_matches('/')
+            ))
+            .expect("server url"),
+            json!({ "audience": "codewhale-runner" }),
+        )
+        .await
+        .expect_err("503 must fail");
+        assert!(known.contains("temporarily unavailable"), "{known}");
+        assert!(!known.contains("opaque-synthetic-value"), "{known}");
     }
 
     #[tokio::test]

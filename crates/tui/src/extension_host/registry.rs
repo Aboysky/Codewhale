@@ -190,6 +190,7 @@ pub struct CommandRegistration {
     pub content_hash: String,
     /// The slash-command name, without the slash (lower case).
     pub name: String,
+    pub declared_name: String,
     pub description: String,
     pub argument_hint: Option<String>,
 }
@@ -285,6 +286,33 @@ fn valid_command_name(name: &str) -> bool {
     matches!(chars.next(), Some(first) if first.is_ascii_lowercase())
         && name.len() <= 64
         && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+}
+
+fn namespaced_command(plugin_name: &str, plugin_id: &str, name: &str) -> String {
+    let slug: String = plugin_name
+        .chars()
+        .map(|c| {
+            let c = c.to_ascii_lowercase();
+            if c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let slug = slug.trim_matches('-');
+    let slug = if slug.is_empty() { "extension" } else { slug };
+    let mut alias = format!("plugin-{slug}-{name}");
+    if alias.len() > 64 {
+        let digest = codewhale_runtime::hashing::sha256_hex(format!("{plugin_id}\0{name}"));
+        alias.truncate(51);
+        while alias.ends_with('-') {
+            alias.pop();
+        }
+        alias.push('-');
+        alias.push_str(&digest[..12]);
+    }
+    alias
 }
 
 /// Why the core would treat a tool called `name` as something other than an
@@ -619,7 +647,7 @@ impl OwnerRegistry {
     pub(super) fn register_mcp(
         &mut self,
         params: &RegisterParams,
-        config: crate::mcp::McpServerConfig,
+        config: codewhale_mcp::config::McpServerConfig,
         host_generation: u64,
     ) -> Result<u64, String> {
         self.check_scope(&params.owner, params.scope.as_ref(), false)?;
@@ -768,7 +796,7 @@ impl OwnerRegistry {
     pub(crate) fn register_skill_root(
         &mut self,
         params: &RegisterParams,
-        snapshots: Vec<crate::plugins::types::PluginSkillSnapshot>,
+        snapshots: Vec<codewhale_plugins::types::PluginSkillSnapshot>,
         host_generation: u64,
     ) -> Result<u64, String> {
         self.check_scope(&params.owner, params.scope.as_ref(), false)?;
@@ -1149,11 +1177,23 @@ impl OwnerRegistry {
                 "command `/{name}` cannot be checked against the built-in commands: no built-in command catalog is installed, so extension commands are refused"
             ));
         };
-        if catalog.answers_to(name) {
-            return Err(format!(
-                "command `/{name}` collides with a built-in command; extensions never shadow core commands; use a plugin-specific name, for example `/myplugin-{name}`"
-            ));
-        }
+        let alias = if catalog.answers_to(name) {
+            if tier != HostTier::Plugin {
+                return Err(format!(
+                    "command `/{name}` collides with a built-in command"
+                ));
+            }
+            let alias = namespaced_command(&plugin_name, &params.owner.plugin_id, name);
+            if !valid_command_name(&alias) || catalog.answers_to(&alias) {
+                return Err(format!(
+                    "command `/{name}` collides with a built-in command and its namespaced alias is unavailable"
+                ));
+            }
+            Some(alias)
+        } else {
+            None
+        };
+        let published_name = alias.as_deref().unwrap_or(name);
         if spec.input_schema.is_some() {
             return Err(format!("command `/{name}` has no input schema"));
         }
@@ -1186,9 +1226,9 @@ impl OwnerRegistry {
         let mut replaced = None;
         if let Some(existing) = self
             .commands_by_name
-            .get(&super::composition_scope::name_key(
+            .get(&codewhale_plugins::composition_scope::name_key(
                 &params.owner.plugin_id,
-                name,
+                published_name,
                 params.scope.as_ref(),
             ))
             .and_then(|handle| self.commands.get(handle))
@@ -1197,6 +1237,11 @@ impl OwnerRegistry {
                 return Err(format!(
                     "command `/{name}` is already registered by extension `{}`; use a plugin-specific name",
                     existing.plugin_name
+                ));
+            }
+            if existing.declared_name != name {
+                return Err(format!(
+                    "command `/{name}` would collide with another command's namespaced alias `/{published_name}`"
                 ));
             }
             // Same owner re-registering a name: the new handle retires the old.
@@ -1232,15 +1277,16 @@ impl OwnerRegistry {
                 tier,
                 plugin_name,
                 content_hash,
-                name: name.to_string(),
+                name: published_name.to_string(),
+                declared_name: name.to_string(),
                 description: description.to_string(),
                 argument_hint: hint.map(str::to_string),
             },
         );
         self.commands_by_name.insert(
-            super::composition_scope::name_key(
+            codewhale_plugins::composition_scope::name_key(
                 &params.owner.plugin_id,
-                name,
+                published_name,
                 params.scope.as_ref(),
             ),
             handle,
@@ -1267,7 +1313,7 @@ impl OwnerRegistry {
             ));
         }
         let plain_key = name.to_ascii_lowercase();
-        let key = super::composition_scope::name_key(
+        let key = codewhale_plugins::composition_scope::name_key(
             &params.owner.plugin_id,
             &plain_key,
             params.scope.as_ref(),
@@ -1434,7 +1480,7 @@ impl OwnerRegistry {
         {
             if self
                 .commands_by_name
-                .get(&super::composition_scope::name_key(
+                .get(&codewhale_plugins::composition_scope::name_key(
                     &command.owner.plugin_id,
                     &command.name,
                     command.scope.as_ref(),
@@ -1442,7 +1488,7 @@ impl OwnerRegistry {
                 == Some(&handle)
             {
                 self.commands_by_name
-                    .remove(&super::composition_scope::name_key(
+                    .remove(&codewhale_plugins::composition_scope::name_key(
                         &command.owner.plugin_id,
                         &command.name,
                         command.scope.as_ref(),
@@ -1459,7 +1505,7 @@ impl OwnerRegistry {
             return;
         }
         if let Some(tool) = self.tools.remove(&handle) {
-            let key = super::composition_scope::name_key(
+            let key = codewhale_plugins::composition_scope::name_key(
                 &tool.owner.plugin_id,
                 &tool.name.to_ascii_lowercase(),
                 tool.scope.as_ref(),
@@ -1483,7 +1529,7 @@ impl OwnerRegistry {
             if let Some(command) = self.commands.remove(&handle)
                 && self
                     .commands_by_name
-                    .get(&super::composition_scope::name_key(
+                    .get(&codewhale_plugins::composition_scope::name_key(
                         &command.owner.plugin_id,
                         &command.name,
                         command.scope.as_ref(),
@@ -1491,7 +1537,7 @@ impl OwnerRegistry {
                     == Some(&handle)
             {
                 self.commands_by_name
-                    .remove(&super::composition_scope::name_key(
+                    .remove(&codewhale_plugins::composition_scope::name_key(
                         &command.owner.plugin_id,
                         &command.name,
                         command.scope.as_ref(),
@@ -1534,7 +1580,7 @@ impl OwnerRegistry {
             .collect();
         for handle in &handles {
             if let Some(tool) = self.tools.remove(handle) {
-                let key = super::composition_scope::name_key(
+                let key = codewhale_plugins::composition_scope::name_key(
                     &tool.owner.plugin_id,
                     &tool.name.to_ascii_lowercase(),
                     tool.scope.as_ref(),

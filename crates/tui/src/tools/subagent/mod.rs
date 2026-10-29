@@ -67,7 +67,9 @@ use codewhale_agent_contract::role::{
     FLEET_ROLE_SCHEMA_VALUES, FleetRole, VALID_ROLE_ALIASES, public_role_label,
 };
 use codewhale_agent_contract::worker_profile::{
-    ChildLaunchManifest, ModelRoute, ShellPolicy, ToolScope, WorkerRuntimeProfile,
+    ChildActivationDelivery, ChildActivationIdentity, ChildActivationManifest,
+    ChildActivationStopReason, ChildInitialAdmission, ChildLaunchManifest,
+    FrozenChildConfiguration, ModelRoute, ShellPolicy, ToolScope, WorkerRuntimeProfile,
     narrow_model_steps, narrow_optional_limit,
 };
 use codewhale_config::AppMode;
@@ -125,9 +127,7 @@ pub use mailbox::{Mailbox, MailboxEnvelope, MailboxMessage, MailboxReceiver};
 pub(crate) use naming::explicit_nickname;
 use naming::generated_whale_name_base;
 pub(crate) use naming::localized_whale_display_names;
-pub(crate) use naming::subagent_display_name;
 pub(crate) use naming::subagent_result_display_name;
-pub(crate) use naming::subagent_role_label;
 #[allow(unused_imports)] // compatibility path; some consumers exist only in test builds today
 pub use naming::{
     WHALE_NICKNAMES, assign_unique_whale_name_in_locale, whale_name_for_id_in_locale,
@@ -565,7 +565,7 @@ pub struct SubAgentAssignment {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native_preset: Option<crate::extension_host::composition_scope::NativePresetRef>,
+    pub native_preset: Option<codewhale_plugins::composition_scope::NativePresetRef>,
 }
 
 impl SubAgentAssignment {
@@ -1508,7 +1508,20 @@ fn default_subagent_artifacts(run_id: &str) -> Vec<AgentRunArtifactRef> {
 /// receipt. Synthesizing either into the root turn delivered the same report
 /// twice and billed it twice.
 fn delivers_to_parent_turn(spec: &AgentWorkerSpec) -> bool {
-    spec.parent_run_id.is_none() && spec.workflow_run_id.is_none()
+    spec.parent_run_id.is_none()
+        && spec.workflow_run_id.is_none()
+        && !spec
+            .launch_manifest
+            .as_ref()
+            .and_then(|manifest| manifest.activation.as_ref())
+            .is_some_and(|activation| {
+                activation
+                    .configuration
+                    .as_ref()
+                    .is_none_or(|configuration| {
+                        configuration.delivery == ChildActivationDelivery::Caller
+                    })
+            })
 }
 
 fn normalize_worker_spec(mut spec: AgentWorkerSpec) -> AgentWorkerSpec {
@@ -1730,6 +1743,76 @@ fn run_git(workspace: &Path, args: &[&str]) -> Option<String> {
         .status
         .success()
         .then(|| String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+struct ChildActivationState {
+    identity: ChildActivationIdentity,
+    admission: tokio::sync::watch::Sender<Option<Result<ChildInitialAdmission, String>>>,
+    settlement: tokio::sync::watch::Sender<Option<Result<SubAgentResult, String>>>,
+    persisted_terminal: std::sync::atomic::AtomicBool,
+    execution_settled: std::sync::atomic::AtomicBool,
+}
+
+#[derive(Clone)]
+pub(crate) struct ChildActivationContext {
+    pub identity: ChildActivationIdentity,
+    pub configuration: FrozenChildConfiguration,
+    state: Arc<ChildActivationState>,
+}
+
+impl ChildActivationContext {
+    pub(crate) async fn accepted(&self) -> Result<ChildInitialAdmission> {
+        let mut receiver = self.state.admission.subscribe();
+        loop {
+            if let Some(result) = receiver.borrow_and_update().clone() {
+                return result.map_err(anyhow::Error::msg);
+            }
+            receiver
+                .changed()
+                .await
+                .map_err(|_| anyhow!("child admission owner closed"))?;
+        }
+    }
+
+    pub(crate) async fn settled(&self) -> Result<SubAgentResult> {
+        let mut receiver = self.state.settlement.subscribe();
+        loop {
+            if let Some(result) = receiver.borrow_and_update().clone() {
+                return result.map_err(anyhow::Error::msg);
+            }
+            receiver
+                .changed()
+                .await
+                .map_err(|_| anyhow!("child settlement owner closed"))?;
+        }
+    }
+}
+
+pub(crate) struct ChildActivationRequest {
+    pub(crate) public_child_id: String,
+    pub(crate) configuration: FrozenChildConfiguration,
+    pub(crate) launched: std::sync::Mutex<Option<(SharedSubAgentManager, ChildActivationContext)>>,
+}
+
+pub(crate) struct PreparedChild {
+    identity: ChildActivationIdentity,
+    activation: Option<Arc<ChildActivationState>>,
+    commit: tokio::sync::oneshot::Sender<PreparedChildLaunch>,
+    event_tx: Option<mpsc::Sender<Event>>,
+    admission: Option<CancellationToken>,
+    deadline_ms: Option<u64>,
+}
+
+#[cfg(test)]
+impl PreparedChild {
+    pub(crate) fn identity(&self) -> &ChildActivationIdentity {
+        &self.identity
+    }
+}
+
+struct PreparedChildLaunch {
+    profile: WorkerRuntimeProfile,
+    activation: Option<ChildActivationContext>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -2432,7 +2515,21 @@ impl SubAgentTerminalDeliveryContext {
             report_ref.as_deref(),
         );
 
-        if self.spawn_depth > 0
+        let caller_owned = manager
+            .worker_records
+            .get(&result.agent_id)
+            .and_then(|record| record.spec.launch_manifest.as_ref())
+            .and_then(|manifest| manifest.activation.as_ref())
+            .is_some_and(|activation| {
+                activation
+                    .configuration
+                    .as_ref()
+                    .is_none_or(|configuration| {
+                        configuration.delivery == ChildActivationDelivery::Caller
+                    })
+            });
+        if !caller_owned
+            && self.spawn_depth > 0
             && let Some(tx) = self.parent_completion_tx.as_ref()
         {
             // A full inbox waits for capacity instead of dropping the wake
@@ -2442,7 +2539,7 @@ impl SubAgentTerminalDeliveryContext {
             send_terminal_event(tx, completion.clone());
         }
 
-        if let Some(mailbox) = self.mailbox.as_ref() {
+        if !caller_owned && let Some(mailbox) = self.mailbox.as_ref() {
             let _ = mailbox.send(terminal_mailbox_message(result, report_ref.as_deref()));
         }
 
@@ -3042,6 +3139,7 @@ pub struct SubAgentRuntime {
     /// parent turn loop through the captured canonical Engine route;
     /// `enabled == false` (the operator's opt-out) holds for the whole tree.
     pub(crate) compaction: crate::compaction::CompactionConfig,
+    pub(crate) activation: Option<ChildActivationContext>,
 }
 
 impl SubAgentRuntime {
@@ -3108,6 +3206,7 @@ impl SubAgentRuntime {
             parent_can_prompt: false,
             approval_receipt_store: None,
             compaction: crate::compaction::CompactionConfig::default(),
+            activation: None,
             // Stamped by the spawning manager in
             // `spawn_background_with_assignment_options`, so every descendant
             // LLM attempt reports 429s/successes to the fleet's rate-limit
@@ -3450,6 +3549,7 @@ impl SubAgentRuntime {
             parent_can_prompt: self.parent_can_prompt,
             approval_receipt_store: self.approval_receipt_store.clone(),
             compaction: self.compaction.clone(),
+            activation: None,
         }
     }
 
@@ -3638,6 +3738,7 @@ pub struct SubAgent {
     // guards until owner teardown; it cannot be replayed as completed work.
     unsettled_launch: Option<Vec<governor::DynamicGatePermit>>,
     unsettled_foreground: Option<ForegroundChildRegistration>,
+    activation: Option<Arc<ChildActivationState>>,
 }
 
 impl SubAgent {
@@ -3689,6 +3790,7 @@ impl SubAgent {
             requested_stop: None,
             unsettled_launch: None,
             unsettled_foreground: None,
+            activation: None,
         }
     }
 
@@ -6045,6 +6147,7 @@ impl SubAgentManager {
                 requested_stop: None,
                 unsettled_launch: None,
                 unsettled_foreground: None,
+                activation: None,
             };
             self.agents.insert(persisted.id, agent);
         }
@@ -6222,6 +6325,17 @@ impl SubAgentManager {
                 .worker_records
                 .values()
                 .filter(|record| record.status.is_terminal())
+                .filter(|record| {
+                    self.agents
+                        .get(&record.spec.worker_id)
+                        .and_then(|agent| agent.activation.as_ref())
+                        .is_none_or(|state| {
+                            Arc::strong_count(state) == 1
+                                && state
+                                    .persisted_terminal
+                                    .load(std::sync::atomic::Ordering::Acquire)
+                        })
+                })
                 .min_by(|a, b| {
                     a.updated_at_ms
                         .cmp(&b.updated_at_ms)
@@ -8620,6 +8734,33 @@ impl SubAgentManager {
     pub(crate) fn spawn_background_with_assignment_options(
         &mut self,
         manager_handle: SharedSubAgentManager,
+        runtime: SubAgentRuntime,
+        agent_type: FleetRole,
+        prompt: String,
+        assignment: SubAgentAssignment,
+        allowed_tools: Option<Vec<String>>,
+        options: SubAgentSpawnOptions,
+        precomputed_delivery_evidence: Option<DeliveryEvidence>,
+    ) -> Result<SubAgentResult> {
+        let prepared = self.prepare_background_with_assignment_options(
+            manager_handle,
+            runtime,
+            agent_type,
+            prompt,
+            assignment,
+            allowed_tools,
+            options,
+            precomputed_delivery_evidence,
+            None,
+        )?;
+        self.commit_prepared_child(prepared, FrozenChildConfiguration::default())
+            .map(|(result, _)| result)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn prepare_background_with_assignment_options(
+        &mut self,
+        manager_handle: SharedSubAgentManager,
         mut runtime: SubAgentRuntime,
         agent_type: FleetRole,
         mut prompt: String,
@@ -8627,13 +8768,40 @@ impl SubAgentManager {
         allowed_tools: Option<Vec<String>>,
         options: SubAgentSpawnOptions,
         precomputed_delivery_evidence: Option<DeliveryEvidence>,
-    ) -> Result<SubAgentResult> {
+        public_child_id: Option<String>,
+    ) -> Result<PreparedChild> {
         if runtime
             .execution_limits
             .as_ref()
             .is_some_and(|limits| limits.admission.is_cancelled())
         {
             return Err(anyhow!("Runtime worker admission is closed"));
+        }
+        if let Some(public_child_id) = public_child_id.as_ref() {
+            if self.state_path.is_none() {
+                return Err(anyhow!(
+                    "child activation requires the existing durable worker store"
+                ));
+            }
+            if options.resume_from_agent_id.is_some()
+                || options.checkpoint_continuation
+                || options.fork_context
+            {
+                return Err(anyhow!("child activation requires a fresh independent run"));
+            }
+            if self.worker_records.values().any(|record| {
+                record.owner_session_id == runtime.context.state_namespace
+                    && record
+                        .spec
+                        .launch_manifest
+                        .as_ref()
+                        .and_then(|manifest| manifest.activation.as_ref())
+                        .is_some_and(|activation| {
+                            activation.identity.public_child_id == *public_child_id
+                        })
+            }) {
+                return Err(anyhow!("public child identity is already reserved"));
+            }
         }
         let mut origin = match options.origin.as_ref() {
             Some(origin) => origin.clone(),
@@ -8812,7 +8980,33 @@ impl SubAgentManager {
             runtime.model = model.to_string();
         }
         let effective_model = runtime.model.clone();
-        let agent_id = format!("agent_{}", &Uuid::new_v4().to_string()[..8]);
+        let agent_id = loop {
+            let candidate = format!("agent_{}", &Uuid::new_v4().to_string()[..8]);
+            if !self.agents.contains_key(&candidate)
+                && !self.worker_records.contains_key(&candidate)
+            {
+                break candidate;
+            }
+        };
+        let identity = ChildActivationIdentity {
+            owner_session_id: runtime.context.state_namespace.clone(),
+            session_boot_id: self.current_session_boot_id.clone(),
+            public_child_id: public_child_id.clone().unwrap_or_else(|| agent_id.clone()),
+            child_id: agent_id.clone(),
+            run_id: agent_id.clone(),
+            generation: 1,
+            initial_submission_id: Uuid::new_v4().to_string(),
+        };
+        let activation = public_child_id.as_ref().map(|_| {
+            Arc::new(ChildActivationState {
+                identity: identity.clone(),
+                admission: tokio::sync::watch::channel(None).0,
+                settlement: tokio::sync::watch::channel(None).0,
+                persisted_terminal: std::sync::atomic::AtomicBool::new(false),
+                execution_settled: std::sync::atomic::AtomicBool::new(false),
+            })
+        });
+
         // Admission into the turn-owned barrier happens before worker records,
         // mailbox events, or task scheduling. Once turn settlement closes the
         // registry, a racing descendant is refused rather than escaping the
@@ -8882,6 +9076,7 @@ impl SubAgentManager {
             agent.session_name = name.to_string();
         }
         agent.fork_context = options.fork_context;
+        agent.activation = activation.clone();
         let agent_id = agent.id.clone();
         let started_at = agent.started_at;
         let tool_profile = match tools.clone() {
@@ -8967,7 +9162,8 @@ impl SubAgentManager {
         } else {
             None
         };
-        let durable_registration = write_capable
+        let durable_registration = public_child_id.is_some()
+            || write_capable
             || runtime_origin_turn_id.is_some()
             || continuation_from.is_some()
             || origin
@@ -9109,6 +9305,14 @@ impl SubAgentManager {
             max_spawn_depth: runtime.max_spawn_depth,
             child_route: options.child_route.clone(),
             launch_manifest: Some(ChildLaunchManifest {
+                activation: activation.as_ref().map(|_| ChildActivationManifest {
+                    identity: identity.clone(),
+                    configuration: None,
+                    admission: None,
+                    output_captured: false,
+                    stop_reason: None,
+                    output: None,
+                }),
                 owner_session: runtime
                     .parent_agent_id
                     .clone()
@@ -9203,38 +9407,6 @@ impl SubAgentManager {
             }
         }
 
-        if let Some(event_tx) = runtime.event_tx.clone() {
-            let _ = event_tx.try_send(Event::AgentSpawned {
-                owner_session_id: runtime.context.state_namespace.clone(),
-                id: agent_id.clone(),
-                prompt: prompt.clone(),
-                worker_status: self
-                    .worker_record_by_ref(&agent_id)
-                    .map(|(_, record)| record.status),
-                parent_run_id: runtime.parent_agent_id.clone(),
-                spawn_depth: runtime.spawn_depth,
-                // The model the child was actually installed with. Read here
-                // rather than from session state so a later `/model` switch
-                // cannot rewrite a launched child's attribution.
-                model: agent.model.clone(),
-                // Route provenance is resolved on the workflow spawn seam
-                // (`WorkflowTaskSpawnMetadata`), not on this path, so it is
-                // honestly absent rather than guessed. The model — the half
-                // that determines billing — is present either way.
-                route_source: None,
-                display_name: Some(subagent_display_name(
-                    &agent_id,
-                    agent.nickname.as_deref(),
-                    Some(agent.session_name.as_str()),
-                    &subagent_role_label(
-                        options.child_route.as_ref(),
-                        agent.assignment.role.as_deref(),
-                        &agent.agent_type,
-                    ),
-                )),
-            });
-        }
-
         let launch_gate = (runtime.spawn_depth == 1).then(|| self.launch_gate.clone());
         let task = SubAgentTask {
             manager_handle,
@@ -9253,27 +9425,308 @@ impl SubAgentManager {
             launch_gate,
             _foreground_child_registration: foreground_child_registration,
         };
+        let event_tx = task.runtime.event_tx.clone();
+        let admission = task
+            .runtime
+            .execution_limits
+            .as_ref()
+            .map(|limits| limits.admission.clone());
+        let deadline_ms = task.runtime.worker_profile.wall_deadline_ms;
+        let (commit, committed) = tokio::sync::oneshot::channel();
         let handle = spawn_supervised(
             "subagent-task",
             std::panic::Location::caller(),
-            run_subagent_task(task),
+            run_prepared_subagent_task(task, committed),
         );
         agent.task_handle = Some(handle);
         self.agents.insert(agent_id.clone(), agent);
+        Ok(PreparedChild {
+            identity,
+            activation,
+            commit,
+            event_tx,
+            admission,
+            deadline_ms,
+        })
+    }
+
+    fn exact_activation(&self, identity: &ChildActivationIdentity) -> Result<&SubAgent> {
+        let agent = self
+            .agents
+            .get(&identity.child_id)
+            .ok_or_else(|| anyhow!("child activation is unavailable"))?;
+        let record = self
+            .worker_records
+            .get(&identity.child_id)
+            .ok_or_else(|| anyhow!("child activation receipt is unavailable"))?;
+        let manifest = record
+            .spec
+            .launch_manifest
+            .as_ref()
+            .ok_or_else(|| anyhow!("child activation manifest is unavailable"))?;
+        if identity.session_boot_id != self.current_session_boot_id
+            || agent.session_boot_id != identity.session_boot_id
+            || agent.owner_session_id != identity.owner_session_id
+            || record.owner_session_id != identity.owner_session_id
+            || record.spec.run_id != identity.run_id
+            || manifest.generation != identity.generation
+            || manifest.child_id != identity.child_id
+            || manifest
+                .activation
+                .as_ref()
+                .map(|activation| &activation.identity)
+                != Some(identity)
+            || agent
+                .activation
+                .as_ref()
+                .map(|activation| &activation.identity)
+                != Some(identity)
+        {
+            return Err(anyhow!("child activation identity is stale or foreign"));
+        }
+        Ok(agent)
+    }
+
+    pub(crate) fn commit_prepared_child(
+        &mut self,
+        prepared: PreparedChild,
+        mut configuration: FrozenChildConfiguration,
+    ) -> Result<(SubAgentResult, Option<ChildActivationContext>)> {
+        if prepared
+            .admission
+            .as_ref()
+            .is_some_and(CancellationToken::is_cancelled)
+            || prepared
+                .deadline_ms
+                .is_some_and(|deadline| deadline <= epoch_millis_now())
+        {
+            return Err(anyhow!("prepared child admission is closed or expired"));
+        }
+        if configuration
+            .persona
+            .as_ref()
+            .is_some_and(|persona| persona.len() > 32 * 1024)
+        {
+            return Err(anyhow!("child persona exceeds 32768 bytes"));
+        }
+        configuration.denied_tools = parse_tool_name_list(
+            &json!({"denied_tools": configuration.denied_tools}),
+            "denied_tools",
+        )
+        .map_err(|error| anyhow!(error.to_string()))?
+        .unwrap_or_default();
+        let identity = &prepared.identity;
+        let agent = self
+            .agents
+            .get(&identity.child_id)
+            .ok_or_else(|| anyhow!("prepared child is unavailable"))?;
+        if agent.session_boot_id != identity.session_boot_id
+            || self.current_session_boot_id != identity.session_boot_id
+            || agent.owner_session_id != identity.owner_session_id
+            || agent.status != SubAgentStatus::Running
+            || agent.completion_claimed
+            || agent
+                .stop_token
+                .as_ref()
+                .is_none_or(|token| prepared.activation.is_some() && token.is_cancelled())
+        {
+            return Err(anyhow!("prepared child is stale or cancelled"));
+        }
+        let origin = self
+            .worker_origins
+            .get(&identity.child_id)
+            .ok_or_else(|| anyhow!("prepared child origin is unavailable"))?;
+        self.validate_worker_origin(origin)
+            .map_err(anyhow::Error::msg)?;
+        if prepared.activation.is_some() {
+            self.exact_activation(identity)?;
+        } else if configuration != FrozenChildConfiguration::default() {
+            return Err(anyhow!(
+                "ordinary child cannot receive activation configuration"
+            ));
+        }
+        let record = self
+            .worker_records
+            .get_mut(&identity.child_id)
+            .ok_or_else(|| anyhow!("prepared child receipt is unavailable"))?;
+        for denied in &configuration.denied_tools {
+            if !record.spec.runtime_profile.denied_tools.contains(denied) {
+                record
+                    .spec
+                    .runtime_profile
+                    .denied_tools
+                    .push(denied.clone());
+            }
+        }
+        let profile = record.spec.runtime_profile.clone();
+        let manifest = record
+            .spec
+            .launch_manifest
+            .as_mut()
+            .ok_or_else(|| anyhow!("prepared child manifest is unavailable"))?;
+        manifest.profile = profile.clone();
+        let context = if let Some(state) = prepared.activation.as_ref() {
+            let activation = manifest
+                .activation
+                .as_mut()
+                .ok_or_else(|| anyhow!("prepared child activation is unavailable"))?;
+            if activation.configuration.is_some() {
+                return Err(anyhow!("child activation was already committed"));
+            }
+            activation.configuration = Some(configuration.clone());
+            Some(ChildActivationContext {
+                identity: identity.clone(),
+                configuration,
+                state: state.clone(),
+            })
+        } else {
+            None
+        };
+        if context.is_some() {
+            self.persist_state_synchronously()?;
+        }
+        prepared
+            .commit
+            .send(PreparedChildLaunch {
+                profile,
+                activation: context.clone(),
+            })
+            .map_err(|_| anyhow!("prepared child execution owner closed"))?;
         self.record_worker_event(
-            &agent_id,
+            &identity.child_id,
             AgentWorkerStatus::Running,
             Some("running".to_string()),
             None,
             None,
         );
         self.persist_state_best_effort();
+        let snapshot = self.get_result(&identity.child_id)?;
+        if let Some(event_tx) = prepared.event_tx {
+            let _ = event_tx.try_send(Event::AgentSpawned {
+                owner_session_id: identity.owner_session_id.clone(),
+                id: identity.child_id.clone(),
+                prompt: self.agents[&identity.child_id].prompt.clone(),
+                worker_status: snapshot.worker_status,
+                parent_run_id: snapshot.parent_run_id.clone(),
+                spawn_depth: snapshot.spawn_depth,
+                model: snapshot.model.clone(),
+                route_source: None,
+                display_name: Some(subagent_result_display_name(&snapshot)),
+            });
+        }
+        Ok((snapshot, context))
+    }
 
-        let agent = self
+    fn exact_activation_descendants(
+        &self,
+        identity: &ChildActivationIdentity,
+    ) -> Result<Vec<String>> {
+        self.exact_activation(identity)?;
+        let mut owned = HashSet::from([identity.child_id.clone()]);
+        loop {
+            let previous = owned.len();
+            for (id, record) in &self.worker_records {
+                if record.owner_session_id == identity.owner_session_id
+                    && record
+                        .spec
+                        .parent_run_id
+                        .as_ref()
+                        .is_some_and(|parent| owned.contains(parent))
+                    && self.agents.get(id).is_some_and(|agent| {
+                        agent.owner_session_id == identity.owner_session_id
+                            && agent.session_boot_id == identity.session_boot_id
+                    })
+                {
+                    owned.insert(id.clone());
+                }
+            }
+            if previous == owned.len() {
+                break;
+            }
+        }
+        Ok(owned.into_iter().collect())
+    }
+
+    pub(crate) fn stop_child_activation(
+        &mut self,
+        identity: &ChildActivationIdentity,
+    ) -> Result<SubAgentResult> {
+        for id in self.exact_activation_descendants(identity)? {
+            if let Some(agent) = self.agents.get(&id)
+                && agent.status == SubAgentStatus::Running
+                && !agent.completion_claimed
+            {
+                let mut result = self.snapshot_for_listing(agent);
+                result.status = SubAgentStatus::Cancelled;
+                result.needs_input = None;
+                self.finish_terminal_result(&id, result, true, true);
+            }
+        }
+        self.get_result(&identity.child_id)
+    }
+
+    fn child_state_write(
+        &self,
+        identity: &ChildActivationIdentity,
+    ) -> Result<impl FnOnce() -> Result<()> + Send + 'static + use<>> {
+        self.exact_activation(identity)?;
+        self.ensure_coordination_process_lock()
+            .map_err(anyhow::Error::msg)?;
+        let (path, payload) = self
+            .build_persist_payload()?
+            .ok_or_else(|| anyhow!("child activation has no durable worker store"))?;
+        let expected_manifest = payload
+            .workers
+            .iter()
+            .find(|record| record.spec.worker_id == identity.child_id)
+            .and_then(|record| record.spec.launch_manifest.clone())
+            .ok_or_else(|| anyhow!("child activation is missing from persistence snapshot"))?;
+        let expected_agent = payload
             .agents
-            .get(&agent_id)
-            .expect("agent should exist after spawn");
-        Ok(self.snapshot_for_listing(agent))
+            .iter()
+            .find(|agent| agent.id == identity.child_id)
+            .ok_or_else(|| {
+                anyhow!("child activation state is missing from persistence snapshot")
+            })?;
+        let expected_status = expected_agent.status.clone();
+        let expected_result = expected_agent.result.clone();
+        let state_root = self.state_root.clone();
+        let identity = identity.clone();
+        let writer_locks = self
+            .coordination_process_lock
+            .lock()
+            .expect("coordination lock slot poisoned")
+            .iter()
+            .cloned()
+            .chain(self.workspace_writer_locks.values().cloned())
+            .collect::<Vec<_>>();
+        Ok(move || {
+            let _writer_locks = writer_locks;
+            write_json_atomic(&state_root, &path, &payload)?;
+            let persisted: PersistedSubAgentState = serde_json::from_slice(&fs::read(&path)?)?;
+            let worker = persisted
+                .workers
+                .iter()
+                .find(|record| record.spec.worker_id == identity.child_id)
+                .ok_or_else(|| anyhow!("published worker receipt is missing"))?;
+            let agent = persisted
+                .agents
+                .iter()
+                .find(|agent| agent.id == identity.child_id)
+                .ok_or_else(|| anyhow!("published child state is missing"))?;
+            if worker.owner_session_id != identity.owner_session_id
+                || worker.spec.launch_manifest.as_ref() != Some(&expected_manifest)
+                || agent.owner_session_id != identity.owner_session_id
+                || agent.session_boot_id != identity.session_boot_id
+                || agent.status != expected_status
+                || agent.result != expected_result
+            {
+                return Err(anyhow!(
+                    "published child receipt changed before acknowledgement"
+                ));
+            }
+            Ok(())
+        })
     }
 
     /// Get the current snapshot for an agent.
@@ -9814,8 +10267,21 @@ impl SubAgentManager {
         // The retained lineage owns continuation lookup and descendant
         // control. Keep the agents projection while live work references it.
         let lineage_records = self.lineage_records_in_use();
+        let retained_activations = self
+            .agents
+            .iter()
+            .filter(|(_, agent)| {
+                agent.activation.as_ref().is_some_and(|state| {
+                    Arc::strong_count(state) > 1
+                        || !state
+                            .persisted_terminal
+                            .load(std::sync::atomic::Ordering::Acquire)
+                })
+            })
+            .map(|(id, _)| id.clone())
+            .collect::<HashSet<_>>();
         self.agents.retain(|agent_id, agent| {
-            if lineage_records.contains(agent_id) {
+            if lineage_records.contains(agent_id) || retained_activations.contains(agent_id) {
                 return true;
             }
             if active_session_id.is_some() && !scoped_agent_ids.contains(agent_id) {
@@ -9834,6 +10300,9 @@ impl SubAgentManager {
         let now_ms = epoch_millis_now();
         let max_age_ms = max_age.as_millis() as u64;
         self.worker_records.retain(|worker_id, record| {
+            if retained_activations.contains(worker_id) {
+                return true;
+            }
             if active_session_id.is_some() && !scoped_worker_ids.contains(worker_id) {
                 return true;
             }
@@ -10189,6 +10658,412 @@ impl SubAgentManager {
 
 /// Thread-safe wrapper for `SubAgentManager`.
 pub type SharedSubAgentManager = Arc<RwLock<SubAgentManager>>;
+
+fn read_child_activation_output(
+    state_root: &Path,
+    identity: &ChildActivationIdentity,
+    admission: &ChildInitialAdmission,
+    output: Option<&codewhale_agent_contract::worker_profile::ChildActivationOutput>,
+) -> Result<Vec<ContentBlock>> {
+    use sha2::Digest;
+    let messages = load_subagent_transcript_artifact(state_root, &identity.child_id)?;
+    if admission.message_index >= messages.len() {
+        return Err(anyhow!("child initial admission is outside its transcript"));
+    }
+    let Some(output) = output else {
+        if messages
+            .iter()
+            .skip(admission.message_index + 1)
+            .any(|message| {
+                matches!(
+                    message.role,
+                    codewhale_models::Role::Assistant
+                        | codewhale_models::Role::InterruptedAssistant
+                ) && !message.content.is_empty()
+            })
+        {
+            return Err(anyhow!("empty child output conflicts with its transcript"));
+        }
+        return Ok(Vec::new());
+    };
+    if output.transcript_message_index <= admission.message_index {
+        return Err(anyhow!("invalid child output reference"));
+    }
+    let message = messages
+        .get(output.transcript_message_index)
+        .filter(|message| {
+            matches!(
+                message.role,
+                codewhale_models::Role::Assistant | codewhale_models::Role::InterruptedAssistant
+            ) && !message.content.is_empty()
+        })
+        .ok_or_else(|| anyhow!("child output reference does not identify assistant content"))?;
+    let digest = sha2::Sha256::digest(serde_json::to_vec(&message.content)?);
+    let hash = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    if output.content_sha256 != hash {
+        return Err(anyhow!(
+            "child output content digest does not match its receipt"
+        ));
+    }
+    Ok(message.content.clone())
+}
+
+pub(crate) async fn record_child_output(
+    manager: &SharedSubAgentManager,
+    identity: &ChildActivationIdentity,
+    output: Option<codewhale_agent_contract::worker_profile::ChildActivationOutput>,
+    stop_reason: ChildActivationStopReason,
+) -> Result<()> {
+    let (state_root, admission) = {
+        let held = manager.read().await;
+        held.exact_activation(identity)?;
+        let admission = held.worker_records[&identity.child_id]
+            .spec
+            .launch_manifest
+            .as_ref()
+            .and_then(|manifest| manifest.activation.as_ref())
+            .and_then(|activation| activation.admission.clone())
+            .ok_or_else(|| anyhow!("child output has no initial admission receipt"))?;
+        (held.state_root.clone(), admission)
+    };
+    let checked_identity = identity.clone();
+    let checked_output = output.clone();
+    tokio::task::spawn_blocking(move || {
+        read_child_activation_output(
+            &state_root,
+            &checked_identity,
+            &admission,
+            checked_output.as_ref(),
+        )
+    })
+    .await
+    .map_err(|error| anyhow!("child output reader failed: {error}"))??;
+    let write = {
+        let mut held = manager.write().await;
+        held.exact_activation(identity)?;
+        let activation = held
+            .worker_records
+            .get_mut(&identity.child_id)
+            .and_then(|record| record.spec.launch_manifest.as_mut())
+            .and_then(|manifest| manifest.activation.as_mut())
+            .expect("validated activation");
+        if activation.output_captured
+            && (activation.output != output || activation.stop_reason != Some(stop_reason))
+        {
+            return Err(anyhow!(
+                "child output receipt conflicts with its existing capture"
+            ));
+        }
+        activation.output_captured = true;
+        activation.output = output;
+        activation.stop_reason = Some(stop_reason);
+        held.child_state_write(identity)?
+    };
+    tokio::task::spawn_blocking(write)
+        .await
+        .map_err(|error| anyhow!("child output writer failed: {error}"))??;
+    Ok(())
+}
+
+pub(crate) async fn resolve_child_activation_output(
+    manager: &SharedSubAgentManager,
+    identity: &ChildActivationIdentity,
+) -> Result<(Vec<ContentBlock>, ChildActivationStopReason)> {
+    let (state_root, admission, output, stop_reason) = {
+        let held = manager.read().await;
+        let agent = held.exact_activation(identity)?;
+        if !agent
+            .activation
+            .as_ref()
+            .expect("validated activation")
+            .persisted_terminal
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            return Err(anyhow!("child output has no acknowledged terminal receipt"));
+        }
+        let activation = held.worker_records[&identity.child_id]
+            .spec
+            .launch_manifest
+            .as_ref()
+            .and_then(|manifest| manifest.activation.as_ref())
+            .expect("validated activation");
+        if !activation.output_captured {
+            return Err(anyhow!("child output capture failed or is unavailable"));
+        }
+        (
+            held.state_root.clone(),
+            activation
+                .admission
+                .clone()
+                .ok_or_else(|| anyhow!("child output has no admission"))?,
+            activation.output.clone(),
+            activation
+                .stop_reason
+                .ok_or_else(|| anyhow!("child output has no terminal reason"))?,
+        )
+    };
+    let checked_identity = identity.clone();
+    let content = tokio::task::spawn_blocking(move || {
+        read_child_activation_output(&state_root, &checked_identity, &admission, output.as_ref())
+    })
+    .await
+    .map_err(|error| anyhow!("child output reader failed: {error}"))??;
+    manager.read().await.exact_activation(identity)?;
+    Ok((content, stop_reason))
+}
+
+pub(crate) async fn record_child_admission(
+    manager: &SharedSubAgentManager,
+    identity: &ChildActivationIdentity,
+    admission: ChildInitialAdmission,
+) -> Result<()> {
+    if admission.submission_id != identity.initial_submission_id
+        || admission.turn_id.is_empty()
+        || admission.prefix_sha256.len() != 64
+        || !admission
+            .prefix_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
+        return Err(anyhow!("invalid initial child admission receipt"));
+    }
+    let (write, state) = {
+        let mut held = manager.write().await;
+        let state = held
+            .exact_activation(identity)?
+            .activation
+            .clone()
+            .expect("validated activation");
+        let manifest = held
+            .worker_records
+            .get_mut(&identity.child_id)
+            .and_then(|record| record.spec.launch_manifest.as_mut())
+            .and_then(|manifest| manifest.activation.as_mut())
+            .expect("validated activation manifest");
+        if manifest.configuration.is_none() {
+            return Err(anyhow!(
+                "child activation has not committed its configuration"
+            ));
+        }
+        if manifest
+            .admission
+            .as_ref()
+            .is_some_and(|existing| existing != &admission)
+        {
+            return Err(anyhow!(
+                "initial child admission receipt conflicts with the existing receipt"
+            ));
+        }
+        manifest.admission = Some(admission.clone());
+        (held.child_state_write(identity)?, state)
+    };
+    tokio::task::spawn_blocking(write)
+        .await
+        .map_err(|error| anyhow!("child admission writer failed: {error}"))??;
+    let held = manager.read().await;
+    held.exact_activation(identity)?;
+    state.admission.send_replace(Some(Ok(admission)));
+    Ok(())
+}
+
+pub(crate) async fn persist_child_settlement(
+    manager: &SharedSubAgentManager,
+    identity: &ChildActivationIdentity,
+) -> Result<SubAgentResult> {
+    let (write, state) = {
+        let held = manager.read().await;
+        let agent = held.exact_activation(identity)?;
+        if agent.status == SubAgentStatus::Running
+            || agent.completion_claimed
+            || !agent
+                .activation
+                .as_ref()
+                .expect("validated activation")
+                .execution_settled
+                .load(std::sync::atomic::Ordering::Acquire)
+        {
+            if let Some(state) = agent.activation.as_ref()
+                && state
+                    .execution_settled
+                    .load(std::sync::atomic::Ordering::Acquire)
+            {
+                let error = "child execution owner ended without acknowledged teardown; result remains uncertain".to_string();
+                if state.admission.borrow().is_none() {
+                    state.admission.send_replace(Some(Err(error.clone())));
+                }
+                state.settlement.send_replace(Some(Err(error)));
+            }
+            return Err(anyhow!(
+                "child activation is still running or teardown is uncertain"
+            ));
+        }
+        (
+            held.child_state_write(identity),
+            agent.activation.clone().expect("validated activation"),
+        )
+    };
+    let outcome = match write {
+        Ok(write) => tokio::task::spawn_blocking(write)
+            .await
+            .map_err(|error| anyhow!("child settlement writer failed: {error}"))
+            .and_then(|result| result),
+        Err(error) => Err(error),
+    };
+    if let Err(error) = outcome {
+        if state.admission.borrow().is_none() {
+            state.admission.send_replace(Some(Err(format!("child stopped before startup acknowledgement; durable receipt is uncertain: {error}"))));
+        }
+        state.settlement.send_replace(Some(Err(format!(
+            "child stopped but its durable receipt is unacknowledged: {error}"
+        ))));
+        return Err(error);
+    }
+    let mut held = manager.write().await;
+    held.exact_activation(identity)?;
+    let result = held.get_result(&identity.child_id)?;
+    state
+        .persisted_terminal
+        .store(true, std::sync::atomic::Ordering::Release);
+    if state.admission.borrow().is_none() {
+        state.admission.send_replace(Some(Err(
+            "child stopped before initial input admission was acknowledged".to_string(),
+        )));
+    }
+    if let Some(agent) = held.agents.get_mut(&identity.child_id) {
+        drop(agent.unsettled_foreground.take());
+        drop(agent.unsettled_launch.take());
+    }
+    let activation = held.worker_records[&identity.child_id]
+        .spec
+        .launch_manifest
+        .as_ref()
+        .and_then(|manifest| manifest.activation.as_ref())
+        .expect("validated activation");
+    let captured = activation.admission.is_none() || activation.output_captured;
+    state.settlement.send_replace(Some(if captured {
+        Ok(result.clone())
+    } else {
+        Err("child execution settled, but exact output capture was not acknowledged".to_string())
+    }));
+    Ok(result)
+}
+
+pub(crate) async fn dispose_child_activation(
+    manager: &SharedSubAgentManager,
+    identity: &ChildActivationIdentity,
+) -> Result<SubAgentResult> {
+    let deadline = tokio::time::Instant::now() + CHILD_STOP_SETTLE_GRACE;
+    loop {
+        let settled = {
+            let mut held = tokio::time::timeout_at(deadline, manager.write())
+                .await
+                .map_err(|_| anyhow!("child disposal could not reach its execution owner"))?;
+            held.stop_child_activation(identity)?;
+            let exact = held.exact_activation(identity)?;
+            if exact.status == SubAgentStatus::Running
+                && exact.activation.as_ref().is_some_and(|state| {
+                    state
+                        .execution_settled
+                        .load(std::sync::atomic::Ordering::Acquire)
+                })
+            {
+                return Err(anyhow!(
+                    "child execution teardown is unresolved; ownership remains retained"
+                ));
+            }
+            held.exact_activation_descendants(identity)?
+                .iter()
+                .all(|id| {
+                    held.agents.get(id).is_some_and(|agent| {
+                        agent.status != SubAgentStatus::Running
+                            && !agent.completion_claimed
+                            && agent.activation.as_ref().is_none_or(|state| {
+                                state
+                                    .execution_settled
+                                    .load(std::sync::atomic::Ordering::Acquire)
+                            })
+                    })
+                })
+        };
+        if settled {
+            return persist_child_settlement(manager, identity).await;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return Err(anyhow!(
+                "child activation disposal has not settled; execution ownership is retained"
+            ));
+        }
+        tokio::time::sleep(SUBAGENT_WAIT_CHECK_INTERVAL).await;
+    }
+}
+
+async fn run_prepared_subagent_task(
+    mut task: SubAgentTask,
+    committed: tokio::sync::oneshot::Receiver<PreparedChildLaunch>,
+) {
+    let owner_admission = task
+        .runtime
+        .execution_limits
+        .as_ref()
+        .map(|limits| limits.admission.clone());
+    let deadline_ms = task.runtime.worker_profile.wall_deadline_ms;
+    let launch = tokio::select! {
+        biased;
+        () = task.runtime.cancel_token.cancelled() => None,
+        () = async {
+            if let Some(token) = owner_admission { token.cancelled().await; }
+            else { std::future::pending::<()>().await; }
+        } => None,
+        () = async {
+            if let Some(deadline) = deadline_ms {
+                tokio::time::sleep(Duration::from_millis(deadline.saturating_sub(epoch_millis_now()))).await;
+            } else { std::future::pending::<()>().await; }
+        } => None,
+        launch = committed => launch.ok(),
+    };
+    if let Some(launch) = launch {
+        task.runtime.worker_profile = launch.profile;
+        for denied in &task.runtime.worker_profile.denied_tools {
+            if !task.runtime.context.disallowed_tools.contains(denied) {
+                task.runtime.context.disallowed_tools.push(denied.clone());
+            }
+        }
+        task.runtime.activation = launch.activation;
+        run_subagent_task(task).await;
+    } else {
+        let identity = {
+            let mut manager = task.manager_handle.write().await;
+            let identity = manager
+                .agents
+                .get(&task.agent_id)
+                .and_then(|agent| agent.activation.as_ref())
+                .map(|state| state.identity.clone());
+            if let Ok(mut result) = manager.get_result(&task.agent_id) {
+                result.status = SubAgentStatus::Cancelled;
+                result.result = None;
+                manager.finish_terminal_result(&task.agent_id, result, false, true);
+            }
+            identity
+        };
+        if let Some(identity) = identity {
+            {
+                let mut held = task.manager_handle.write().await;
+                if let Some(agent) = held.agents.get_mut(&task.agent_id) {
+                    agent.unsettled_foreground = task._foreground_child_registration.take();
+                    if let Some(state) = agent.activation.as_ref() {
+                        state
+                            .execution_settled
+                            .store(true, std::sync::atomic::Ordering::Release);
+                    }
+                }
+            }
+            let _ = persist_child_settlement(&task.manager_handle, &identity).await;
+        }
+    }
+}
 
 pub(crate) const CHILD_STOP_SETTLE_GRACE: Duration =
     crate::core::engine::FOREGROUND_CHILD_SETTLE_GRACE;
@@ -12131,10 +13006,12 @@ impl ToolSpec for AgentTool {
         .into_iter()
         .filter(|key| input.get(key).is_some())
         .collect();
+        let mut runtime = self.runtime.clone();
+        runtime.context.execution.child_activation = context.execution.child_activation.clone();
         let (snapshot, _spawn_metadata) = spawn_subagent_from_input(
             input,
             self.manager.clone(),
-            self.runtime.clone(),
+            runtime,
             false,
             None,
             None,
@@ -12713,6 +13590,7 @@ async fn spawn_subagent_from_input(
     if exact_fleet_binding.is_none() {
         refresh_spawn_route_sources(&mut runtime);
     }
+    let activation = runtime.context.execution.child_activation.take();
     let mut spawn_request = parse_spawn_request(&input)?;
     spawn_request.max_steps = None;
     spawn_request.wall_time = None;
@@ -13073,45 +13951,70 @@ async fn spawn_subagent_from_input(
     };
     let mut manager_guard = manager.write().await;
 
-    let result = manager_guard.spawn_background_with_assignment_options(
-        Arc::clone(&manager),
-        child_runtime,
-        spawn_request.agent_type,
-        effective_prompt,
-        spawn_request.assignment,
-        spawn_request.allowed_tools,
-        SubAgentSpawnOptions {
-            origin: Some(captured_origin),
-            name: spawn_request.session_name.clone(),
-            model: Some(effective_model),
-            model_route: Some(model_route),
-            child_route: Some(child_route),
-            // A workflow child goes by its task label everywhere: the label is
-            // its explicit nickname, so every snapshot, event and host reads
-            // the same name (#6565).
-            nickname: workflow_identity
-                .and_then(|identity| identity.workflow_task_label.as_deref())
-                .map(str::trim)
-                .filter(|label| !label.is_empty())
-                .map(str::to_string),
-            fork_context,
-            max_output_tokens: spawn_request
-                .max_output_tokens
-                .and_then(std::num::NonZeroU32::new),
-            max_steps: spawn_request.max_steps,
-            wall_time: spawn_request.wall_time,
-            write_claim,
-            isolated_worktree: spawn_request.worktree.is_some(),
-            expected_artifact: spawn_request.expected_artifact.clone(),
-            deliverables: spawn_request.deliverables.clone(),
-            resume_from_agent_id: resume_from_agent_id.clone(),
-            checkpoint_continuation: false,
-            claim_pre_namespaced: false,
-            preserve_runtime_profile: None,
-            workflow_run_id: workflow_identity.map(|identity| identity.workflow_run_id.clone()),
-        },
-        precomputed_delivery_evidence,
-    );
+    let spawn_options = SubAgentSpawnOptions {
+        origin: Some(captured_origin),
+        name: spawn_request.session_name.clone(),
+        model: Some(effective_model),
+        model_route: Some(model_route),
+        child_route: Some(child_route),
+        // A workflow child goes by its task label everywhere: the label is
+        // its explicit nickname, so every snapshot, event and host reads
+        // the same name (#6565).
+        nickname: workflow_identity
+            .and_then(|identity| identity.workflow_task_label.as_deref())
+            .map(str::trim)
+            .filter(|label| !label.is_empty())
+            .map(str::to_string),
+        fork_context,
+        max_output_tokens: spawn_request
+            .max_output_tokens
+            .and_then(std::num::NonZeroU32::new),
+        max_steps: spawn_request.max_steps,
+        wall_time: spawn_request.wall_time,
+        write_claim,
+        isolated_worktree: spawn_request.worktree.is_some(),
+        expected_artifact: spawn_request.expected_artifact.clone(),
+        deliverables: spawn_request.deliverables.clone(),
+        resume_from_agent_id: resume_from_agent_id.clone(),
+        checkpoint_continuation: false,
+        claim_pre_namespaced: false,
+        preserve_runtime_profile: None,
+        workflow_run_id: workflow_identity.map(|identity| identity.workflow_run_id.clone()),
+    };
+    let result = match activation.as_ref() {
+        None => manager_guard.spawn_background_with_assignment_options(
+            Arc::clone(&manager),
+            child_runtime,
+            spawn_request.agent_type,
+            effective_prompt,
+            spawn_request.assignment,
+            spawn_request.allowed_tools,
+            spawn_options,
+            precomputed_delivery_evidence,
+        ),
+        Some(request) => manager_guard
+            .prepare_background_with_assignment_options(
+                Arc::clone(&manager),
+                child_runtime,
+                spawn_request.agent_type,
+                effective_prompt,
+                spawn_request.assignment,
+                spawn_request.allowed_tools,
+                spawn_options,
+                precomputed_delivery_evidence,
+                Some(request.public_child_id.clone()),
+            )
+            .and_then(|prepared| {
+                manager_guard.commit_prepared_child(prepared, request.configuration.clone())
+            })
+            .and_then(|(result, context)| {
+                let context =
+                    context.ok_or_else(|| anyhow!("child activation was not recorded"))?;
+                *request.launched.lock().expect("child activation lock") =
+                    Some((Arc::clone(&manager), context));
+                Ok(result)
+            }),
+    };
     let result = match result {
         Ok(result) => result,
         Err(error) => {
@@ -13786,10 +14689,37 @@ struct SubAgentTask {
 /// terminal result through the same `finish_terminal_result` arbitration every
 /// other terminal path uses, then resumes unwinding so the supervisor still
 /// logs the panic and writes its crash dump.
-async fn run_subagent_task(task: SubAgentTask) {
+async fn run_subagent_task(mut task: SubAgentTask) {
+    use futures_util::FutureExt;
     let agent_id = task.agent_id.clone();
     let manager_handle = task.manager_handle.clone();
-    supervise_subagent_task_body(manager_handle, agent_id, run_subagent_task_inner(task)).await;
+    let activation = task.runtime.activation.clone();
+    let foreground = activation
+        .as_ref()
+        .and_then(|_| task._foreground_child_registration.take());
+    let outcome = std::panic::AssertUnwindSafe(supervise_subagent_task_body(
+        manager_handle.clone(),
+        agent_id.clone(),
+        run_subagent_task_inner(task),
+    ))
+    .catch_unwind()
+    .await;
+    if let Some(activation) = activation {
+        {
+            let mut held = manager_handle.write().await;
+            if let Some(agent) = held.agents.get_mut(&agent_id) {
+                agent.unsettled_foreground = foreground;
+                activation
+                    .state
+                    .execution_settled
+                    .store(true, std::sync::atomic::Ordering::Release);
+            }
+        }
+        let _ = persist_child_settlement(&manager_handle, &activation.identity).await;
+    }
+    if let Err(panic) = outcome {
+        std::panic::resume_unwind(panic);
+    }
 }
 
 async fn supervise_subagent_task_body(
@@ -16439,8 +17369,8 @@ fn apply_spawn_profile(
     if member.native_preset.is_none()
         && let Some(authority) = member.plugin_authority.as_ref()
     {
-        crate::plugins::registry::verify_plugin_component_authority(
-            authority, crate::plugins::activation::PluginActivationCapability::Agents,
+        codewhale_plugins::registry::verify_plugin_component_authority(
+            authority, codewhale_plugins::activation::PluginActivationCapability::Agents,
         ).map_err(|reason| ToolError::permission_denied(format!(
             "Plugin Agent profile '{}' is unavailable: {reason}. Reload and review the bundle before retrying.", member.id
         )))?;
@@ -19874,6 +20804,7 @@ mod owner_scoped_coordination_tests {
         spec.agent_type = FleetRole::Builder;
         spec.runtime_profile = WorkerRuntimeProfile::for_role(FleetRole::Builder);
         spec.launch_manifest = Some(ChildLaunchManifest {
+            activation: None,
             owner_session: "owner".into(),
             child_id: id.into(),
             profile: spec.runtime_profile.clone(),

@@ -532,6 +532,7 @@ async fn lifecycle_running_row_reports_declared_vs_observed_writes() {
         let record = manager.worker_records.get_mut(&id).unwrap();
         record.spec.runtime_profile.permissions.write = true;
         record.spec.launch_manifest = Some(ChildLaunchManifest {
+            activation: None,
             owner_session: "root".to_string(),
             child_id: id.clone(),
             profile: record.spec.runtime_profile.clone(),

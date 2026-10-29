@@ -72,10 +72,9 @@ fn output_tokens(app: &App) -> Option<u64> {
 /// the git bottom view own them. Fleet, whale and automation counts left too —
 /// the posture bar's live counts own activity.
 ///
-/// Composition is the user's (#5950): every segment here is gated on the
-/// matching [`StatusItem`] in `app.status_items`, which is what `/statusline`
-/// edits and `tui.status_items` persists. Between 0.9.12 and this change the
-/// row ignored that list entirely and the picker's toggles did nothing.
+/// Session metrics follow the matching [`StatusItem`] in `app.status_items`,
+/// which `/statusline` edits and `tui.status_items` persists. The active goal
+/// and available-update notice follow their own live state.
 pub(crate) fn info_segments(app: &App, width: u16) -> Vec<InfoSegment> {
     use codewhale_localization::MessageId;
     use codewhale_palette::ChromeInk;
@@ -325,6 +324,15 @@ pub(crate) fn info_segments(app: &App, width: u16) -> Vec<InfoSegment> {
         }
     }
 
+    if let Some(label) = app.update_available.as_deref() {
+        segments.push(InfoSegment::new(
+            InfoSegmentId::Update,
+            "",
+            label,
+            ChromeInk::Info,
+        ));
+    }
+
     segments
 }
 
@@ -418,10 +426,9 @@ fn split_route_hitbox(
 }
 
 /// Render the info line into its one row and record its segment
-/// hitboxes (spec §5b `Constraint::Length(1)`). The ONE header on every
-/// screen: the session shell and the launch screen both call this, so the
-/// brand lockup, contextual segments, and the pinned meter + clock never
-/// change identity between pre- and post-session states. Segment rects are
+/// hitboxes (spec §5b `Constraint::Length(1)`). The session shell and launch
+/// screen both use this row, keeping the visible identity and notice facts
+/// consistent between pre- and post-session states. Segment rects are
 /// recorded for hover (this frame's highlight resolves against the previous
 /// frame's rects, the standard one-frame-lag registry pattern) and for typed
 /// click routing.
@@ -446,7 +453,10 @@ fn render_info_row(
         segments.retain(|segment| {
             matches!(
                 segment.id,
-                InfoSegmentId::Model | InfoSegmentId::Workspace | InfoSegmentId::GitBranch
+                InfoSegmentId::Model
+                    | InfoSegmentId::Workspace
+                    | InfoSegmentId::GitBranch
+                    | InfoSegmentId::Update
             )
         });
     }
@@ -3019,9 +3029,8 @@ mod tests {
         }
     }
 
-    /// Every remaining status item owns a segment, and an empty list leaves
-    /// the row with nothing but the help hint — no toggle in `/statusline`
-    /// paints something no toggle can remove.
+    /// Every selected status item owns its segment; without live notices an
+    /// empty list leaves the metrics line empty.
     #[test]
     fn every_metrics_segment_answers_to_a_status_item() {
         let mut app = app_with_context_percent(60);
@@ -3070,6 +3079,7 @@ mod tests {
         app.workspace = std::path::PathBuf::from("/fixture/checkout");
         app.workspace_context = Some("feature-6112 | clean".to_string());
         app.status_items = vec![StatusItem::Workspace, StatusItem::GitBranch];
+        app.update_available = Some("↑ v9.9.9".to_string());
         app.metrics_line = codewhale_runtime::config::ChromeRowPreset::Compact;
         let backend = ratatui::backend::TestBackend::new(100, 1);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
@@ -3088,6 +3098,15 @@ mod tests {
             .collect();
         assert!(rendered.contains("checkout"), "{rendered}");
         assert!(rendered.contains("feature-6112"), "{rendered}");
+        assert!(rendered.contains("v9.9.9"), "{rendered}");
+        let mut notice = super::super::UpdateNotice {
+            current: "0.10.1".to_string(),
+            latest: "0.10.2".to_string(),
+            staged: Some(false),
+        };
+        assert_eq!(notice.chip_label(), "↑ v0.10.2");
+        notice.staged = Some(true);
+        assert_eq!(notice.chip_label(), "↑ v0.10.2 ready");
     }
 
     /// #6112: the opt-in workspace and branch chips read cached state only —

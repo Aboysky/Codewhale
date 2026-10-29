@@ -39,6 +39,7 @@ list_areas() {
   cat <<'EOF'
 area              command
 ----              -------
+account-cli       cargo test -p codewhale-account-cli --lib --locked
 agent             cargo test -p codewhale-agent --lib --locked
 agent-contract    cargo test -p codewhale-agent-contract --lib --locked
 app-server        cargo test -p codewhale-app-server --lib --locked
@@ -67,6 +68,7 @@ telemetry         cargo test -p codewhale-telemetry --lib --locked
 tools             cargo test -p codewhale-tools --lib --locked
 tui               cargo test -p codewhale-tui --lib --locked
 skill-install     cargo test -p codewhale-skill-install --lib --locked
+plugins           cargo test -p codewhale-plugins --lib --locked
 util              cargo test -p codewhale-util --lib --locked
 dependencies      cargo test -p codewhale-dependencies --lib --locked
 snapshot          cargo test -p codewhale-snapshot --lib --locked
@@ -190,6 +192,7 @@ fi
 pkg=
 target=--lib
 case $area in
+  account-cli) pkg=codewhale-account-cli ;;
   agent) pkg=codewhale-agent ;;
   agent-contract) pkg=codewhale-agent-contract ;;
   app-server) pkg=codewhale-app-server ;;
@@ -218,6 +221,7 @@ case $area in
   tools) pkg=codewhale-tools ;;
   tui) pkg=codewhale-tui ;;
   skill-install) pkg=codewhale-skill-install ;;
+  plugins) pkg=codewhale-plugins ;;
   util) pkg=codewhale-util ;;
   dependencies) pkg=codewhale-dependencies ;;
   snapshot) pkg=codewhale-snapshot ;;

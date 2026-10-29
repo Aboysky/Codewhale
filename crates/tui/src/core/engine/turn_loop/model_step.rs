@@ -541,6 +541,9 @@ impl Engine {
         } else {
             stop_reason
         };
+        if let Some(job) = self.child_job() {
+            job.record_activation_provider_stop(stop_reason.as_deref(), response_stream_failed);
+        }
         // These belong to post-stream response assembly, not stream
         // consumption: blocks are built from the completed stream state,
         // and truncation is derived from its terminal stop reason below.

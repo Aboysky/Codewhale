@@ -47,6 +47,9 @@ export const METHODS = [
   { name: 'core/call', direction: 'host_to_core', request: true, params: 'CoreCallParams', tiers: ['plugin', 'builtin'] },
   { name: 'session/checkpoint', direction: 'host_to_core', request: true, params: 'SessionCheckpointParams', tiers: ['plugin', 'builtin'] },
   { name: 'user-questions/ask', direction: 'host_to_core', request: true, params: 'UserQuestionParams', tiers: ['plugin', 'builtin'] },
+  { name: 'subagent/start', direction: 'host_to_core', request: true, params: 'SubagentStartParams', tiers: ['plugin', 'builtin'] },
+  { name: 'subagent/result', direction: 'host_to_core', request: true, params: 'SubagentHandleParams', tiers: ['plugin', 'builtin'] },
+  { name: 'subagent/dispose', direction: 'host_to_core', request: true, params: 'SubagentHandleParams', tiers: ['plugin', 'builtin'] },
   { name: 'proc/launch', direction: 'host_to_core', request: true, params: 'ProcLaunchParams', tiers: ['builtin'] },
   { name: 'proc/read', direction: 'host_to_core', request: true, params: 'ProcSessionParams', tiers: ['builtin'] },
   { name: 'proc/write', direction: 'host_to_core', request: true, params: 'ProcWriteParams', tiers: ['builtin'] },
@@ -258,10 +261,20 @@ export const SHAPES: { readonly [name: string]: Shape } = {
     required: { owner: { ref: 'OwnerRef' }, ticket: 'string' },
     optional: {},
   },
+  SubagentHandleParams: {
+    strict: true,
+    required: { owner: { ref: 'OwnerRef' }, ticket: 'string', child_id: 'string' },
+    optional: {},
+  },
+  SubagentStartParams: {
+    strict: true,
+    required: { owner: { ref: 'OwnerRef' }, ticket: 'string', child_id: 'string', prompt: 'string', delivery: 'string' },
+    optional: { model: 'string', persona: 'string', denied_tools: { items: 'string' } },
+  },
   ToolCallParams: {
     strict: false,
     required: { handle: 'uint', call_id: 'string', input: 'json', deadline_ms: 'uint' },
-    optional: { workspace: 'string', ticket: 'string', checkpoint_ticket: 'string', question_ticket: 'string', session_id: 'string', agent_id: 'string', origin_turn_id: 'string' },
+    optional: { workspace: 'string', ticket: 'string', checkpoint_ticket: 'string', question_ticket: 'string', subagent_ticket: 'string', caller_tools: { items: 'string' }, session_id: 'string', agent_id: 'string', origin_turn_id: 'string' },
   },
   UnregisterParams: {
     strict: true,
@@ -552,6 +565,23 @@ export interface SessionCheckpointParams {
   ticket: string
 }
 
+export interface SubagentHandleParams {
+  owner: OwnerRef
+  ticket: string
+  child_id: string
+}
+
+export interface SubagentStartParams {
+  owner: OwnerRef
+  ticket: string
+  child_id: string
+  prompt: string
+  model?: string
+  persona?: string
+  denied_tools?: string[]
+  delivery: string
+}
+
 export interface ToolCallParams {
   handle: number
   call_id: string
@@ -561,6 +591,8 @@ export interface ToolCallParams {
   ticket?: string
   checkpoint_ticket?: string
   question_ticket?: string
+  subagent_ticket?: string
+  caller_tools?: string[]
   session_id?: string
   agent_id?: string
   origin_turn_id?: string

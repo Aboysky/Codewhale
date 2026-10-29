@@ -171,6 +171,20 @@ Runtime 保留现有的回执秘密脱敏规则；成功确认的是持久化投
 取消可能与磁盘写入竞争，因此拒绝不能证明磁盘完全未写入。其他 `sessions` 方法
 仍未支持。
 
+注入 `subagents` 的插件可在直接调用的根工具中启动一个独立子 agent。
+`ctx.subagents.getProvider('spawn')` 描述唯一的提供者：不继承对话的全新子 agent。
+`ctx.subagents.startActivation({ provider: 'spawn', childId, request: { parent:
+exec.agent, prompt, agentOptions: { model } }, signal, delivery })` 先运行该插件自己的
+`agent/created` 监听器：其中子 agent 的 `ctx.systemPrompt.section({ name:
+PERSONA_PREFIX_SECTION, ... })` 设置最多 32 KiB 的角色设定，追加到该子 agent 自己的系统提示并记入其启动清单；
+`ctx.tools.restrict({ deny })` 只会增加禁用工具。随后 Engine 通过本轮的审批流程以普通 `agent` 启动该子 agent：
+插件的调用需要单独审批，不会复用模型的授权。子 agent 运行在 Codewhale 现有的子 agent 管理器中，
+受父级权限和预算限制。返回的对象在子 agent 接收首条消息后才完成；`result` 等待子 agent 结束并返回文本输出与停止原因；
+`dispose()` 停止该子 agent 及其后代。`delivery: 'caller'` 只把结果交给插件，不交给父模型。
+插件未释放的子 agent 会在调用结束时停止。`ctx.tools.get(name, exec.agent)` 报告调用方是否拥有某个工具。
+提示词仅支持文本，agent 选项仅接受 `model`；子 agent 自己的工具调用中不可使用该服务；非文本输出及其他 DSH agent API 尚未支持，
+`agents` 与根级 `systemPrompt` 不提供方法。
+
 当 Rust 提供调用者会话时，`invocation.agent` 另外提供只读 id 和
 `followup(message)`。一次调用只接收一条 JSON user 消息，包含有界 id、仅有 kind
 的 source 和一个纯文本块；成功返回时转为相同的 Submit 结果。错误、异常或取消

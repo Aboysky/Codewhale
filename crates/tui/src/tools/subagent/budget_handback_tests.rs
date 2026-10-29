@@ -767,6 +767,7 @@ async fn budget_death_checkpoint_commits_uncommitted_work_on_isolated_worktree()
     let mut spec = make_worker_spec("checkpoint-worker", root.to_path_buf());
     spec.runtime_profile.permissions.write = true;
     spec.launch_manifest = Some(ChildLaunchManifest {
+        activation: None,
         owner_session: "root".to_string(),
         child_id: "checkpoint-worker".to_string(),
         profile: spec.runtime_profile.clone(),
@@ -856,6 +857,7 @@ async fn budget_death_checkpoint_reports_worker_committed_tree() {
     let mut spec = make_worker_spec("tidy-worker", root.to_path_buf());
     spec.runtime_profile.permissions.write = true;
     spec.launch_manifest = Some(ChildLaunchManifest {
+        activation: None,
         owner_session: "root".to_string(),
         child_id: "tidy-worker".to_string(),
         profile: spec.runtime_profile.clone(),

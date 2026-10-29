@@ -190,7 +190,7 @@ fn runtime_token_alias_warning(
 pub struct RuntimeApiState {
     config: Arc<parking_lot::RwLock<Config>>,
     workspace: PathBuf,
-    plugin_discovery: Arc<crate::plugins::PluginDiscoveryContext>,
+    plugin_discovery: Arc<codewhale_plugins::PluginDiscoveryContext>,
     task_manager: SharedTaskManager,
     runtime_threads: SharedRuntimeThreadManager,
     cors_origins: Vec<String>,
@@ -301,7 +301,8 @@ impl Drop for RuntimeWorkspaceScope {
 struct RuntimeWorkspaceScopes {
     scopes: parking_lot::Mutex<BTreeMap<PathBuf, Arc<RuntimeWorkspaceScope>>>,
     mcp_generation: std::sync::atomic::AtomicU64,
-    dynamic_servers: Arc<parking_lot::RwLock<HashMap<String, crate::mcp::McpServerConfig>>>,
+    dynamic_servers:
+        Arc<parking_lot::RwLock<HashMap<String, codewhale_mcp::config::McpServerConfig>>>,
     owner: SharedRuntimeThreadManager,
     workers: SharedSubAgentManager,
     cleanup_runtime: tokio::runtime::Handle,
@@ -802,12 +803,14 @@ impl codewhale_app_server::RuntimeOwnerFrontend for CapturedRuntimeFrontend {
             let shutdown = RuntimeServerShutdown::default();
             state.shutdown = shutdown.clone();
             let app = with_loopback_host_guard(
-                build_router(state).merge(codewhale_app_server::runtime_compatibility_router(
-                    compatibility,
-                    &options.cors_origins,
-                    resolved.token.clone(),
-                    Some(workspace),
-                )),
+                build_router(state).merge(
+                    codewhale_app_server::http::runtime_compatibility_router(
+                        compatibility,
+                        &options.cors_origins,
+                        resolved.token.clone(),
+                        Some(workspace),
+                    ),
+                ),
                 resolved.token.is_none(),
             );
             let ready = RuntimeFrontendReady {
@@ -857,7 +860,7 @@ async fn write_frontend_ready(
 async fn wait_frontend_input_close(
     input: Box<dyn tokio::io::AsyncBufRead + Send + Unpin>,
 ) -> Result<()> {
-    let mut input = codewhale_app_server::BoundedLines::new(input);
+    let mut input = codewhale_app_server::stdio::BoundedLines::new(input);
     if let Some(line) = input.next_line().await? {
         let value: Value = serde_json::from_str(&line)?;
         anyhow::ensure!(
@@ -1523,7 +1526,7 @@ struct McpServerDetail {
 impl McpServerDetail {
     fn from_config(
         name: &str,
-        cfg: &crate::mcp::McpServerConfig,
+        cfg: &codewhale_mcp::config::McpServerConfig,
         connected: bool,
         revision: String,
     ) -> Self {
@@ -1659,7 +1662,7 @@ fn open_runtime_threads_for_server(
     config: &Config,
     workspace: PathBuf,
     manager_config: RuntimeThreadManagerConfig,
-    plugin_registry: Arc<crate::plugins::PluginRegistry>,
+    plugin_registry: Arc<codewhale_plugins::PluginRegistry>,
 ) -> Result<(SharedRuntimeThreadManager, codewhale_config::WorkshopConfig)> {
     open_runtime_threads_for_host(
         config,
@@ -1676,7 +1679,7 @@ pub(crate) fn open_runtime_threads_for_host(
     config: &Config,
     workspace: PathBuf,
     manager_config: RuntimeThreadManagerConfig,
-    plugin_registry: Arc<crate::plugins::PluginRegistry>,
+    plugin_registry: Arc<codewhale_plugins::PluginRegistry>,
     acp: bool,
     preheld_lock: Option<crate::runtime_threads::RuntimeProcessOwnerLock>,
     binding: Option<&crate::runtime_threads::RuntimeStoreBinding>,
@@ -1803,7 +1806,7 @@ pub const RUNTIME_LISTENING_PREFIX: &str = "Runtime API listening on http://";
 pub async fn run_http_server(
     mut config: Config,
     workspace: PathBuf,
-    plugin_discovery: Arc<crate::plugins::PluginDiscoveryContext>,
+    plugin_discovery: Arc<codewhale_plugins::PluginDiscoveryContext>,
     options: RuntimeApiOptions,
 ) -> Result<()> {
     let inherited_listener = listener::take(&options.host, options.port, options.insecure_no_auth)?;
@@ -2090,7 +2093,7 @@ pub async fn run_http_server(
     let listener_workspace = state.workspace.clone();
     let app = build_router(state);
     #[cfg(any(unix, windows))]
-    let app = app.merge(codewhale_app_server::runtime_compatibility_router(
+    let app = app.merge(codewhale_app_server::http::runtime_compatibility_router(
         control_state.clone(),
         &options.cors_origins,
         runtime_token.clone(),
@@ -5669,9 +5672,9 @@ async fn get_skill_detail(
                 // The same gate the TUI's own activation path runs: a plugin whose
                 // trust or enablement changed since discovery must not hand its
                 // body to a client.
-                crate::plugins::registry::verify_plugin_component_authority(
+                codewhale_plugins::registry::verify_plugin_component_authority(
                     authority,
-                    crate::plugins::activation::PluginActivationCapability::Skills,
+                    codewhale_plugins::activation::PluginActivationCapability::Skills,
                 )
                 .map_err(|reason| {
                     ApiError::forbidden(format!(
@@ -6002,7 +6005,7 @@ async fn audit_skill_api(
         let config = state.config.read();
         config.skills_dir.as_ref().map(PathBuf::from)
     };
-    let canonical = crate::skills::normalize_skill_name_for_lookup(&name);
+    let canonical = codewhale_skill_install::skill_parse::normalize_skill_name_for_lookup(&name);
 
     let snap = scan_with_configured(
         &state.workspace,
@@ -6443,7 +6446,7 @@ fn mcp_management_config(
     state: &RuntimeApiState,
 ) -> Result<
     (
-        crate::mcp::McpConfig,
+        codewhale_mcp::config::McpConfig,
         std::collections::HashMap<String, &'static str>,
     ),
     ApiError,
@@ -6473,7 +6476,7 @@ fn mcp_management_config(
         crate::mcp::load_config(&project_path)
             .map_err(|e| ApiError::internal(format!("Failed to load project MCP config: {e}")))?
     } else {
-        crate::mcp::McpConfig::default()
+        codewhale_mcp::config::McpConfig::default()
     };
     let origins = config
         .servers
@@ -6550,7 +6553,7 @@ fn mcp_expected_revision(headers: &axum::http::HeaderMap) -> Result<String, ApiE
 async fn mutate_mcp_management<T: Send + 'static>(
     state: RuntimeApiState,
     headers: axum::http::HeaderMap,
-    mutate: impl FnOnce(&RuntimeApiState, &mut crate::mcp::McpConfig) -> Result<T, ApiError>
+    mutate: impl FnOnce(&RuntimeApiState, &mut codewhale_mcp::config::McpConfig) -> Result<T, ApiError>
     + Send
     + 'static,
 ) -> Result<(T, String), ApiError> {
@@ -6584,7 +6587,7 @@ async fn mcp_management_snapshot(
 ) -> Result<
     (
         (
-            crate::mcp::McpConfig,
+            codewhale_mcp::config::McpConfig,
             std::collections::HashMap<String, &'static str>,
         ),
         String,
@@ -7195,10 +7198,10 @@ async fn reconnect_mcp_server(
 /// Build a fresh [`McpServerConfig`] from a create request.
 fn mcp_server_config_from_write_request(
     req: McpServerWriteRequest,
-    _existing: Option<&crate::mcp::McpServerConfig>,
-) -> crate::mcp::McpServerConfig {
+    _existing: Option<&codewhale_mcp::config::McpServerConfig>,
+) -> codewhale_mcp::config::McpServerConfig {
     let enabled = req.enabled.unwrap_or(true);
-    crate::mcp::McpServerConfig {
+    codewhale_mcp::config::McpServerConfig {
         command: req.command.flatten(),
         args: req.args.unwrap_or_default(),
         env: req.env.unwrap_or_default(),
@@ -7228,7 +7231,7 @@ fn mcp_server_config_from_write_request(
 
 /// Nonsecret indicator and retargeting guard. Treat environment and OAuth
 /// configuration as authority even when it only references a credential.
-fn mcp_credential_configured(cfg: &crate::mcp::McpServerConfig) -> bool {
+fn mcp_credential_configured(cfg: &codewhale_mcp::config::McpServerConfig) -> bool {
     !cfg.env.is_empty()
         || !cfg.headers.is_empty()
         || !cfg.env_headers.is_empty()
@@ -7241,7 +7244,7 @@ fn mcp_credential_configured(cfg: &crate::mcp::McpServerConfig) -> bool {
 /// Apply a partial update from a PATCH request onto an existing config entry.
 fn apply_write_request_to_config(
     req: McpServerWriteRequest,
-    cfg: &mut crate::mcp::McpServerConfig,
+    cfg: &mut codewhale_mcp::config::McpServerConfig,
 ) {
     if let Some(v) = req.command {
         cfg.command = v;
@@ -10769,7 +10772,7 @@ fn discover_skills_for_runtime_api(
     workspace: &FsPath,
     skills_dir: &FsPath,
     mode: crate::skills::SkillDiscoveryMode,
-    plugins: Option<&crate::plugins::PluginRegistry>,
+    plugins: Option<&codewhale_plugins::PluginRegistry>,
 ) -> (crate::skills::SkillRegistry, Vec<PathBuf>) {
     let directories = skills_search_directories(workspace, skills_dir, mode);
     let registry = crate::skills::discover_from_directories_in_workspace(
@@ -10826,10 +10829,10 @@ fn skill_entry_for(skill: &crate::skills::Skill, enabled: bool, skills_dir: &FsP
         enabled,
         is_bundled,
         invocation: match skill.invocation {
-            crate::skills::SkillInvocation::ModelAndUser => "model+user",
-            crate::skills::SkillInvocation::ExplicitOnly => "explicit-only",
-            crate::skills::SkillInvocation::ModelOnly => "model-only",
-            crate::skills::SkillInvocation::Disabled => "disabled",
+            codewhale_skill_install::skill_parse::SkillInvocation::ModelAndUser => "model+user",
+            codewhale_skill_install::skill_parse::SkillInvocation::ExplicitOnly => "explicit-only",
+            codewhale_skill_install::skill_parse::SkillInvocation::ModelOnly => "model-only",
+            codewhale_skill_install::skill_parse::SkillInvocation::Disabled => "disabled",
         },
         aliases: skill.aliases.clone(),
         // Reported only when `is_bundled` is true, so the two fields cannot
@@ -11483,7 +11486,8 @@ fn provider_model_entry_for_api(
     {
         entry.reasoning_effort_levels = efforts
             .into_iter()
-            .filter(|effort| !matches!(effort, ReasoningEffort::Off | ReasoningEffort::Auto))
+            .filter(|effort| *effort != ReasoningEffort::Auto)
+            .filter(|effort| *effort != ReasoningEffort::Off || provider == ProviderKind::Deepseek)
             .map(|effort| effort.as_setting().to_string())
             .collect();
         entry.reasoning_effort_source = Some("catalog");
@@ -12087,7 +12091,7 @@ async fn switch_provider(
             // route is invalid under the new provider — surface it so the GUI can
             // tell the user to fix their config.
             let applied =
-                match crate::plugins::providers::load_config(state.config_path.clone(), state.config_profile.as_deref()) {
+                match codewhale_plugins::providers::load_config(state.config_path.clone(), state.config_profile.as_deref()) {
                     Ok(mut reloaded) => {
                         reloaded.preserve_runtime_credentials(&state.config.read());
                         match runtime.block_on(state.runtime_threads.reload_config(reloaded.clone())) {
@@ -13144,7 +13148,7 @@ async fn reload_config(
 ) -> Result<Json<ReloadConfigResponse>, ApiError> {
     tokio::spawn(async move {
         let _credential_change = state.provider_switches.lock().await;
-        let mut reloaded = crate::plugins::providers::load_config(
+        let mut reloaded = codewhale_plugins::providers::load_config(
             state.config_path.clone(),
             state.config_profile.as_deref(),
         )
@@ -13810,7 +13814,7 @@ base_url = "http://127.0.0.1:9/v1"
         let root = config_path.parent().expect("fixture root");
         let workspace = root.join("workspace");
         fs::create_dir_all(&workspace)?;
-        let config = crate::plugins::providers::load_config(Some(config_path.clone()), None)?;
+        let config = codewhale_plugins::providers::load_config(Some(config_path.clone()), None)?;
         let sessions_dir = root.join("sessions");
         let mut manager_config =
             RuntimeThreadManagerConfig::from_task_data_dir(root.join("runtime"));
@@ -13819,7 +13823,7 @@ base_url = "http://127.0.0.1:9/v1"
             config.clone(),
             workspace.clone(),
             manager_config,
-            Arc::new(crate::plugins::PluginRegistry::empty(&workspace)),
+            Arc::new(codewhale_plugins::PluginRegistry::empty(&workspace)),
         )?);
         let sessions_dir = runtime_threads.sessions_dir().to_path_buf();
         let task_manager = TaskManager::start_with_runtime_manager(
@@ -13849,7 +13853,7 @@ base_url = "http://127.0.0.1:9/v1"
         let state = RuntimeApiState {
             config: Arc::new(parking_lot::RwLock::new(config)),
             workspace: workspace.clone(),
-            plugin_discovery: crate::plugins::PluginDiscoveryContext::capture_pre_dotenv(),
+            plugin_discovery: codewhale_plugins::PluginDiscoveryContext::capture_pre_dotenv(),
             task_manager,
             runtime_threads,
             cors_origins: Vec::new(),
@@ -13905,8 +13909,9 @@ base_url = "http://127.0.0.1:9/v1"
     }
 
     fn assert_declared_route(config_path: &FsPath, provider: ProviderKind, model: &str) {
-        let config = crate::plugins::providers::load_config(Some(config_path.to_path_buf()), None)
-            .expect("reloaded config");
+        let config =
+            codewhale_plugins::providers::load_config(Some(config_path.to_path_buf()), None)
+                .expect("reloaded config");
         let persisted = config
             .provider_config_for(&config.test_identity_for_kind(provider))
             .and_then(|entry| entry.model.as_deref());
@@ -14379,7 +14384,7 @@ model = "GLM-5.2"
         .await?;
         assert_eq!(body["value"], "deepseek-v4-pro");
         post_json(addr, "/v1/config/reload", json!({})).await?;
-        let config = crate::plugins::providers::load_config(Some(config_path), None)?;
+        let config = codewhale_plugins::providers::load_config(Some(config_path), None)?;
         assert_eq!(
             config
                 .provider_config_for(&config.test_identity_for_kind(ProviderKind::Deepseek))

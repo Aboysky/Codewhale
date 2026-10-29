@@ -1551,7 +1551,7 @@ pub(crate) struct SkillCacheScope {
     pub(crate) workspace: std::path::PathBuf,
     pub(crate) skills_dir: std::path::PathBuf,
     pub(crate) mode: crate::skills::SkillDiscoveryMode,
-    pub(crate) plugins: std::sync::Arc<crate::plugins::PluginRegistry>,
+    pub(crate) plugins: std::sync::Arc<codewhale_plugins::PluginRegistry>,
 }
 
 pub struct App {
@@ -1669,9 +1669,9 @@ pub struct App {
     pub status_message: Option<String>,
     /// Recent status toasts (ephemeral, newest at back).
     pub status_toasts: VecDeque<StatusToast>,
-    /// Header chip label (e.g. `↑ v0.9.5`) set once by the fire-and-forget
+    /// Metrics-line label (e.g. `↑ v0.9.5`) set once by the fire-and-forget
     /// startup version check when a newer stable release exists. Drives the
-    /// small persistent update chip in the header so the affordance survives
+    /// persistent update notice so the affordance survives
     /// the transient toast without nagging (FINISH-0.9.4 #14).
     pub update_available: Option<String>,
     /// Sticky status toast used for important warnings/errors.
@@ -1684,7 +1684,7 @@ pub struct App {
     pub context_pressure_warning_dismissed:
         Option<codewhale_runtime::context_budget::PressureLevel>,
     /// Last on-disk plugin catalog stamp we already nudged `/plugin reload` for.
-    pub plugin_reload_nudge_stamp: Option<crate::plugins::PluginCatalogStamp>,
+    pub plugin_reload_nudge_stamp: Option<codewhale_plugins::PluginCatalogStamp>,
     /// Last idle catalog fingerprint poll, so disk changes can surface between turns.
     pub last_plugin_catalog_poll: Option<Instant>,
     /// Live composer plugin CTA (debounce + one match, never auto-install).
@@ -1814,7 +1814,7 @@ pub struct App {
     /// (#4022).
     pub lane_control: codewhale_runtime::lane_control::LaneControlQueue,
     /// Immutable plugin catalogue scoped to this App's effective workspace.
-    pub plugin_registry: std::sync::Arc<crate::plugins::PluginRegistry>,
+    pub plugin_registry: std::sync::Arc<codewhale_plugins::PluginRegistry>,
     pub config_path: Option<PathBuf>,
     pub config_profile: Option<String>,
     /// Legacy executable plugin-tool directory resolved from the already
@@ -3255,7 +3255,7 @@ impl App {
         workspace: &std::path::Path,
         skills_dir: &std::path::Path,
         discovery_mode: crate::skills::SkillDiscoveryMode,
-        plugins: &crate::plugins::PluginRegistry,
+        plugins: &codewhale_plugins::PluginRegistry,
     ) -> Vec<(String, String)> {
         crate::skills::discover_for_workspace_and_dir_with_mode_and_plugins(
             workspace,
@@ -3271,7 +3271,9 @@ impl App {
         .collect()
     }
 
-    pub(crate) fn extension_plugin_view(&self) -> std::sync::Arc<crate::plugins::PluginRegistry> {
+    pub(crate) fn extension_plugin_view(
+        &self,
+    ) -> std::sync::Arc<codewhale_plugins::PluginRegistry> {
         crate::extension_host::caller_view(
             &self.workspace,
             self.current_session_id.as_deref(),

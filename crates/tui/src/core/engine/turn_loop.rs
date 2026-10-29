@@ -3899,6 +3899,7 @@ impl Engine {
                             mode,
                             extension.as_ref(),
                             request.withdraw.as_ref(),
+                            request.child_activation,
                         )
                         .await
                     };
@@ -4014,8 +4015,23 @@ impl Engine {
         mode: AppMode,
         extension: Option<&crate::tools::codemode::ExtensionCaller>,
         withdraw: Option<&tokio_util::sync::CancellationToken>,
+        child_activation: bool,
     ) -> crate::tools::codemode::NestedCallVerdict {
         use crate::tools::codemode::{NestedCallVerdict, NestedDecision};
+        let typed_child = |name: &str, input: &serde_json::Value| {
+            child_activation
+                && extension.is_some()
+                && name == "agent"
+                && crate::tools::codemode::child_activation_input(input)
+        };
+        if child_activation && !typed_child(&name, &input) {
+            return NestedCallVerdict::Refused {
+                error: ToolError::permission_denied(
+                    "a child activation may only start an independent agent",
+                ),
+                decision: NestedDecision::Refused,
+            };
+        }
         let source = if extension.is_some() {
             ToolCallSource::Extension
         } else {
@@ -4037,7 +4053,9 @@ impl Engine {
                 crate::extension_host::core_call::refusal(&specs, name, input)
             })
         };
-        if let Some(note) = refuse_early(tool_registry, &name, &input) {
+        if let Some(note) =
+            refuse_early(tool_registry, &name, &input).filter(|_| !typed_child(&name, &input))
+        {
             return NestedCallVerdict::Refused {
                 error: ToolError::permission_denied(note),
                 decision: NestedDecision::Refused,
@@ -4105,9 +4123,14 @@ impl Engine {
         // Planning resolves a near-miss name (`Agent` -> `agent`) and hooks
         // may rewrite the input, so the direct-only refusals the program's
         // raw request passed are checked again on what would actually run.
-        if let Some(note) =
-            crate::tools::codemode::refusal_before_gate(&plan.name, &plan.input, true)
-                .or_else(|| refuse_early(tool_registry, &plan.name, &plan.input))
+        let resolved_child = typed_child(&plan.name, &plan.input);
+        if let Some(note) = (child_activation && !resolved_child)
+            .then(|| "a child activation may only start an independent agent".to_string())
+            .or_else(|| {
+                crate::tools::codemode::refusal_before_gate(&plan.name, &plan.input, true)
+                    .or_else(|| refuse_early(tool_registry, &plan.name, &plan.input))
+                    .filter(|_| !resolved_child)
+            })
         {
             // Admitted by planning but never executed: hand the slot back.
             nested_gate_env.tool_call_budget.refund();
@@ -8953,7 +8976,7 @@ pub(crate) async fn run_tool_call_before_hooks_for_context(
     model: &str,
 ) -> Result<ToolCallBeforeHookOutcome, ToolError> {
     if context.is_none()
-        && crate::plugins::activation::extension_host_policy_enabled()
+        && codewhale_plugins::activation::extension_host_policy_enabled()
         && (hooks.is_some() || attachment.is_some())
     {
         return Err(ToolError::not_available(
