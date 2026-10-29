@@ -287,23 +287,26 @@ where
     F: FnMut(String) -> Fut,
     Fut: std::future::Future<Output = anyhow::Result<OllamaTagProfile>>,
 {
-    let candidates: Vec<&String> = tags
+    let candidates: Vec<String> = tags
         .iter()
         .filter(|tag| {
             profiles
                 .get(*tag)
                 .is_none_or(|profile| profile.capabilities.is_none())
         })
+        .cloned()
         .collect();
-    futures_util::stream::iter(candidates
-        .into_iter()
-        .map(|tag| {
-            let future = fetch(tag.clone());
-            async move { (tag, future.await) }
-        }))
+    let probes = futures_util::stream::iter(candidates.into_iter().map(|tag| {
+        let future = fetch(tag.clone());
+        async move {
+            let result = future.await;
+            (tag, result)
+        }
+    }));
+    probes
         .buffer_unordered(SHOW_PROBE_LIMIT)
         .filter_map(|(tag, result)| futures_util::future::ready(match result {
-            Ok(profile) => Some((tag.clone(), profile)),
+            Ok(profile) => Some((tag, profile)),
             Err(err) => {
                 tracing::debug!(target: "local_ollama", error = %err, tag = %tag, "POST /api/show probe failed");
                 None

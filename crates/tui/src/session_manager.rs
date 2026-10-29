@@ -2785,6 +2785,7 @@ impl SessionManager {
     ///
     /// Checkpoints are keyed per session (`checkpoints/<session_id>.json`) so
     /// concurrent sessions never overwrite each other's crash-recovery state.
+    #[cfg(test)]
     pub fn save_checkpoint(&self, session: &SavedSession) -> std::io::Result<PathBuf> {
         self.save_checkpoint_owned(session.clone())
     }
@@ -3272,7 +3273,7 @@ impl SessionManager {
         let path = self.checkpoints_dir().join(LEGACY_CHECKPOINT_FILE);
         match Self::load_checkpoint_metadata(&path) {
             Ok(metadata) => Ok(Some(metadata.id)),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(error) => Err(error),
         }
     }
