@@ -14,14 +14,14 @@ rest of the workspace.
 This document defines the decomposition target. [CW-6129](https://linear.app/shannonlabs/issue/CW-6129)
 and its existing children own current source status, claims and acceptance;
 [the roadmap](DECONSTRUCTION_ROADMAP.md) orders structural dependencies. The
-complete program remains in0.10.3. Dated audits below are rationale, not current
+complete program remains in 0.10.3. Dated audits below are rationale, not current
 assignments or permission to create another checkout or build cache.
 
 The terminal UI becomes a presentation adapter over the existing headless
 runtime. A boundary counts when it moves real ownership, migrates every
 consumer and reduces dependency/rebuild closure. Moving a monolith or adding a
-facade does not establish that result. Aim around10,000 production lines per
-crate and complete the existing50,000 ceiling across the resulting workspace.
+facade does not establish that result. Aim around 10,000 production lines per
+crate and complete the existing 50,000 ceiling across the resulting workspace.
 Production lines, physical lines, SCCs and build timings measure different things.
 
 ## Audited baseline (2026-10-09, `bd2a7b49c`)
@@ -427,7 +427,7 @@ pricing and native skill ownership have moved with their consumers. Runtime
 configuration now lives in `crates/runtime/src/config.rs`; do not recreate the
 removed TUI config owner. Skill listing and bundled policy share the existing
 registry/configuration rather than separate prompt or activation stores.
-These moves do not complete the target: the TUI remains far above50,000
+These moves do not complete the target: the TUI remains far above 50,000
 production lines and the remaining runtime/UI ownership cycle must be cut.
 
 Continue from the current dependency graph and owning children, in this order:
@@ -438,7 +438,7 @@ Continue from the current dependency graph and owning children, in this order:
 2. Move feature and provider implementations with their final callers and
    existing checks. Preserve reviewed plugin authority, tool permission
    ceilings, credentials, typed human decisions and model-visible receipts.
-   The remaining MCP/DSH, durable Tasks, isolated UI and gix work stays in0.10.3.
+   The remaining MCP/DSH, durable Tasks, isolated UI and gix work stays in 0.10.3.
 3. Complete Engine, agents, sessions, runtime API and tool ownership without a
    second turn loop, event authority or session store. Keep the runtime API
    separate from transport-only app-server routing; avoid another large hub.
@@ -458,7 +458,7 @@ the admitted scope or authorize relocating the whole component as completion.
 
 The desktop product is `codewhale-app`'s existing native root
 `codewhale-gpui`, using GPUI/weGPUI and Codewhale-owned components. It is active
-product source, not legacy code to freeze or delete. The founder's October24/29 direction selects that native host and its
+product source, not legacy code to freeze or delete. The founder's October 24/29 direction selects that native host and its
 component migration.
 `crates/client` is the separate browser client. The superseded Tauri
 `crates/desktop-host` was deleted; no extraction or packaging should target it.
@@ -488,7 +488,7 @@ Engine helper checks alone do not qualify it.
   whose name must be claimed at release. Publication remains a human gate.
 - **An ownership move may leave an oversized crate.** Complete its internal
   split within the admitted program, guided by current churn and closure data;
-  the initial map does not waive the50,000 production-line ceiling.
+  the initial map does not waive the 50,000 production-line ceiling.
 - **No speedup has been measured.** Claims wait for the step 0 report and the
   step 3 pilot.
 
@@ -517,7 +517,7 @@ Engine helper checks alone do not qualify it.
 
 ## Model judgment and test-time compute
 
-The founder's September9 direction calls for model judgment about useful
+The founder's September 9 direction calls for model judgment about useful
 planning, delegation, verification and durable continuation, including a useful
 inferred objective within the user's authorized task. Ordinary multi-step work
 need not create a goal. Preserve runtime-owned state, provenance, accounting,
