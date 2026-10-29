@@ -7358,6 +7358,7 @@ impl Engine {
 
         // Update session usage
         self.session.total_usage.add(&turn.usage);
+        record_model_turn_telemetry(self.api_provider, &self.session.model, &turn, status);
         if !self.is_acp_turn() {
             self.record_goal_usage_for_turn(&turn.usage, turn.started_at);
         }
@@ -11074,3 +11075,33 @@ use codewhale_tools::names::{REQUEST_USER_INPUT_NAME, is_tool_search_tool};
 
 #[cfg(test)]
 pub(crate) mod tests;
+
+fn record_model_turn_telemetry(
+    provider: ProviderKind,
+    model: &str,
+    turn: &TurnContext,
+    status: TurnOutcomeStatus,
+) {
+    let usage = &turn.parent_route_usage;
+    if usage.input_tokens == 0 && usage.output_tokens == 0 && status == TurnOutcomeStatus::Completed
+    {
+        return;
+    }
+    let outcome = match status {
+        TurnOutcomeStatus::Completed => codewhale_telemetry::TurnOutcome::Ok,
+        TurnOutcomeStatus::Failed => codewhale_telemetry::TurnOutcome::Failed,
+        TurnOutcomeStatus::Interrupted => codewhale_telemetry::TurnOutcome::Interrupted,
+    };
+    codewhale_telemetry::session_counters().record_model_turn(
+        provider,
+        model,
+        outcome,
+        codewhale_telemetry::TurnTokens {
+            input: u64::from(usage.input_tokens),
+            output: u64::from(usage.output_tokens),
+            cache_read: u64::from(usage.prompt_cache_hit_tokens.unwrap_or(0)),
+            cache_write: u64::from(usage.prompt_cache_write_tokens.unwrap_or(0)),
+        },
+        turn.started_at.elapsed().as_secs(),
+    );
+}

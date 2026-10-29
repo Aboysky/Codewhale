@@ -904,6 +904,9 @@ fn telemetry_session_end() -> codewhale_telemetry::Event {
 /// A no-op unless this process was armed.
 fn record_signal_session_end() {
     codewhale_telemetry::set_exit_class(codewhale_telemetry::ExitClass::Signal);
+    for event in codewhale_telemetry::session_counters().usage_events() {
+        codewhale_telemetry::record_blocking(event);
+    }
     codewhale_telemetry::record_blocking(telemetry_session_end());
 }
 
@@ -2320,6 +2323,19 @@ fn telemetry_session_source(command: Option<&Commands>) -> codewhale_telemetry::
     }
 }
 
+fn telemetry_session_source_for_run(
+    command: Option<&Commands>,
+) -> codewhale_telemetry::SessionSource {
+    let flag = |name: &str| {
+        std::env::var(name).is_ok_and(|value| !matches!(value.trim(), "" | "0" | "false"))
+    };
+    if flag("CI") || flag("GITHUB_ACTIONS") {
+        codewhale_telemetry::SessionSource::Ci
+    } else {
+        telemetry_session_source(command)
+    }
+}
+
 /// Read-only commands must not create telemetry state as a side effect.
 // Sessions export only projects local records to an explicit output. Like
 // listing, it must not initialize telemetry or interactive session state.
@@ -2387,7 +2403,7 @@ fn arm_telemetry(cli: &Cli, command: Option<&Commands>) {
     arm_telemetry_with_setup(
         cli.config.clone(),
         telemetry_surface(command),
-        telemetry_session_source(command),
+        telemetry_session_source_for_run(command),
         None,
     );
 }
@@ -2440,6 +2456,9 @@ async fn finish_telemetry(outcome: &Result<()>, surface: codewhale_telemetry::Su
         && codewhale_telemetry::exit_class() == codewhale_telemetry::ExitClass::Clean
     {
         codewhale_telemetry::set_exit_class(codewhale_telemetry::ExitClass::Error);
+    }
+    for event in codewhale_telemetry::session_counters().usage_events() {
+        codewhale_telemetry::record(event);
     }
     codewhale_telemetry::record(telemetry_session_end());
     if surface == codewhale_telemetry::Surface::Cli {
@@ -2497,7 +2516,7 @@ async fn run_async_main_inner(
     let telemetry_notice_plan = if surface == codewhale_telemetry::Surface::Tui {
         crate::telemetry_notice::plan_if_due(
             cli.config.clone(),
-            telemetry_session_source(command.as_ref()),
+            telemetry_session_source_for_run(command.as_ref()),
         )
     } else {
         crate::telemetry_notice::TelemetryNoticePlan::NotDue
