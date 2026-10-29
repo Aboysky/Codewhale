@@ -11,6 +11,7 @@ use crate::client::ollama_catalog::{
     ollama_native_origin, parse_ollama_tags_with_profiles,
 };
 use codewhale_config::ProviderKind;
+use codewhale_config::descriptors::defaults::DEFAULT_TEXT_MODEL;
 use codewhale_runtime::config::Config;
 
 /// Result of a successful local Ollama tags/models probe.
@@ -57,6 +58,46 @@ pub(crate) fn should_adopt_live_local_ollama(
         return false;
     }
     onboarding_needs_key
+}
+
+#[must_use]
+pub(crate) fn startup_route_configured(config: &Config) -> bool {
+    // First launch writes `default_text_model = DEFAULT_TEXT_MODEL` into
+    // the generated config.toml; that line is the template, not a choice,
+    // so it must not turn off local discovery on a later launch.
+    let generated_default_model = config.provider.is_none()
+        && config.default_text_model.as_deref() == Some(DEFAULT_TEXT_MODEL);
+    config.provider.is_some()
+        || (config.default_text_model.is_some() && !generated_default_model)
+        || config.legacy_model.is_some()
+        || codewhale_runtime::config::explicit_launch_provider_override().is_some()
+        || codewhale_runtime::config::explicit_launch_model_override().is_some()
+        || config
+            .active_provider_identity()
+            .ok()
+            .as_ref()
+            .and_then(|identity| config.provider_config_for(identity))
+            .is_some_and(|entry| entry.model.is_some())
+        || config.active_route_endpoint_configured()
+}
+
+pub(crate) async fn adopt_live_local_ollama_for_run(config: &mut Config) -> Option<String> {
+    let provider = config.active_provider_identity().ok()?.provider;
+    if !should_adopt_live_local_ollama(
+        startup_route_configured(config),
+        provider,
+        false,
+        !crate::provider_readiness::has_api_key(config),
+    ) {
+        return None;
+    }
+    let catalog = spawn_local_ollama_adoption_probe(config, true)?
+        .await
+        .ok()??;
+    let tag = catalog.preferred_tag()?.to_string();
+    config.provider = Some(ProviderKind::Ollama.as_str().to_string());
+    config.default_text_model = Some(tag.clone());
+    Some(tag)
 }
 
 /// Resolve the OpenAI-compat Ollama base URL (`…/v1`) from config defaults.

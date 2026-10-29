@@ -2819,12 +2819,21 @@ async fn run_async_main_dispatch(
                         || explicit_model.is_some()
                         || codewhale_runtime::config::explicit_launch_provider_override().is_some()
                         || codewhale_runtime::config::explicit_launch_model_override().is_some();
-                    apply_selected_fleet_operator_for_launch(
+                    let fleet_route_applied = apply_selected_fleet_operator_for_launch(
                         &mut config,
                         &workspace,
                         explicit_route_override,
                         explicit_reasoning.is_some(),
                     )?;
+                    if !explicit_route_override
+                        && !fleet_route_applied
+                        && let Some(tag) =
+                            crate::local_ollama::adopt_live_local_ollama_for_run(&mut config).await
+                    {
+                        eprintln!(
+                            "codewhale exec: no cloud API key, so this run uses local Ollama {tag}; nothing was saved."
+                        );
+                    }
                 }
                 // The `codewhale` dispatcher refuses `--provider`/`--model`
                 // after `exec` and forwards the top-level flags as
@@ -5006,6 +5015,20 @@ async fn run_doctor(
             .bold()
     );
     println!("{}", "==================".truecolor(sky_r, sky_g, sky_b));
+    let local_route = if probes.probe_local {
+        let mut local = config.clone();
+        crate::local_ollama::adopt_live_local_ollama_for_run(&mut local)
+            .await
+            .map(|tag| (local, tag))
+    } else {
+        None
+    };
+    if let Some((_, tag)) = &local_route {
+        println!(
+            "No cloud API key, so Codewhale and `codewhale exec` use local Ollama {tag}; this report checks that route, and nothing was saved."
+        );
+    }
+    let config = local_route.as_ref().map_or(config, |(local, _)| local);
     // The answer comes before the detail (U7). A requested live probe runs
     // first so that answer can include it; the probe line is the only thing
     // printed while that check is in flight.
@@ -5044,6 +5067,15 @@ async fn run_doctor(
             live_probe_timed_out: live_probe
                 .as_ref()
                 .is_some_and(|result| result.as_ref().is_err_and(doctor_probe_timed_out)),
+            local_discovery: !probes.probe_local
+                && identity.as_ref().is_some_and(|identity| {
+                    crate::local_ollama::should_adopt_live_local_ollama(
+                        crate::local_ollama::startup_route_configured(config),
+                        identity.provider,
+                        false,
+                        true,
+                    )
+                }),
         },
     );
     println!("{}", verdict.truecolor(aqua_r, aqua_g, aqua_b).bold());
@@ -6198,6 +6230,7 @@ struct DoctorVerdictFacts {
     /// The live check failed by running out of time, not by being refused
     /// (#6889). A model the provider is still loading looks exactly like this.
     live_probe_timed_out: bool,
+    local_discovery: bool,
 }
 
 /// `set via <VAR> (value not shown; not checked offline)`.
@@ -6270,6 +6303,10 @@ fn doctor_verdict(
                 format!(
                     "Ready: onboarding is complete (saved {provider} key not checked offline; {PROBE_HINT})."
                 )
+            } else if facts.local_discovery {
+                format!(
+                    "Not confirmed: the {provider} route has no verified key, so Codewhale and `codewhale exec` use a local Ollama model if one is running → `codewhale doctor --probe-local` checks for one; or save a key with /provider in Codewhale or `codewhale auth set --provider {provider}`."
+                )
             } else {
                 format!(
                     "Not ready: the {provider} route has no verified key → save one with /provider in Codewhale or `codewhale auth set --provider {provider}`; `codewhale doctor --probe-api` checks a key already saved."
@@ -6277,8 +6314,13 @@ fn doctor_verdict(
             }
         }),
         _ => env_ready.unwrap_or_else(|| {
-            "Not ready: no model provider set up → run /provider in Codewhale, or `codewhale setup`."
-                .to_string()
+            if facts.local_discovery {
+                "Not confirmed: no model provider is set up, so Codewhale and `codewhale exec` use a local Ollama model if one is running → `codewhale doctor --probe-local` checks for one; or run /provider in Codewhale, or `codewhale setup`."
+                    .to_string()
+            } else {
+                "Not ready: no model provider set up → run /provider in Codewhale, or `codewhale setup`."
+                    .to_string()
+            }
         }),
     }
 }
@@ -6360,6 +6402,7 @@ mod doctor_verdict_tests {
             env_key_source: env_key_source.map(str::to_string),
             live_probe,
             live_probe_timed_out: false,
+            local_discovery: false,
         }
     }
 
@@ -9662,7 +9705,7 @@ fn load_structural_config_from_cli(cli: &Cli) -> Result<Config> {
     Ok(config)
 }
 
-/// Select the plugin activation policy (v5, or v7 with the experimental
+/// Select the plugin activation policy (v5, or v8 with the experimental
 /// extension host) and the host's runtime settings, once per process, before
 /// any plugin discovery. Later config reloads never flip either.
 fn install_extension_host_boot_config(config: &Config) {
