@@ -663,7 +663,7 @@ async fn runtime_chat_queues_local_composer_input_without_starting_a_second_turn
 }
 
 #[tokio::test]
-async fn stale_remote_control_turn_never_cancels_the_current_engine_turn() {
+async fn remote_control_events_preserve_current_turn_and_surface_failures() {
     let mut app = create_test_app();
     app.remote_control
         .force_mirror_connected_for_tests("run_fixture", "turn_current");
@@ -685,6 +685,113 @@ async fn stale_remote_control_turn_never_cancels_the_current_engine_turn() {
         !mock.cancel_token.is_cancelled(),
         "a delayed command for an older turn must not cancel the current provider lifecycle"
     );
+
+    for (event, previous_status, reason) in [
+        (
+            crate::remote_control::RemoteEvent::FailedPreLease(
+                "fixture enrollment rejected: accessToken = fixture_remote_secret".to_string(),
+            ),
+            "Remote control: connecting",
+            "fixture enrollment rejected",
+        ),
+        (
+            crate::remote_control::RemoteEvent::Failed("fixture relay disconnected".to_string()),
+            "Remote control: connected",
+            "fixture relay disconnected",
+        ),
+    ] {
+        let mut app = create_test_app();
+        app.ui_locale = codewhale_localization::Locale::En;
+        app.launch.visible = true;
+        app.status_message = Some(previous_status.to_string());
+        app.status_toasts.clear();
+        app.sticky_status = Some(StatusToast::new(
+            previous_status,
+            StatusToastLevel::Warning,
+            None,
+        ));
+        if matches!(&event, crate::remote_control::RemoteEvent::Failed(_)) {
+            let phase = crate::tui::underwater::ShellPhase::from_app(&app);
+            assert_eq!(
+                app.active_status_toast(phase)
+                    .expect("prior remote status")
+                    .text,
+                previous_status
+            );
+            app.remote_control
+                .force_mirror_connected_for_tests("run_fixture", "turn_current");
+        }
+        app.remote_control.queue_remote_event_for_tests(event);
+
+        drain_remote_control_events(&mut app, &Config::default(), &mock.handle)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            app.remote_control.status(),
+            crate::remote_control::Status::Failed
+        );
+        assert!(app.remote_control.status_line().contains(reason));
+        assert!(app.status_message.is_none());
+        let phase = crate::tui::underwater::ShellPhase::from_app(&app);
+        let toast = app
+            .active_status_toast(phase)
+            .expect("remote failure toast");
+        assert_eq!(toast.level, StatusToastLevel::Error);
+        assert!(toast.text.contains(reason), "{}", toast.text);
+        assert!(!toast.text.contains(previous_status), "{}", toast.text);
+        assert!(
+            !toast.text.contains("fixture_remote_secret"),
+            "{}",
+            toast.text
+        );
+        assert!(toast.ttl_ms.is_some());
+        assert!(app.history.iter().any(|cell| matches!(
+            cell,
+            HistoryCell::System { content }
+                if content.contains(reason) && !content.contains("fixture_remote_secret")
+        )));
+
+        app.sticky_status
+            .as_mut()
+            .expect("remote failure sticky")
+            .created_at = Instant::now() - Duration::from_secs(20);
+        assert!(app.active_status_toast(phase).is_none());
+        for locale in [
+            codewhale_localization::Locale::En,
+            codewhale_localization::Locale::ZhHans,
+            codewhale_localization::Locale::De,
+        ] {
+            app.ui_locale = locale;
+            for width in [40, 80] {
+                let facts = crate::tui::phase_strip::tideline_footer_from_app(&mut app, width);
+                let (text, ink) = facts.right.expect("remote failure footer");
+                assert!(text.starts_with("/rc status"), "{locale:?} {width}: {text}");
+                assert_eq!(ink, codewhale_palette::ChromeInk::Failure);
+            }
+        }
+        assert!(app.history.iter().any(|cell| matches!(
+            cell,
+            HistoryCell::System { content } if content.contains(reason)
+        )));
+    }
+
+    let mut app = create_test_app();
+    app.ui_locale = codewhale_localization::Locale::En;
+    app.launch.visible = true;
+    app.status_message = None;
+    app.status_toasts.clear();
+    app.sticky_status = None;
+    app.remote_control
+        .record_start_failure("fixture start rejected: accessToken = fixture_remote_secret");
+    let status = app.remote_control.status_line();
+    assert!(status.contains("fixture start rejected"), "{status}");
+    assert!(!status.contains("fixture_remote_secret"), "{status}");
+    let facts = crate::tui::phase_strip::tideline_footer_from_app(&mut app, 40);
+    let (text, ink) = facts.right.expect("synchronous failure footer");
+    assert!(text.starts_with("/rc status"), "{text}");
+    assert_eq!(ink, codewhale_palette::ChromeInk::Failure);
+    assert!(!mock.cancel_token.is_cancelled());
 }
 
 fn test_mailbox_route(
