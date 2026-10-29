@@ -4355,7 +4355,8 @@ impl SessionManager {
         }
         let owns_legacy_checkpoint =
             matches!(&legacy_origin, Ok(Some(origin)) if origin == id.trim());
-        if matches!(removal, SessionRemoval::Explicit) && owns_legacy_checkpoint {
+        if matches!(removal, SessionRemoval::Explicit) && owns_legacy_checkpoint && !already_deleted
+        {
             return Err(io::Error::other(
                 "this session has a shared legacy checkpoint; remove that checkpoint separately before deleting the session",
             ));
