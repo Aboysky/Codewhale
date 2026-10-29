@@ -2,7 +2,7 @@
   "format": "codewhale.features.v1",
   "source": {
     "path": "docs/features.toml",
-    "sha256": "5e18921ce90014e26473bc496fc80a29abf1a288144f59c25fcea5b6939d38e1"
+    "sha256": "5c6c59e71bf5cf7636f470a4f1c175a310e010b42019cf69c60c1779a0480fa5"
   },
   "features": [
     {
@@ -374,7 +374,7 @@
     {
       "id": "providers",
       "name": "Providers",
-      "summary": "Provider routes with scoped facts, limits, price estimates and a disclosed OrcaRouter offer in the pickers.",
+      "summary": "Provider routes including Runcrate, with scoped facts, limits, price estimates and a disclosed OrcaRouter offer.",
       "status": "stable",
       "surfaces": {
         "tui": "stable",
