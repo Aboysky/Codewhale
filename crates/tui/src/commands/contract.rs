@@ -454,11 +454,19 @@ impl CommandSessionLifecycleContext for SessionLifecycleAdapter<'_> {
             let mut rendered =
                 String::from("Active branch (linear — journal will be created on save):\n");
             for (i, msg) in app.api_messages.iter().enumerate() {
+                let meta_index = codewhale_models::turn_classify::turn_metadata_text(msg)
+                    .filter(|_| msg.role == codewhale_models::Role::User)
+                    .map(|(index, _)| index);
                 let snippet: String = msg
                     .content
                     .iter()
-                    .filter_map(|b| match b {
-                        codewhale_models::ContentBlock::Text { text, .. } => Some(text.as_str()),
+                    .enumerate()
+                    .filter_map(|(index, b)| match b {
+                        codewhale_models::ContentBlock::Text { text, .. }
+                            if Some(index) != meta_index =>
+                        {
+                            Some(text.as_str())
+                        }
                         _ => None,
                     })
                     .collect::<Vec<_>>()
@@ -1709,12 +1717,21 @@ fn project_transcript(app: &App) -> TranscriptProjection {
 }
 
 fn project_message(message: &Message) -> ExportMessage {
+    let meta_index = codewhale_models::turn_classify::turn_metadata_text(message)
+        .filter(|_| message.role == codewhale_models::Role::User)
+        .map(|(index, _)| index);
     ExportMessage {
         role: message.role.as_str().to_string(),
         // Exact enum identity, not a string comparison: `Role::Unrecognized("user")`
         // must not be treated as a user turn (baseline parity, F6).
         is_user_role: message.role == codewhale_models::Role::User,
-        blocks: message.content.iter().map(project_block).collect(),
+        blocks: message
+            .content
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| Some(*index) != meta_index)
+            .map(|(_, block)| project_block(block))
+            .collect(),
         prompt_snippet: first_text_block(message)
             .and_then(crate::core::turn::snapshot_label_prompt_snippet),
     }
