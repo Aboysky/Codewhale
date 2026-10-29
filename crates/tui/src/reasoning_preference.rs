@@ -27,8 +27,8 @@ pub enum ReasoningEffort {
     High,
     XHigh,
     Ultra,
-    Auto,
     #[default]
+    Auto,
     Max,
 }
 
