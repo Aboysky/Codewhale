@@ -125,15 +125,18 @@ impl CommandReceipt {
 
 pub(crate) fn run(yes: bool, purge_data: bool) -> Result<()> {
     let selected = std::env::current_exe().ok();
+    if purge_data {
+        purge_targets(selected.as_deref())?;
+    }
     let result = remove(yes);
     report_path_copies(selected.as_deref());
     let removed = result?;
     if purge_data {
         if !yes {
-            return purge(false);
+            return purge(false, selected.as_deref());
         }
         if removed {
-            return purge(true);
+            return purge(true, selected.as_deref());
         }
         println!(
             "Data was not purged: this run did not remove a receipted installation. Data is shared by every install and is kept."
@@ -357,7 +360,7 @@ fn remove(yes: bool) -> Result<bool> {
         }
     }
     println!(
-        "Removed this receipted release installation. Data and other installations are unchanged. {}",
+        "Removed this receipted release installation. Other installations were not removed. {}",
         if cfg!(windows) {
             "Remove its directory from your user PATH if you added it, then open a new terminal."
         } else {
@@ -395,12 +398,15 @@ fn report_path_blocks(directory: &Path) {
     .collect();
     profiles.sort();
     profiles.dedup();
+    let install_directory = directory.canonicalize().ok();
     let names_directory = |value: &str| {
         let expanded = match value.strip_prefix("$HOME/") {
             Some(rest) => home.join(rest),
             None => PathBuf::from(value),
         };
-        expanded.canonicalize().is_ok_and(|path| path == directory)
+        expanded
+            .canonicalize()
+            .is_ok_and(|path| install_directory.as_ref() == Some(&path))
     };
     let ours = |line: &str| {
         line.strip_prefix("export PATH=\"")
@@ -538,13 +544,13 @@ fn delete_after_exit(path: &Path) -> Result<()> {
     const DETACHED_PROCESS: u32 = 0x0000_0008;
     let system = std::env::var_os("SystemRoot").context("SystemRoot is not set")?;
     let powershell = Path::new(&system).join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
-    let literal = path.display().to_string().replace('\'', "''");
     std::process::Command::new(powershell)
         .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"])
         .arg(format!(
-            "Wait-Process -Id {} -ErrorAction SilentlyContinue; Remove-Item -LiteralPath '{literal}' -Force",
+            "Wait-Process -Id {} -ErrorAction SilentlyContinue; Remove-Item -LiteralPath $env:CODEWHALE_UNINSTALL_RETIRED_PATH -Force",
             std::process::id()
         ))
+        .env("CODEWHALE_UNINSTALL_RETIRED_PATH", path)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -554,23 +560,28 @@ fn delete_after_exit(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn purge(yes: bool) -> Result<()> {
+fn purge_targets(selected: Option<&Path>) -> Result<Vec<PathBuf>> {
     let home = codewhale_config::codewhale_home()?;
     let explicit = codewhale_config::codewhale_home_is_explicit();
     let mut targets = vec![home.clone()];
     if !explicit {
         targets.push(codewhale_config::legacy_deepseek_home()?.join("snapshots"));
     }
-    let user_home = dirs::home_dir().context("failed to resolve home directory")?;
-    println!(
-        "Data purge scope: Codewhale's config, plaintext secrets file, sessions, logs, skills, plugins, tasks and caches in the directories below. Nothing else is searched for."
-    );
+    let user_home = dirs::home_dir()
+        .context("failed to resolve home directory")?
+        .canonicalize()
+        .context("failed to resolve the real home directory")?;
+    let install_directory = selected
+        .and_then(Path::parent)
+        .map(std::fs::canonicalize)
+        .transpose()
+        .context("failed to resolve the install directory before data purge")?;
     let mut present = Vec::new();
     for target in targets {
+        let target: PathBuf = target.components().collect();
         let metadata = match std::fs::symlink_metadata(&target) {
             Ok(metadata) => metadata,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                println!("Already absent: {}", target.display());
                 continue;
             }
             Err(error) => {
@@ -578,9 +589,9 @@ fn purge(yes: bool) -> Result<()> {
                     .with_context(|| format!("failed to inspect {}", target.display()));
             }
         };
-        if !metadata.is_dir() || user_home.starts_with(&target) || target.parent().is_none() {
+        if !metadata.is_dir() {
             bail!(
-                "Preserved {}: it is not a real directory, or it is your home or one of its parents; no data was deleted",
+                "Preserved {}: it is not a real directory; no data was deleted",
                 target.display()
             );
         }
@@ -603,12 +614,39 @@ fn purge(yes: bool) -> Result<()> {
                 );
             }
         }
+        let target = target
+            .canonicalize()
+            .with_context(|| format!("failed to resolve data directory {}", target.display()))?;
+        if user_home.starts_with(&target)
+            || target.parent().is_none()
+            || install_directory
+                .as_ref()
+                .is_some_and(|install| install.starts_with(&target))
+        {
+            bail!(
+                "Preserved {}: it contains the home or install directory; no data was deleted",
+                target.display()
+            );
+        }
+        present.push(target);
+    }
+    Ok(present)
+}
+
+fn purge(yes: bool, selected: Option<&Path>) -> Result<()> {
+    let present = purge_targets(selected)?;
+    println!(
+        "Data purge scope: Codewhale's config, plaintext secrets file, sessions, logs, skills, plugins, tasks, caches, recovery records and snapshots in the directories below. Nothing else is searched for. Data can be shared by other installations; purging it affects those copies too."
+    );
+    if present.is_empty() {
+        println!("Codewhale data directories are already absent.");
+    }
+    for target in &present {
         println!(
             "{} {}",
             if yes { "Delete" } else { "Would delete" },
             target.display()
         );
-        present.push(target);
     }
     println!(
         "Not covered: OS keychain/keyring entries (run codewhale auth clear --provider <id> before removing the program), per-workspace .codewhale directories, shell profile lines and completion files."

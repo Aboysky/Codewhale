@@ -696,8 +696,10 @@ go back further than one version, replace the files:
 
 ```bash
 dir="$(dirname "$(command -v codewhale)")"     # the install PATH actually selects
-rm "$dir/codewhale" "$dir/codew"
-curl -fsSL https://codewhale.net/install.sh | CODEWHALE_VERSION=v0.9.13 CODEWHALE_INSTALL_DIR="$dir" sh
+mkdir -p "$dir/.keep" && mv "$dir/codewhale" "$dir/codew" "$dir/.keep/"
+curl -fsSL https://codewhale.net/install.sh | CODEWHALE_VERSION=v0.9.13 CODEWHALE_INSTALL_DIR="$dir" sh \
+  && rm -r "$dir/.keep" \
+  || mv "$dir/.keep/codewhale" "$dir/.keep/codew" "$dir/"   # restore on failure
 hash -r; codewhale --version      # codewhale 0.9.13 (a0b81f619b66)
 ```
 
