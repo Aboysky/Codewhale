@@ -34,12 +34,12 @@ use crate::tui::shell_key_routing::{
 };
 use crate::tui::views::ConfigView;
 use crate::tui::views::{HelpView, ModalView, ViewAction};
-use crate::working_set::Workspace;
 use codewhale_config::ProviderKind;
 use codewhale_config::descriptors::defaults::{
     DEFAULT_OPENROUTER_MODEL, DEFAULT_TEXT_MODEL, DEFAULT_ZAI_MODEL,
 };
 use codewhale_runtime::config::{Config, ProviderConfig, ProvidersConfig};
+use codewhale_runtime::working_set::Workspace;
 use codewhale_tui_kit::ui_text::{line_to_plain, truncate_line_to_width};
 use crossterm::event::{KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::{

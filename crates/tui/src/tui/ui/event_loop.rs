@@ -1029,7 +1029,7 @@ pub async fn run_tui(
     // messages reach the user's terminal. We accept the init failing (e.g.,
     // read-only $HOME) and continue without the redirect rather than refusing
     // to start the TUI.
-    let _tui_log_guard = match crate::runtime_log::init() {
+    let _tui_log_guard = match codewhale_runtime::runtime_log::init() {
         Ok(guard) => Some(guard),
         Err(err) => {
             tracing::warn!(target: "runtime_log", ?err, "TUI log init failed; stderr leaks may render as scroll-demon");

@@ -56,7 +56,6 @@ use crate::tools::subagent::{
 use crate::tools::todo::{SharedTodoList, new_shared_todo_list};
 use crate::tools::user_input::{UserInputRequest, UserInputResponse};
 use crate::tools::{ToolContext, ToolRegistryBuilder};
-use crate::working_set::WorkingSet;
 use codewhale_agent_contract::role::FleetRole;
 use codewhale_agent_contract::worker_profile::WorkerRuntimeProfile;
 use codewhale_config::AppMode;
@@ -74,6 +73,7 @@ use codewhale_models::{
 };
 use codewhale_runtime::config::{Config, DEFAULT_MAX_SUBAGENTS};
 use codewhale_runtime::features::{Feature, Features};
+use codewhale_runtime::working_set::WorkingSet;
 use codewhale_snapshot::{WorkspaceSnapshotKind, WorkspaceSnapshotRef};
 use codewhale_util::utils::spawn_supervised;
 
@@ -194,7 +194,8 @@ impl StructuredState {
         subagents: Option<&SharedSubAgentManager>,
         active_session_id: &str,
     ) -> Self {
-        let working_set_summary = working_set.summary_block(&workspace);
+        let working_set_summary =
+            working_set.summary_block(&workspace, &crate::tools::file::working_set_read_allowed);
 
         let subagent_snapshots = if let Some(handle) = subagents {
             let mut guard = handle.write().await;
@@ -4999,7 +5000,10 @@ impl Engine {
         } = snapshot;
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
         let working_set_summary = working_set
-            .summary_block(&self.config.workspace)
+            .summary_block(
+                &self.config.workspace,
+                &crate::tools::file::working_set_read_allowed,
+            )
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
 
@@ -10600,7 +10604,7 @@ pub(crate) struct TurnMetadataSnapshot<'a> {
     pub(crate) prompt_context: &'a NextTurnPromptContext,
     pub(crate) system_prompt: Option<&'a SystemPrompt>,
     pub(crate) approval_mode: ApprovalMode,
-    pub(crate) working_set: &'a crate::working_set::WorkingSet,
+    pub(crate) working_set: &'a codewhale_runtime::working_set::WorkingSet,
     pub(crate) policy_narrowing: Option<&'a PolicyNarrowingEvent>,
     pub(crate) messages: &'a [Message],
 }
