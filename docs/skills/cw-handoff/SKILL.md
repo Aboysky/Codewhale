@@ -66,6 +66,13 @@ starts at [cw-orient](../cw-orient/SKILL.md) with what you leave here.
    evidence you could not gather (CI state, registry state, review threads)
    rather than inferring it. A named gap is useful; a confident guess is not.
 
+   Before writing the handoff, run the record backstop and list anything it
+   shows as owed:
+   ```bash
+   git log --format='%h %s' "$(git log -1 --format=%H -- CHANGELOG.md)"..origin/main | grep -E '^[0-9a-f]+ (feat|fix)'
+   python3 scripts/check-contributor-credit.py
+   ```
+
 ## Red flags / don't
 
 - Don't imply publication happened unless you verified registry, tag, or release
