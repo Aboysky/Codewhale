@@ -609,6 +609,25 @@ pub(crate) fn compact_tool_result_for_route(
     tool_result_context_view(provider, model, route_limits, tool_name, output).text
 }
 
+pub(crate) fn compact_tool_result_for_route_with_window(
+    provider: ProviderKind,
+    model: &str,
+    route_limits: Option<RouteLimits>,
+    effective_window: Option<u32>,
+    tool_name: &str,
+    output: &ToolResult,
+) -> String {
+    tool_result_context_view_with_window(
+        provider,
+        model,
+        route_limits,
+        effective_window,
+        tool_name,
+        output,
+    )
+    .text
+}
+
 /// The model's view of one tool result (#6508).
 ///
 /// There is one size authority: [`crate::route_budget::route_inline_char_budget`].
@@ -626,6 +645,17 @@ pub(crate) fn tool_result_context_view(
     provider: ProviderKind,
     model: &str,
     route_limits: Option<RouteLimits>,
+    tool_name: &str,
+    output: &ToolResult,
+) -> ToolResultContextView {
+    tool_result_context_view_with_window(provider, model, route_limits, None, tool_name, output)
+}
+
+pub(crate) fn tool_result_context_view_with_window(
+    provider: ProviderKind,
+    model: &str,
+    route_limits: Option<RouteLimits>,
+    effective_window: Option<u32>,
     tool_name: &str,
     output: &ToolResult,
 ) -> ToolResultContextView {
@@ -662,7 +692,9 @@ pub(crate) fn tool_result_context_view(
     }
 
     let budget =
-        crate::route_budget::route_inline_char_budget_for_route(provider, model, route_limits);
+        crate::route_budget::route_inline_char_budget(Some(effective_window.unwrap_or_else(
+            || crate::route_budget::route_context_window_tokens(provider, model, route_limits),
+        )));
     let recovery = recovery_ref(metadata);
     let recovery_path = recovery.as_ref().map(|recovery| recovery.path);
     let retrieval_ref = recovery.as_ref().and_then(|recovery| recovery.artifact_id);

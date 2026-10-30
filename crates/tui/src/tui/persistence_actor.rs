@@ -369,20 +369,26 @@ pub fn init_actor(handle: PersistActorHandle) {
 /// already shut down — the drop is logged instead of discarded silently, so
 /// lost session/work-graph state is diagnosable after the fact.
 pub fn persist(request: PersistRequest) {
+    let _ = persist_checked(request);
+}
+
+pub(crate) fn persist_checked(request: PersistRequest) -> Result<(), String> {
     let label = request_label(&request);
     if try_persist(request) {
-        return;
+        return Ok(());
     }
     if ACTOR_TX.get().is_some() {
         tracing::warn!(
             request = label,
             "persistence request dropped: actor channel is closed (shutdown already happened)"
         );
+        Err("persistence actor is unavailable".to_string())
     } else {
         tracing::debug!(
             request = label,
             "persistence request dropped: actor not initialised yet"
         );
+        Ok(())
     }
 }
 
