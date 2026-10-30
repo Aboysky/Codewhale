@@ -638,7 +638,7 @@ fn install_one(
 ///   writes the version marker.
 /// - Version bump (marker present with older version): re-installs any existing
 ///   bundled skill whose body is still one CodeWhale shipped (current or a
-///   [`SUPERSEDED_BODIES`] entry) and installs newly introduced bundled skills.
+///   `SUPERSEDED_BODIES` entry) and installs newly introduced bundled skills.
 ///   A user-edited body is never replaced.
 /// - User deleted a skill dir while marker still present at same version: leaves
 ///   it gone.

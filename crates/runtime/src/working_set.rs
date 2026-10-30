@@ -95,7 +95,7 @@ impl Workspace {
     }
 
     /// Construct with an explicit completion walk depth and symlink-following
-    /// preference. See [`Workspace::follow_links`].
+    /// preference. See `Workspace::follow_links`.
     pub fn with_cwd_depth_and_follow_links(
         root: PathBuf,
         cwd: Option<PathBuf>,

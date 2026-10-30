@@ -127,7 +127,7 @@ pub(crate) fn read_telemetry_env() -> (Option<bool>, bool) {
 /// config-file value but not the full CLI/env resolution chain — the doctor
 /// runtime-posture row and the `config get telemetry` display (#5441).
 ///
-/// This is the same resolution [`ConfigToml::resolve_runtime_options`]
+/// This is the same resolution `ConfigToml::resolve_runtime_options`
 /// applies without its CLI term: environment first (an explicit value, an
 /// unreadable one, or a dispatcher floor), then the file, then the shipped
 /// default of `on`; a persisted `telemetry = false` is a floor no later

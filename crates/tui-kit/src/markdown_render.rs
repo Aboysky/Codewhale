@@ -80,7 +80,7 @@ pub enum Block {
         text: String,
     },
     /// A `>` quote line with its nesting depth (1 = single `>`). The text has
-    /// the quote markers stripped; depth is capped at [`MAX_QUOTE_DEPTH`].
+    /// the quote markers stripped; depth is capped at `MAX_QUOTE_DEPTH`.
     Quote { depth: usize, text: String },
     /// A line inside a fenced code block. Fences themselves are dropped, but
     /// their language token and block identity stay available to syntect.

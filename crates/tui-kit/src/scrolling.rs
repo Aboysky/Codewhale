@@ -93,7 +93,7 @@ const TAIL_SENTINEL: usize = usize::MAX;
 /// Flat line-offset scroll state for the transcript view.
 ///
 /// Stores the index of the top visible line into the cache's `line_meta`
-/// buffer, or [`TAIL_SENTINEL`] (`usize::MAX`) to mean "stuck to bottom."
+/// buffer, or `TAIL_SENTINEL` (`usize::MAX`) to mean "stuck to bottom."
 /// The renderer resolves the sentinel against the current line count and
 /// viewport height every frame, so content rewrites simply clamp the
 /// user's offset rather than triggering anchor recovery heuristics.

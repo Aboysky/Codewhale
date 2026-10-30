@@ -1061,7 +1061,7 @@ pub struct GoalConfig {
     /// Goals are unlimited by default; token/time budgets are telemetry only.
     ///
     /// `None` uses the built-in default
-    /// ([`codewhale_runtime::goal_loop::DEFAULT_MAX_GOAL_CONTINUATIONS`], currently `0`);
+    /// (`codewhale_runtime::goal_loop::DEFAULT_MAX_GOAL_CONTINUATIONS`, currently `0`);
     /// `0` disables the backstop entirely so only terminal status or user
     /// control ends the run.
     #[serde(default)]
@@ -1607,7 +1607,7 @@ pub struct AutoRouterConfig {
     #[serde(default)]
     pub thinking: Option<String>,
     /// Classifier call timeout in seconds. Defaults to
-    /// [`DEFAULT_AUTO_ROUTER_TIMEOUT_SECS`] (4); `0` means "use the default".
+    /// `DEFAULT_AUTO_ROUTER_TIMEOUT_SECS` (4); `0` means "use the default".
     /// Values above [`MAX_AUTO_ROUTER_TIMEOUT_SECS`] (300) are clamped so a
     /// hung local router cannot stall a turn indefinitely.
     #[serde(default)]
@@ -3711,7 +3711,7 @@ impl Config {
     }
 
     /// Classifier call timeout for `[auto.router]` in seconds. Defaults to
-    /// [`DEFAULT_AUTO_ROUTER_TIMEOUT_SECS`] (4); `0` means "use the default".
+    /// `DEFAULT_AUTO_ROUTER_TIMEOUT_SECS` (4); `0` means "use the default".
     /// Values above [`MAX_AUTO_ROUTER_TIMEOUT_SECS`] (300) are clamped so a
     /// hung local router cannot stall a turn indefinitely.
     #[must_use]
@@ -5455,7 +5455,7 @@ impl Config {
     ///
     /// Step 3 is why this is identity-aware instead of a bare env read.
     /// `CODEWHALE_BASE_URL` is documented as "base URL for the active
-    /// provider", and [`apply_env_overrides`] writes it onto exactly one
+    /// provider", and `apply_env_overrides` writes it onto exactly one
     /// provider entry. Every cross-provider construction seam — a pinned
     /// subagent/fleet child, the per-turn auto-router, tool routing, a picker
     /// preview — works by cloning the session config and re-pointing
@@ -10439,7 +10439,7 @@ impl Config {
 }
 
 /// Parse one `config.toml`-shaped layer (no profile applied) through
-/// [`parse_config_file`], so the legacy top-level keys are canonicalized.
+/// `parse_config_file`, so the legacy top-level keys are canonicalized.
 pub fn parse_config_base(contents: &str) -> std::result::Result<Config, toml::de::Error> {
     let parsed = parse_config_file(contents)?;
     let mut config = *parsed.base;
@@ -11305,7 +11305,7 @@ impl Config {
 /// and `/model` manager views (#3830). Shared by both pickers so "what shows
 /// up without browsing the full catalog" stays a single definition.
 /// Self-hosted providers (Ollama/Sglang/Vllm) report `has_key = true`
-/// unconditionally in [`codewhale_tui::provider_readiness::has_api_key_for`] since they don't require auth to
+/// unconditionally in `codewhale_tui::provider_readiness::has_api_key_for` since they don't require auth to
 /// route to — that's correct for routing, but wrong for "did the user set
 /// this up," so a self-hosted provider only qualifies via an explicit
 /// `[providers.<name>]` entry or being active, never via `has_key` alone
