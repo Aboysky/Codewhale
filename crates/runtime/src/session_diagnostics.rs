@@ -15,7 +15,7 @@ use codewhale_error_taxonomy::{ErrorCategory, classify_error_message};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum SessionFailureClass {
+pub enum SessionFailureClass {
     CommandExit,
     Network,
     SandboxApproval,
@@ -47,7 +47,7 @@ impl fmt::Display for SessionFailureClass {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct SessionFailureSource {
+pub struct SessionFailureSource {
     pub line: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub event: Option<String>,
@@ -60,7 +60,7 @@ pub(crate) struct SessionFailureSource {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct SessionFailureSummary {
+pub struct SessionFailureSummary {
     pub total_lines: usize,
     pub malformed_lines: usize,
     pub counts: BTreeMap<SessionFailureClass, usize>,
@@ -81,7 +81,7 @@ impl SessionFailureSummary {
 }
 
 #[must_use]
-pub(crate) fn analyze_session_failure_jsonl(jsonl: &str) -> SessionFailureSummary {
+pub fn analyze_session_failure_jsonl(jsonl: &str) -> SessionFailureSummary {
     let mut summary = SessionFailureSummary {
         total_lines: 0,
         malformed_lines: 0,
@@ -149,7 +149,7 @@ pub(crate) fn analyze_session_failure_jsonl(jsonl: &str) -> SessionFailureSummar
 }
 
 #[must_use]
-pub(crate) fn format_redacted_failure_summary(summary: &SessionFailureSummary) -> String {
+pub fn format_redacted_failure_summary(summary: &SessionFailureSummary) -> String {
     if summary.counts.is_empty() {
         return "No session failure signals detected.".to_string();
     }

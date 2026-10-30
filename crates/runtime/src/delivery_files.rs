@@ -81,7 +81,7 @@ fn hash_exact_length(reader: &mut impl Read, length: u64) -> io::Result<String> 
     if total != length {
         return Err(invalid("delivery file shortened while reading"));
     }
-    Ok(codewhale_runtime::hashing::hex_bytes(hash.finalize()))
+    Ok(crate::hashing::hex_bytes(hash.finalize()))
 }
 
 fn stable_hash(file: &mut File, maximum: Option<u64>) -> io::Result<(String, Version)> {
@@ -317,7 +317,7 @@ impl GuardedFile {
         (&mut self.file)
             .take(self.version.length.saturating_add(1))
             .read_to_end(&mut bytes)?;
-        if bytes.len() > maximum || codewhale_runtime::hashing::sha256_hex(&bytes) != self.digest {
+        if bytes.len() > maximum || crate::hashing::sha256_hex(&bytes) != self.digest {
             return Err(invalid("delivery receipt changed while reading"));
         }
         self.verify()?;
@@ -378,7 +378,7 @@ mod tests {
         let mut exact = &b"owned"[..];
         assert_eq!(
             hash_exact_length(&mut exact, 5).unwrap(),
-            codewhale_runtime::hashing::sha256_hex(b"owned")
+            crate::hashing::sha256_hex(b"owned")
         );
     }
 

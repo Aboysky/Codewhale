@@ -8012,7 +8012,8 @@ impl Engine {
             context.refresh_live_posture();
             return context;
         }
-        let trusted = crate::workspace_trust::WorkspaceTrust::load_for(&self.session.workspace);
+        let trusted =
+            codewhale_runtime::workspace_trust::WorkspaceTrust::load_for(&self.session.workspace);
         let mut trusted_external_paths = trusted.paths().to_vec();
         let clipboard_images_dir =
             codewhale_runtime::config::clipboard_images_dir(&self.session.workspace);

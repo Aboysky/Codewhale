@@ -1359,6 +1359,7 @@ dependencies = [
  "codewhale-command-contract",
  "codewhale-config",
  "codewhale-core",
+ "codewhale-error-taxonomy",
  "codewhale-execpolicy",
  "codewhale-lane",
  "codewhale-localization",

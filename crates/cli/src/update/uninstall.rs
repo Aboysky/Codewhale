@@ -1,5 +1,5 @@
 use super::*;
-use codewhale_tui::delivery_files::GuardedFile;
+use codewhale_runtime::delivery_files::GuardedFile;
 use std::collections::BTreeMap;
 
 const RECEIPT: &str = codewhale_release::installs::RECEIPT_FILE;

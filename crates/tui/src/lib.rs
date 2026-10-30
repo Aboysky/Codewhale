@@ -35,7 +35,6 @@ mod context_report;
 mod core;
 mod cost_status;
 /// Guarded installation I/O reusing Engine's confined file primitives.
-pub mod delivery_files;
 mod doctor;
 mod doctor_fix;
 mod eval;
@@ -95,7 +94,6 @@ mod runtime_threads;
 #[cfg(test)]
 mod sandbox_stay_tests;
 mod scorecard;
-mod session_diagnostics;
 // Acceptance matrix for #2934 / #4397. Test-only: the table documents the
 // contract for reviewers and is enforced by the tests beside it, so it does
 // not need to exist in a shipped binary.
@@ -129,7 +127,6 @@ mod voice;
 pub mod whats_new;
 mod work_graph;
 mod workspace_lease;
-mod workspace_trust;
 
 use crate::eval::{EvalHarness, EvalHarnessConfig, ScenarioStepKind};
 use crate::llm_client::LlmClient;
@@ -4946,13 +4943,13 @@ fn run_session_diagnostics(args: SessionDiagnosticsArgs) -> Result<()> {
             codewhale_util::utils::display_path(&args.path)
         )
     })?;
-    let summary = crate::session_diagnostics::analyze_session_failure_jsonl(&contents);
+    let summary = codewhale_runtime::session_diagnostics::analyze_session_failure_jsonl(&contents);
     if args.json {
         println!("{}", serde_json::to_string_pretty(&summary)?);
     } else {
         println!(
             "{}",
-            crate::session_diagnostics::format_redacted_failure_summary(&summary)
+            codewhale_runtime::session_diagnostics::format_redacted_failure_summary(&summary)
         );
     }
     Ok(())
@@ -14822,7 +14819,7 @@ async fn build_direct_workflow_tool(
     let mode = AppMode::Operate;
     let allow_shell = yolo || config.allow_shell();
     let shell_policy = shell_policy_for_mode(mode, allow_shell);
-    let trusted = crate::workspace_trust::WorkspaceTrust::load_for(workspace);
+    let trusted = codewhale_runtime::workspace_trust::WorkspaceTrust::load_for(workspace);
     let mut context = crate::tools::ToolContext::with_auto_approve(
         workspace.to_path_buf(),
         yolo,

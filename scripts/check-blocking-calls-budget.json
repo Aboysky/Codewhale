@@ -136,6 +136,10 @@
     "path_canonicalize": 4,
     "std_fs": 5
   },
+  "crates/runtime/src/delivery_files.rs": {
+    "path_canonicalize": 2,
+    "std_fs": 1
+  },
   "crates/runtime/src/external_credentials.rs": {
     "std_fs": 1
   },
@@ -155,6 +159,10 @@
   "crates/runtime/src/working_set.rs": {
     "path_canonicalize": 1,
     "std_fs": 1
+  },
+  "crates/runtime/src/workspace_trust.rs": {
+    "path_canonicalize": 2,
+    "std_fs": 2
   },
   "crates/sandbox/src/bwrap.rs": {
     "path_canonicalize": 2,
@@ -241,10 +249,6 @@
     "path_canonicalize": 3
   },
   "crates/tui/src/core/engine/tool_execution.rs": {
-    "std_fs": 1
-  },
-  "crates/tui/src/delivery_files.rs": {
-    "path_canonicalize": 2,
     "std_fs": 1
   },
   "crates/tui/src/doctor_fix.rs": {
@@ -520,10 +524,6 @@
   },
   "crates/tui/src/workspace_lease.rs": {
     "path_canonicalize": 1
-  },
-  "crates/tui/src/workspace_trust.rs": {
-    "path_canonicalize": 1,
-    "std_fs": 2
   },
   "crates/util/src/files.rs": {
     "path_canonicalize": 2,

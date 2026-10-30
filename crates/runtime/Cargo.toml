@@ -53,6 +53,7 @@ anyhow.workspace = true
 chrono.workspace = true
 codewhale-command-contract = { path = "../command-contract", version = "0.10.2" }
 codewhale-config = { path = "../config", version = "0.10.2" }
+codewhale-error-taxonomy = { path = "../error-taxonomy", version = "0.10.2" }
 codewhale-core = { path = "../core", version = "0.10.2" }
 codewhale-execpolicy = { path = "../execpolicy", version = "0.10.2" }
 codewhale-lane = { path = "../lane", version = "0.10.2" }
