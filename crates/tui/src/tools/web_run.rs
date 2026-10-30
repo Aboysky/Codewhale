@@ -1940,8 +1940,9 @@ mod tests {
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         let tmp = tempfile::tempdir().unwrap();
-        let prior =
-            codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(tmp.path().join("sessions")));
+        let prior = codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
+            tmp.path().join("sessions"),
+        ));
         let _restore = ArtifactRootRestore(prior);
         let context = ToolContext::new(".")
             .with_state_namespace("web-run-overflow")

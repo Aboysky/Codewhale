@@ -20201,7 +20201,9 @@ fn subagent_tool_results_spill_to_disk_and_stay_bounded_inline() {
         assert!(inline.contains("full output at"));
         assert!(inline.contains(codewhale_tools::names::SPILLOVER_RECOVERY_HINT));
         assert!(inline.contains("\n…\n"));
-        assert!(inline.contains(&codewhale_runtime::artifacts::format_artifact_relative_path(&path)));
+        assert!(
+            inline.contains(&codewhale_runtime::artifacts::format_artifact_relative_path(&path))
+        );
         assert!(!inline.contains("Exact evidence retained"));
         assert!(inline.contains("retrieve_tool_result"), "{inline}");
         // Full output remains recoverable from disk.

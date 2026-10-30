@@ -7,7 +7,6 @@
 //! - Managing session lifecycle
 
 use crate::approval_log::{ApprovalReceipt, ApprovalReceiptStore, ApprovalReplay};
-use codewhale_runtime::artifacts::ArtifactRecord;
 use crate::model_routing::AutoRouteReceipt;
 use crate::project_context::find_git_root;
 use crate::tools::goal::{GoalPauseReason, GoalSnapshot};
@@ -20,6 +19,7 @@ use codewhale_core::ContextReference;
 use codewhale_core::{ContextReferenceKind, ContextReferenceSource};
 use codewhale_models::reasoning_effort_tier::ReasoningEffortTier;
 use codewhale_models::{ContentBlock, Message, SystemPrompt};
+use codewhale_runtime::artifacts::ArtifactRecord;
 use codewhale_runtime::session_tree::{SessionEntry, SessionImportContainer, SessionJournal};
 use codewhale_util::utils::write_atomic;
 use serde::{Deserialize, Serialize};

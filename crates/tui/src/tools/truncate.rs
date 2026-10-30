@@ -393,7 +393,9 @@ fn spillover_preview_footer(
 ) -> String {
     format!(
         "… {} of output omitted ({omitted_lines} lines) — full output at {recovery_path}; {}",
-        codewhale_runtime::artifacts::format_byte_size(omitted_bytes.try_into().unwrap_or(u64::MAX)),
+        codewhale_runtime::artifacts::format_byte_size(
+            omitted_bytes.try_into().unwrap_or(u64::MAX)
+        ),
         spillover_recovery_instruction(retrieval_ref)
     )
 }
@@ -847,7 +849,9 @@ fn preview_footer(
         Some(path) => spillover_preview_footer(omitted_bytes, omitted_lines, path, retrieval_ref),
         None => format!(
             "… {} of output omitted ({omitted_lines} lines) — the full output could not be saved; {}",
-            codewhale_runtime::artifacts::format_byte_size(omitted_bytes.try_into().unwrap_or(u64::MAX)),
+            codewhale_runtime::artifacts::format_byte_size(
+                omitted_bytes.try_into().unwrap_or(u64::MAX)
+            ),
             spillover_recovery_instruction(None)
         ),
     }
@@ -1078,18 +1082,19 @@ fn apply_adaptive_evidence_inner(
     // retention, size, and digest checks above. A metadata-only interruption
     // is safe: the handle is never advertised and a retry can idempotently
     // publish the matching bytes.
-    let (absolute_path, relative_path) = match codewhale_runtime::artifacts::write_session_artifact_immutable(
-        context.session_id,
-        &artifact_id,
-        original.as_bytes(),
-    ) {
-        Ok(paths) => paths,
-        Err(err) => {
-            tracing::warn!(target: "evidence", ?err, tool_id, "adaptive evidence content publication failed");
-            bound_unpersisted_output(result, head_bytes, tail_bytes);
-            return None;
-        }
-    };
+    let (absolute_path, relative_path) =
+        match codewhale_runtime::artifacts::write_session_artifact_immutable(
+            context.session_id,
+            &artifact_id,
+            original.as_bytes(),
+        ) {
+            Ok(paths) => paths,
+            Err(err) => {
+                tracing::warn!(target: "evidence", ?err, tool_id, "adaptive evidence content publication failed");
+                bound_unpersisted_output(result, head_bytes, tail_bytes);
+                return None;
+            }
+        };
 
     let record = codewhale_runtime::artifacts::record_tool_output_artifact(
         context.session_id,
@@ -1176,7 +1181,9 @@ where
     impl Drop for StorageRootOverride {
         fn drop(&mut self) {
             set_test_spillover_root(self.prior_spillover.take());
-            codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.prior_artifacts.take());
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(
+                self.prior_artifacts.take(),
+            );
         }
     }
 

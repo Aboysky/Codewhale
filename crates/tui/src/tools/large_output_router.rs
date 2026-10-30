@@ -173,7 +173,8 @@ pub fn adaptive_output_routing_enabled() -> bool {
 
 #[must_use]
 pub fn evidence_metadata_relative_path(handle: &str) -> PathBuf {
-    PathBuf::from(codewhale_runtime::artifacts::ARTIFACTS_DIR_NAME).join(format!("{handle}.evidence.json"))
+    PathBuf::from(codewhale_runtime::artifacts::ARTIFACTS_DIR_NAME)
+        .join(format!("{handle}.evidence.json"))
 }
 
 pub fn publish_evidence_metadata(

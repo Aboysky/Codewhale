@@ -22463,8 +22463,9 @@ fn spillover_pager_uses_session_artifact_for_specialized_bash_cell() {
         .lock()
         .unwrap_or_else(|error| error.into_inner());
     let dir = tempfile::tempdir().unwrap();
-    let prior =
-        codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(dir.path().join("sessions")));
+    let prior = codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
+        dir.path().join("sessions"),
+    ));
     struct RestoreArtifactRoot(Option<PathBuf>);
     impl Drop for RestoreArtifactRoot {
         fn drop(&mut self) {
@@ -22474,8 +22475,9 @@ fn spillover_pager_uses_session_artifact_for_specialized_bash_cell() {
     let _restore = RestoreArtifactRoot(prior);
     let session_id = "session-bash";
     let relative_path = PathBuf::from("artifacts/art_call-bash.txt");
-    let path = codewhale_runtime::artifacts::session_artifact_absolute_path(session_id, &relative_path)
-        .expect("isolated artifact path");
+    let path =
+        codewhale_runtime::artifacts::session_artifact_absolute_path(session_id, &relative_path)
+            .expect("isolated artifact path");
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(&path, "BASH_EXACT_DEEP_SENTINEL\n").unwrap();
 
@@ -23969,7 +23971,10 @@ fn spilled_tool_completion_records_session_artifact_metadata() {
 
     assert_eq!(app.session_artifacts.len(), 1);
     let artifact = &app.session_artifacts[0];
-    assert_eq!(artifact.kind, codewhale_runtime::artifacts::ArtifactKind::ToolOutput);
+    assert_eq!(
+        artifact.kind,
+        codewhale_runtime::artifacts::ArtifactKind::ToolOutput
+    );
     assert_eq!(artifact.session_id, "session-123");
     assert_eq!(artifact.tool_call_id, "call-big");
     assert_eq!(artifact.tool_name, "exec_shell");
@@ -25794,17 +25799,19 @@ fn apply_loaded_session_restores_artifact_registry() {
         text_message("user", "hello"),
         text_message("assistant", "hi"),
     ]);
-    session.artifacts.push(codewhale_runtime::artifacts::ArtifactRecord {
-        id: "art_call_big".to_string(),
-        kind: codewhale_runtime::artifacts::ArtifactKind::ToolOutput,
-        session_id: "session-123".to_string(),
-        tool_call_id: "call-big".to_string(),
-        tool_name: "exec_shell".to_string(),
-        created_at: chrono::Utc::now(),
-        byte_size: 128,
-        preview: "hello".to_string(),
-        storage_path: PathBuf::from("/tmp/tool_outputs/call-big.txt"),
-    });
+    session
+        .artifacts
+        .push(codewhale_runtime::artifacts::ArtifactRecord {
+            id: "art_call_big".to_string(),
+            kind: codewhale_runtime::artifacts::ArtifactKind::ToolOutput,
+            session_id: "session-123".to_string(),
+            tool_call_id: "call-big".to_string(),
+            tool_name: "exec_shell".to_string(),
+            created_at: chrono::Utc::now(),
+            byte_size: 128,
+            preview: "hello".to_string(),
+            storage_path: PathBuf::from("/tmp/tool_outputs/call-big.txt"),
+        });
 
     apply_loaded_session(&mut app, &mut Config::default(), &session).expect("restore session");
     assert_eq!(app.session_artifacts, session.artifacts);

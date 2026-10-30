@@ -653,7 +653,9 @@ impl Run<'_> {
             let Some(owner_id) = owner.to_str() else {
                 continue;
             };
-            if !codewhale_runtime::artifacts::is_valid_session_id(owner_id) || !entry.path().is_dir() {
+            if !codewhale_runtime::artifacts::is_valid_session_id(owner_id)
+                || !entry.path().is_dir()
+            {
                 continue;
             }
             let Ok(children) = fs::read_dir(entry.path()) else {

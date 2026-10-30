@@ -81,8 +81,8 @@ fn publish_image(
         "art_image_{}",
         codewhale_runtime::hashing::sha256_hex(&identity)
     );
-    let storage_path =
-        PathBuf::from(codewhale_runtime::artifacts::ARTIFACTS_DIR_NAME).join(format!("{handle}.image"));
+    let storage_path = PathBuf::from(codewhale_runtime::artifacts::ARTIFACTS_DIR_NAME)
+        .join(format!("{handle}.image"));
     let digest = codewhale_runtime::hashing::sha256_hex(&bytes);
     let now = unix_millis_now();
     let proposed = EvidenceArtifact {
@@ -121,7 +121,11 @@ fn publish_image(
         Err(error) if error.kind() == io::ErrorKind::NotFound => proposed,
         Err(error) => return Err(error),
     };
-    codewhale_runtime::artifacts::write_session_relative_immutable(session_id, &storage_path, &bytes)?;
+    codewhale_runtime::artifacts::write_session_relative_immutable(
+        session_id,
+        &storage_path,
+        &bytes,
+    )?;
     if let Err(error) = publish_evidence_metadata(session_id, &artifact) {
         // Concurrent identical replays can propose different timestamps. Keep
         // the winner's immutable lifetime, never replace or extend it.
@@ -185,9 +189,11 @@ mod tests {
 
     async fn check_tool_media_publication_is_immutable_and_replay_preserves_manifest() {
         let temp = tempfile::tempdir().unwrap();
-        let _root = ArtifactRoot(codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
-            temp.path().to_owned(),
-        )));
+        let _root = ArtifactRoot(
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
+                temp.path().to_owned(),
+            )),
+        );
         let first = project(
             image_result(3, "image/png"),
             "media_owner",
@@ -306,9 +312,11 @@ mod tests {
 
     async fn check_tool_media_rejects_spoofed_mime_bytes_and_plugin_descriptors() {
         let temp = tempfile::tempdir().unwrap();
-        let _root = ArtifactRoot(codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
-            temp.path().to_owned(),
-        )));
+        let _root = ArtifactRoot(
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
+                temp.path().to_owned(),
+            )),
+        );
         let mime = project(
             image_result(0, "image/jpeg"),
             "media_owner",

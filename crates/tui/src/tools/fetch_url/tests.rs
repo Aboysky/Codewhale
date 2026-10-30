@@ -23,8 +23,9 @@ fn raw_pdf_production_path_preserves_exact_bytes_without_extractor() {
         .lock()
         .unwrap_or_else(|error| error.into_inner());
     let temporary = tempfile::tempdir().expect("artifact root");
-    let prior =
-        codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(temporary.path().join("sessions")));
+    let prior = codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
+        temporary.path().join("sessions"),
+    ));
     let _restore = ArtifactRootRestore(prior);
     let bytes = b"%PDF-1.7\nraw fixture that is intentionally not parseable\n%%EOF";
     let missing = temporary.path().join("definitely-not-pdftotext");
@@ -61,7 +62,8 @@ fn raw_pdf_spoofs_and_contradictory_media_mime_create_no_artifact() {
         .unwrap_or_else(|error| error.into_inner());
     let temporary = tempfile::tempdir().expect("artifact root");
     let sessions = temporary.path().join("sessions");
-    let prior = codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(sessions.clone()));
+    let prior =
+        codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(sessions.clone()));
     let _restore = ArtifactRootRestore(prior);
     let missing = temporary.path().join("definitely-not-pdftotext");
     let request = PdfTextCommand::test(missing.as_os_str(), Duration::from_millis(50), None);

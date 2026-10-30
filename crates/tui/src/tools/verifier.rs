@@ -1492,8 +1492,12 @@ impl GateCapture {
     }
 
     async fn open_log(&self) -> Option<tokio::fs::File> {
-        let relative = codewhale_runtime::artifacts::session_artifact_relative_path(&self.artifact_id);
-        let path = codewhale_runtime::artifacts::session_artifact_absolute_path(&self.session_id, &relative)?;
+        let relative =
+            codewhale_runtime::artifacts::session_artifact_relative_path(&self.artifact_id);
+        let path = codewhale_runtime::artifacts::session_artifact_absolute_path(
+            &self.session_id,
+            &relative,
+        )?;
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent).await.ok()?;
         }

@@ -363,7 +363,10 @@ pub(crate) fn artifact_refs_from_tool_metadata(
         let mut reference = base(
             handle.to_owned(),
             TurnArtifactKind::Media,
-            format!("{}/{handle}.image", codewhale_runtime::artifacts::ARTIFACTS_DIR_NAME),
+            format!(
+                "{}/{handle}.image",
+                codewhale_runtime::artifacts::ARTIFACTS_DIR_NAME
+            ),
             TurnArtifactSource::ToolMedia,
         );
         reference.session_id = Some(session_id.to_owned());

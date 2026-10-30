@@ -43,13 +43,16 @@ where
     }
 
     let artifact_id = artifact_id(&content);
-    let (absolute_path, relative_path) =
-        codewhale_runtime::artifacts::write_session_artifact(&context.state_namespace, &artifact_id, &content)
-            .map_err(|error| {
-                ToolError::execution_failed(format!(
-                    "failed to preserve {subject} content artifact: {error}"
-                ))
-            })?;
+    let (absolute_path, relative_path) = codewhale_runtime::artifacts::write_session_artifact(
+        &context.state_namespace,
+        &artifact_id,
+        &content,
+    )
+    .map_err(|error| {
+        ToolError::execution_failed(format!(
+            "failed to preserve {subject} content artifact: {error}"
+        ))
+    })?;
     let relative = codewhale_runtime::artifacts::format_artifact_relative_path(&relative_path);
     let absolute = absolute_path.display().to_string();
     let inline = crate::tools::truncate::fit_to_inline_budget(

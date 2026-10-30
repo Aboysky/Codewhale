@@ -847,7 +847,10 @@ mod tests {
         expired: bool,
     ) -> crate::tools::large_output_router::EvidenceArtifact {
         let relative = codewhale_runtime::artifacts::session_artifact_relative_path(handle);
-        codewhale_runtime::artifacts::write_session_relative_immutable(session_id, &relative, bytes).unwrap();
+        codewhale_runtime::artifacts::write_session_relative_immutable(
+            session_id, &relative, bytes,
+        )
+        .unwrap();
         let now = crate::tools::large_output_router::unix_millis_now();
         let artifact = crate::tools::large_output_router::EvidenceArtifact {
             handle: handle.to_string(),
@@ -926,8 +929,9 @@ mod tests {
             .unwrap_or_else(|err| err.into_inner());
         let tmp = tempdir().unwrap();
         let _root = set_spillover_root(tmp.path().join("tool_outputs"));
-        let prior =
-            codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(tmp.path().join("sessions")));
+        let prior = codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
+            tmp.path().join("sessions"),
+        ));
         struct Restore(Option<PathBuf>);
         impl Drop for Restore {
             fn drop(&mut self) {
@@ -960,8 +964,9 @@ mod tests {
             .unwrap_or_else(|err| err.into_inner());
         let tmp = tempdir().unwrap();
         let _root = set_spillover_root(tmp.path().join("tool_outputs"));
-        let prior =
-            codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(tmp.path().join("sessions")));
+        let prior = codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
+            tmp.path().join("sessions"),
+        ));
         struct Restore(Option<PathBuf>);
         impl Drop for Restore {
             fn drop(&mut self) {
@@ -1004,8 +1009,9 @@ mod tests {
             .unwrap_or_else(|err| err.into_inner());
         let tmp = tempdir().unwrap();
         let _root = set_spillover_root(tmp.path().join("tool_outputs"));
-        let prior =
-            codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(tmp.path().join("sessions")));
+        let prior = codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
+            tmp.path().join("sessions"),
+        ));
         struct Restore(Option<PathBuf>);
         impl Drop for Restore {
             fn drop(&mut self) {
@@ -1021,9 +1027,11 @@ mod tests {
         assert!(expired.contains("expired"), "{expired}");
 
         let artifact = publish_test_evidence("session-a", "art_call-corrupt", b"original", false);
-        let absolute =
-            codewhale_runtime::artifacts::session_artifact_absolute_path("session-a", &artifact.storage_path)
-                .unwrap();
+        let absolute = codewhale_runtime::artifacts::session_artifact_absolute_path(
+            "session-a",
+            &artifact.storage_path,
+        )
+        .unwrap();
         std::fs::write(absolute, b"changed").unwrap();
         let corrupt = execute_tool_in_session(json!({"ref": "art_call-corrupt"}), "session-a")
             .unwrap_err()
@@ -1236,7 +1244,8 @@ mod tests {
         };
         let session_id = "session-abc";
         let body = "this is the canonical session artifact body, not a legacy file";
-        codewhale_runtime::artifacts::write_session_artifact(session_id, "art_call_real", body).unwrap();
+        codewhale_runtime::artifacts::write_session_artifact(session_id, "art_call_real", body)
+            .unwrap();
 
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()

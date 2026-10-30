@@ -16,7 +16,6 @@ use codewhale_config::{AppMode, ProviderChain, route::RouteLimits};
 use codewhale_core::ContextReference;
 use codewhale_execpolicy::ApprovalMode;
 
-use codewhale_runtime::artifacts::ArtifactRecord;
 use crate::client::{CacheWarmupKey, PromptInspection};
 use crate::compaction::CompactionConfig;
 use crate::core::authority::{ModeSessionPrefs, base_policy_for_mode};
@@ -49,6 +48,7 @@ use codewhale_config::pricing::CostCurrency;
 use codewhale_localization::{Locale, MessageId, resolve_locale, tr};
 use codewhale_models::{ContentBlock, Message, SystemPrompt, Tool, Usage};
 use codewhale_palette::{self as palette, UiTheme};
+use codewhale_runtime::artifacts::ArtifactRecord;
 use codewhale_runtime::config::{ApprovalPolicyControl, Config};
 use codewhale_runtime::settings::{InlineDiffMode, Settings};
 use codewhale_tui_kit::paste_burst::{FlushResult, PasteBurst};

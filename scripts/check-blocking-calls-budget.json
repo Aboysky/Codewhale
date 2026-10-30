@@ -126,6 +126,9 @@
   "crates/repl/src/runtime.rs": {
     "std_fs": 1
   },
+  "crates/runtime/src/artifacts.rs": {
+    "std_fs": 2
+  },
   "crates/runtime/src/codex_model_roster.rs": {
     "std_fs": 3
   },
@@ -148,6 +151,10 @@
   },
   "crates/runtime/src/settings.rs": {
     "std_fs": 4
+  },
+  "crates/runtime/src/working_set.rs": {
+    "path_canonicalize": 1,
+    "std_fs": 1
   },
   "crates/sandbox/src/bwrap.rs": {
     "path_canonicalize": 2,
@@ -183,9 +190,6 @@
   },
   "crates/tui/examples/zz_perf_probe.rs": {
     "std_fs": 1
-  },
-  "crates/tui/src/artifacts.rs": {
-    "std_fs": 2
   },
   "crates/tui/src/automation_manager.rs": {
     "path_canonicalize": 4
@@ -513,10 +517,6 @@
   },
   "crates/tui/src/voice.rs": {
     "std_fs": 3
-  },
-  "crates/runtime/src/working_set.rs": {
-    "path_canonicalize": 1,
-    "std_fs": 1
   },
   "crates/tui/src/workspace_lease.rs": {
     "path_canonicalize": 1

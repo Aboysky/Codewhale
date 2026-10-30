@@ -21074,7 +21074,9 @@ fn test_artifact_root(root: &Path) -> TestArtifactRoot {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     TestArtifactRoot {
-        previous: codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(root.to_path_buf())),
+        previous: codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
+            root.to_path_buf(),
+        )),
         _guard: guard,
     }
 }

@@ -242,9 +242,9 @@ impl ToolSpec for FetchUrlTool {
             &fetched.bytes,
             context,
         )?;
-        let artifact = artifact_write
-            .as_ref()
-            .map(|write| codewhale_runtime::artifacts::format_artifact_relative_path(&write.relative_path));
+        let artifact = artifact_write.as_ref().map(|write| {
+            codewhale_runtime::artifacts::format_artifact_relative_path(&write.relative_path)
+        });
 
         let citation = super::web::citations::register(
             &context.state_namespace,
@@ -409,7 +409,8 @@ fn render_extracted(
                 "bin"
             });
         let artifact = write_binary_artifact(url, extension, bytes, context)?;
-        let relative = codewhale_runtime::artifacts::format_artifact_relative_path(&artifact.relative_path);
+        let relative =
+            codewhale_runtime::artifacts::format_artifact_relative_path(&artifact.relative_path);
         let label = if document.kind == DocumentKind::Pdf {
             "PDF"
         } else {
@@ -460,17 +461,18 @@ fn write_binary_artifact(
     context: &ToolContext,
 ) -> Result<ArtifactWrite, ToolError> {
     let artifact_id = fetch_artifact_id(url, bytes);
-    let (absolute_path, relative_path) = codewhale_runtime::artifacts::write_session_artifact_bytes(
-        &context.state_namespace,
-        &artifact_id,
-        extension,
-        bytes,
-    )
-    .map_err(|error| {
-        ToolError::execution_failed(format!(
-            "failed to preserve fetched media artifact: {error}"
-        ))
-    })?;
+    let (absolute_path, relative_path) =
+        codewhale_runtime::artifacts::write_session_artifact_bytes(
+            &context.state_namespace,
+            &artifact_id,
+            extension,
+            bytes,
+        )
+        .map_err(|error| {
+            ToolError::execution_failed(format!(
+                "failed to preserve fetched media artifact: {error}"
+            ))
+        })?;
     Ok(ArtifactWrite {
         session_id: context.state_namespace.clone(),
         absolute_path,
@@ -682,8 +684,9 @@ mod tests {
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         let tmp = tempfile::tempdir().unwrap();
-        let prior =
-            codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(tmp.path().join("sessions")));
+        let prior = codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
+            tmp.path().join("sessions"),
+        ));
         let _restore = ArtifactRootRestore(prior);
         let context = ToolContext::new(".")
             .with_state_namespace("fetch-overflow")

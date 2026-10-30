@@ -487,7 +487,9 @@ fn publish_offloaded_context(
     };
     publish_evidence_metadata(session_id, &metadata)
         .and_then(|_| {
-            codewhale_runtime::artifacts::write_session_artifact_immutable(session_id, &handle, &bytes)
+            codewhale_runtime::artifacts::write_session_artifact_immutable(
+                session_id, &handle, &bytes,
+            )
         })
         .map_err(|err| format!("Could not store offloaded context; history unchanged: {err}"))?;
     Ok(format!(

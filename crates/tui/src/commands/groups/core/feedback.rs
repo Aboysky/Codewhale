@@ -194,9 +194,11 @@ mod tests {
                 codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.0.take());
             }
         }
-        let _restore = Restore(codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
-            tmp.path().join("sessions"),
-        )));
+        let _restore = Restore(
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
+                tmp.path().join("sessions"),
+            )),
+        );
         app.current_session_id = Some("session-a".into());
         let context = ToolContext::new(tmp.path())
             .with_state_namespace("session-a")

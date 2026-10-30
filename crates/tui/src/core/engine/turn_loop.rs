@@ -1199,7 +1199,8 @@ impl Engine {
             .map(|mut completion| {
                 let tool_call_id =
                     format!("background-shell-completion-{}", completion.event.task_id);
-                let artifact_id = codewhale_runtime::artifacts::artifact_id_for_tool_call(&tool_call_id);
+                let artifact_id =
+                    codewhale_runtime::artifacts::artifact_id_for_tool_call(&tool_call_id);
                 let bytes = completion.artifact_bytes();
                 match codewhale_runtime::artifacts::write_session_artifact_immutable(
                     &self.session.id,
@@ -7442,9 +7443,11 @@ mod tests {
                 codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.0.take());
             }
         }
-        let _artifact_root = ArtifactRootReset(codewhale_runtime::artifacts::set_test_artifact_sessions_root(
-            Some(tmp.path().join("sessions")),
-        ));
+        let _artifact_root = ArtifactRootReset(
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
+                tmp.path().join("sessions"),
+            )),
+        );
 
         let delivered = engine.drain_shell_completion_events();
         assert_eq!(

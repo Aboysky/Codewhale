@@ -428,9 +428,11 @@ mod tests {
             .lock()
             .unwrap();
         let root = tempfile::tempdir().unwrap();
-        let _restore = ArtifactRoot(codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
-            root.path().to_owned(),
-        )));
+        let _restore = ArtifactRoot(
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
+                root.path().to_owned(),
+            )),
+        );
         let worker = Worker::start(Some("pet-worker-test".into())).unwrap();
         worker
             .tx

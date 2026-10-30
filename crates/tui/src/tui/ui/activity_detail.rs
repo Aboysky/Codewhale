@@ -319,7 +319,9 @@ pub(super) fn spillover_pager_section(app: &App, cell_index: usize) -> Option<St
 // unavailable-output state is shown. This is not a persistence size limit.
 const MAX_SESSION_ARTIFACT_DISPLAY_BYTES: u64 = 64 * 1024 * 1024;
 
-fn read_owned_session_artifact(artifact: &codewhale_runtime::artifacts::ArtifactRecord) -> Option<String> {
+fn read_owned_session_artifact(
+    artifact: &codewhale_runtime::artifacts::ArtifactRecord,
+) -> Option<String> {
     use std::io::Read;
 
     if !artifact
@@ -2178,9 +2180,7 @@ mod tests {
     struct PrivateArtifactRoot(Option<PathBuf>);
     impl PrivateArtifactRoot {
         fn set(path: PathBuf) -> Self {
-            Self(codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
-                path,
-            )))
+            Self(codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(path)))
         }
     }
     impl Drop for PrivateArtifactRoot {
@@ -2205,8 +2205,12 @@ mod tests {
             .unwrap_or_else(|err| err.into_inner());
         let temp = tempfile::tempdir().unwrap();
         let _root = PrivateArtifactRoot::set(temp.path().join("sessions"));
-        codewhale_runtime::artifacts::write_session_artifact("session-a", "mutable", "exact pager output")
-            .unwrap();
+        codewhale_runtime::artifacts::write_session_artifact(
+            "session-a",
+            "mutable",
+            "exact pager output",
+        )
+        .unwrap();
         assert_eq!(
             read_owned_session_artifact(&owned_artifact_fixture()).as_deref(),
             Some("exact pager output")

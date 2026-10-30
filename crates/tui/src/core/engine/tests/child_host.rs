@@ -1274,8 +1274,11 @@ async fn captured_child_output_caps_preserve_utf8_error_kinds_metadata_and_raw_b
         )));
         assert!(content.len() <= 6 + "\n[truncated: true]".len() + 80);
         let relative = codewhale_runtime::artifacts::session_artifact_relative_path(&artifact);
-        let path =
-            codewhale_runtime::artifacts::session_artifact_absolute_path("origin-session", &relative).unwrap();
+        let path = codewhale_runtime::artifacts::session_artifact_absolute_path(
+            "origin-session",
+            &relative,
+        )
+        .unwrap();
         assert_eq!(std::fs::read_to_string(path).unwrap(), raw);
         let retrieved = crate::tools::tool_result_retrieval::RetrieveToolResultTool
             .execute(

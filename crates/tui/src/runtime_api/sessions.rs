@@ -1298,7 +1298,9 @@ pub(super) struct SessionArtifactReadResponse {
     content: String,
 }
 
-fn artifact_summary(record: &codewhale_runtime::artifacts::ArtifactRecord) -> SessionArtifactSummary {
+fn artifact_summary(
+    record: &codewhale_runtime::artifacts::ArtifactRecord,
+) -> SessionArtifactSummary {
     SessionArtifactSummary {
         id: record.id.clone(),
         session_id: record.session_id.clone(),
@@ -1528,8 +1530,8 @@ fn image_evidence_summary(
     let file = super::workspace::open_confined_file_resolved(sessions_dir, &relative, false)?;
     let evidence = crate::tools::large_output_router::read_evidence_metadata_file(&file)
         .map_err(|error| super::workspace::map_fs_error(error, "evidence metadata"))?;
-    let expected_path =
-        PathBuf::from(codewhale_runtime::artifacts::ARTIFACTS_DIR_NAME).join(format!("{artifact_id}.image"));
+    let expected_path = PathBuf::from(codewhale_runtime::artifacts::ARTIFACTS_DIR_NAME)
+        .join(format!("{artifact_id}.image"));
     if evidence.origin_session != id
         || evidence.handle != artifact_id
         || evidence.storage_path != expected_path

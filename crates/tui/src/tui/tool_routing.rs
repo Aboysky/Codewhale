@@ -607,15 +607,16 @@ fn record_spillover_artifact_if_any(
     {
         return;
     }
-    app.session_artifacts
-        .push(codewhale_runtime::artifacts::record_tool_output_artifact_with_size(
+    app.session_artifacts.push(
+        codewhale_runtime::artifacts::record_tool_output_artifact_with_size(
             session_id,
             id,
             name,
             storage_path,
             byte_size,
             content_for_preview,
-        ));
+        ),
+    );
 }
 
 pub(super) fn evidence_completion_should_be_ignored(

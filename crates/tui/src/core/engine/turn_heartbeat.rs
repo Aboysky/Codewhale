@@ -395,12 +395,8 @@ mod tests {
         let (tx, mut rx) = mpsc::channel(4);
         let started = std::time::Instant::now();
         let cancel = CancellationToken::new();
-        let watchdog = spawn_turn_stall_watchdog_every(
-            Arc::clone(&heartbeat),
-            tx,
-            cancel.clone(),
-            tick,
-        );
+        let watchdog =
+            spawn_turn_stall_watchdog_every(Arc::clone(&heartbeat), tx, cancel.clone(), tick);
 
         let event = tokio::time::timeout(Duration::from_secs(10), rx.recv())
             .await
