@@ -480,29 +480,39 @@ pub(crate) fn persist_recovery_snapshot(app: &mut App) {
 }
 
 pub(crate) fn persist_full_reset_snapshot(app: &mut App) {
-    if let Ok(manager) = SessionManager::default_location()
-        && let Ok(session) = build_session_snapshot(app, &manager)
-    {
-        let projection = saved_work_projection(app, &session);
-        app.current_session_id = Some(session.metadata.id.clone());
-        if let Err(err) = persist_with_pending_work_boundary(
-            app,
-            PersistRequest::CompletedCommit { session },
-            &projection,
-        ) {
-            app.status_message = Some(format!(
-                "To-do list update pending while saving reset snapshot ({err})"
-            ));
+    let session = SessionManager::default_location()
+        .map_err(|err| err.to_string())
+        .and_then(|manager| build_session_snapshot(app, &manager));
+    let session = match session {
+        Ok(session) => session,
+        Err(err) => {
+            let id = app
+                .current_session_id
+                .as_deref()
+                .map(crate::session_manager::truncate_id)
+                .unwrap_or("—");
+            let message = app
+                .tr(MessageId::SessionSaveFailed)
+                .replace("{id}", id)
+                .replace("{error}", &err);
+            app.add_message(crate::tui::history::HistoryCell::Error {
+                message: message.clone(),
+                severity: codewhale_error_taxonomy::ErrorSeverity::Error,
+            });
+            app.status_message = Some(message);
+            return;
         }
-        return;
-    }
-    // `/clear` and `/new` are explicit boundaries. Never let an older
-    // in-flight checkpoint resurrect the session the user just discarded,
-    // even if the replacement snapshot could not be constructed.
-    // `build_session_snapshot` reuses `current_session_id`, so this id is the
-    // discarded session's id when the replacement snapshot could not be built.
-    if let Some(session_id) = app.current_session_id.clone() {
-        persistence_actor::persist(PersistRequest::ClearCheckpoint { session_id });
+    };
+    let projection = saved_work_projection(app, &session);
+    app.current_session_id = Some(session.metadata.id.clone());
+    if let Err(err) = persist_with_pending_work_boundary(
+        app,
+        PersistRequest::CompletedCommit { session },
+        &projection,
+    ) {
+        app.status_message = Some(format!(
+            "To-do list update pending while saving reset snapshot ({err})"
+        ));
     }
 }
 

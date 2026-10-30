@@ -33680,6 +33680,41 @@ async fn offline_queue_lifecycle_preserves_edits_and_explicit_reset() {
         assert_eq!(app.current_session_id, active);
         assert_eq!(app.input, "preserve on failed resume");
     }
+    let mut reset_app = create_test_app();
+    let reset_id = "reset-snapshot-build-failure";
+    reset_app.current_session_id = Some(reset_id.into());
+    let checkpoint = create_saved_session_with_id_and_mode(
+        reset_id.into(),
+        &[text_message("user", "recover this")],
+        &reset_app.model,
+        &reset_app.workspace,
+        0,
+        None,
+        None,
+    );
+    let checkpoint_path = manager
+        .save_checkpoint(&checkpoint)
+        .expect("save checkpoint");
+    let bad_home = directory.path().join("blocked-state-home");
+    std::fs::write(&bad_home, b"not a directory").unwrap();
+    {
+        let _bad_home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &bad_home);
+        persist_full_reset_snapshot(&mut reset_app);
+    }
+    flush_offline_queue_test_actor(&handle).await;
+    assert!(
+        checkpoint_path.exists(),
+        "failed reset must retain recovery"
+    );
+    let failure = reset_app
+        .status_message
+        .as_deref()
+        .expect("failed reset status");
+    assert!(failure.contains("could not be saved"), "{failure}");
+    assert!(matches!(
+        reset_app.history.last(),
+        Some(HistoryCell::Error { message, .. }) if message == failure
+    ));
     assert!(handle.try_send(PersistRequest::Shutdown));
     task.await.expect("queue actor shutdown");
 }
