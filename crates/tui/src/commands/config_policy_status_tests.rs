@@ -509,6 +509,13 @@ mod tests {
         let mut app = create_test_app(tmpdir.path().to_path_buf());
         app.ui_locale = Locale::Ja;
         app.approval_mode = ApprovalMode::Bypass;
+        // The installed window carries its own source and outranks the bare
+        // field, so a fixture that only sets the source keeps whatever window
+        // the test app resolved and the status reports that source instead.
+        app.active_context_window = Some(crate::route_runtime::ContextWindowResolution {
+            tokens: 200_000,
+            source: crate::route_runtime::ContextWindowSource::ProviderReported,
+        });
         app.active_context_window_source =
             crate::route_runtime::ContextWindowSource::ProviderReported;
 

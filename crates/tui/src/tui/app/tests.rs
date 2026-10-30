@@ -4916,6 +4916,12 @@ fn test_update_model_compaction_budget() {
     app.api_provider = ProviderKind::Deepseek;
     app.active_route_limits = None;
     app.active_context_window_override = None;
+    // The installed window outranks the route limits, so a fixture that only
+    // clears the limits keeps the window `App::new` resolved for its default
+    // model and the budget is computed against the wrong one. Production
+    // clears it through `set_model_selection`; mutating `app.model` directly
+    // has to do the same.
+    app.active_context_window = None;
     app.auto_compact_threshold_percent = 80.0;
 
     // A large-context model earns a proportionally larger compaction
