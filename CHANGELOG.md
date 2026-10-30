@@ -57,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Newer model rows in the offline catalog:** the bundled seed now carries `kimi-k3.1-pro` and `kimi-k3.1-pro-highspeed` (Moonshot), `MiniMax-M3.1-Flash` (MiniMax and its Anthropic-compatible endpoint) and `gpt-6.1-terra` (OpenAI), which Models.dev already listed and Codewhale did not pin. Live refreshes from Models.dev were already showing these online; the seed is what a first run, an offline start and a deep-offline install read, so it is now re-locked at 2026-10-30 and rendered. `seed render --check` matches and `defaults audit` reports no stale default.
 - **Skills ownership (internal):** skill discovery, provenance, mutation and bundled skill content move into `codewhale-skills`. Native roots still use the existing host manager's selection and lifetime checks. (S20, #5316)
 
 - **Model pricing ownership (internal):** hand-sourced price metadata and recorded-time rules move into `codewhale-models`; cost auditing and live catalog callers use the same owner. (S24p1, #5316)
