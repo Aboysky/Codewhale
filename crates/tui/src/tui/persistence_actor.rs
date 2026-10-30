@@ -650,22 +650,22 @@ impl PendingState {
                 // session only — other sessions' pending work is untouched.
                 // An explicit clear is also a user-owned boundary (e.g.
                 // `/new`): it supersedes a pending completion while keeping
-                // a newer explicit snapshot for the same session.
+                // a newer explicit snapshot and clearing only after its save.
                 self.checkpoints.remove(&session_id);
-                if let Some(PendingSession::Snapshot(session)) =
-                    self.completed_commits.remove(&session_id)
-                {
-                    self.sessions
-                        .insert(session_id.clone(), PendingSession::Snapshot(session));
+                let completed = self.completed_commits.remove(&session_id);
+                let session = self.sessions.remove(&session_id);
+                let snapshot = match (session, completed) {
+                    (Some(PendingSession::Snapshot(session)), _)
+                    | (_, Some(PendingSession::Snapshot(session))) => Some(session),
+                    _ => None,
+                };
+                if let Some(snapshot) = snapshot {
+                    self.checkpoint_clears.remove(&session_id);
+                    self.completed_commits
+                        .insert(session_id, PendingSession::Snapshot(snapshot));
+                } else {
+                    self.checkpoint_clears.insert(session_id);
                 }
-                if self
-                    .sessions
-                    .get(&session_id)
-                    .is_some_and(|session| matches!(session, PendingSession::Completion(_)))
-                {
-                    self.sessions.remove(&session_id);
-                }
-                self.checkpoint_clears.insert(session_id);
             }
             PersistRequest::FlushAndReport { reply } => return Control::Flush(reply),
             PersistRequest::Shutdown => return Control::Shutdown,
@@ -1343,7 +1343,9 @@ mod tests {
         block_session_file(&sessions_dir, &session_id);
         let (handle, task) = spawn_persistence_actor(manager);
 
-        handle.try_send(PersistRequest::CompletedCommit { session });
+        handle.try_send(PersistRequest::CompletedCommit {
+            session: session.clone(),
+        });
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
         handle.try_send(PersistRequest::FlushAndReport { reply: reply_tx });
         let report = reply_rx.await.expect("flush report reply");
@@ -1366,6 +1368,18 @@ mod tests {
         assert!(
             checkpoint_path.exists(),
             "a failed session save must retain the crash-recovery checkpoint"
+        );
+        handle.try_send(PersistRequest::SessionSnapshot(session));
+        handle.try_send(PersistRequest::ClearCheckpoint {
+            session_id: session_id.clone(),
+        });
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        handle.try_send(PersistRequest::FlushAndReport { reply: reply_tx });
+        let report = reply_rx.await.expect("reset flush report reply");
+        assert!(!report.failures.is_empty());
+        assert!(
+            checkpoint_path.exists(),
+            "a failed reset save must retain the crash-recovery checkpoint"
         );
         handle.try_send(PersistRequest::Shutdown);
         task.await.expect("persistence actor join");
@@ -1581,7 +1595,7 @@ mod tests {
             session_id: session_id.clone(),
         });
         assert!(matches!(
-            &pending.sessions[&session_id],
+            &pending.completed_commits[&session_id],
             PendingSession::Snapshot(session) if session.metadata.title == "Reset session"
         ));
         let saved = verification_manager.load_session(&session_id).unwrap();
@@ -1606,7 +1620,7 @@ mod tests {
                 session_id: session_id.clone(),
             });
             assert!(matches!(
-                &pending.sessions[&session_id],
+                &pending.completed_commits[&session_id],
                 PendingSession::Snapshot(session) if session.metadata.title == "Newer reset"
             ));
         }

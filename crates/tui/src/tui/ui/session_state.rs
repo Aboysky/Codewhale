@@ -487,19 +487,20 @@ pub(crate) fn persist_full_reset_snapshot(app: &mut App) {
         app.current_session_id = Some(session.metadata.id.clone());
         if let Err(err) = persist_with_pending_work_boundary(
             app,
-            PersistRequest::SessionSnapshot(session),
+            PersistRequest::CompletedCommit { session },
             &projection,
         ) {
             app.status_message = Some(format!(
                 "To-do list update pending while saving reset snapshot ({err})"
             ));
         }
+        return;
     }
     // `/clear` and `/new` are explicit boundaries. Never let an older
     // in-flight checkpoint resurrect the session the user just discarded,
     // even if the replacement snapshot could not be constructed.
     // `build_session_snapshot` reuses `current_session_id`, so this id is the
-    // discarded session's id whether or not the snapshot above succeeded.
+    // discarded session's id when the replacement snapshot could not be built.
     if let Some(session_id) = app.current_session_id.clone() {
         persistence_actor::persist(PersistRequest::ClearCheckpoint { session_id });
     }
