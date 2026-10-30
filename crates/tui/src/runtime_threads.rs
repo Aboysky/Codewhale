@@ -4205,7 +4205,7 @@ impl RuntimeStoreBinding {
             || !session_dir
                 .file_name()
                 .and_then(|name| name.to_str())
-                .is_some_and(crate::artifacts::is_valid_session_id)
+                .is_some_and(codewhale_runtime::artifacts::is_valid_session_id)
         {
             return Ok(false);
         }

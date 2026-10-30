@@ -86,7 +86,7 @@ fn project_status(app: &App) -> ConfigStatusView {
     let catalog = crate::models_dev_live::status();
     let metrics = crate::tui::session_metrics::snapshot_from_app(app);
     let outputs =
-        crate::tool_output_receipts::tool_output_status(&app.api_messages, &app.session_artifacts);
+        codewhale_runtime::tool_output_receipts::tool_output_status(&app.api_messages, &app.session_artifacts);
     let context_window = app.effective_context_window();
     let context_used = crate::compaction::estimate_input_tokens_conservative(
         &app.api_messages,

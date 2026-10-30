@@ -173,7 +173,7 @@ pub fn adaptive_output_routing_enabled() -> bool {
 
 #[must_use]
 pub fn evidence_metadata_relative_path(handle: &str) -> PathBuf {
-    PathBuf::from(crate::artifacts::ARTIFACTS_DIR_NAME).join(format!("{handle}.evidence.json"))
+    PathBuf::from(codewhale_runtime::artifacts::ARTIFACTS_DIR_NAME).join(format!("{handle}.evidence.json"))
 }
 
 pub fn publish_evidence_metadata(
@@ -182,7 +182,7 @@ pub fn publish_evidence_metadata(
 ) -> io::Result<PathBuf> {
     let bytes = serde_json::to_vec_pretty(artifact)
         .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
-    crate::artifacts::write_session_relative_immutable(
+    codewhale_runtime::artifacts::write_session_relative_immutable(
         session_id,
         &evidence_metadata_relative_path(&artifact.handle),
         &bytes,
@@ -191,7 +191,7 @@ pub fn publish_evidence_metadata(
 
 pub fn read_evidence_metadata(session_id: &str, handle: &str) -> io::Result<EvidenceArtifact> {
     let relative = evidence_metadata_relative_path(handle);
-    let file = crate::artifacts::open_session_relative(session_id, &relative, false)?;
+    let file = codewhale_runtime::artifacts::open_session_relative(session_id, &relative, false)?;
     read_evidence_metadata_file(&file)
 }
 

@@ -20923,7 +20923,7 @@ async fn session_artifacts_list_and_bounded_read() -> Result<()> {
     fs::create_dir_all(&artifact_dir)?;
     let body = "line one\nline two\n".repeat(64);
     fs::write(artifact_dir.join("art_call_1.txt"), &body)?;
-    let served = crate::artifacts::record_tool_output_artifact_with_size(
+    let served = codewhale_runtime::artifacts::record_tool_output_artifact_with_size(
         &session_id,
         "call_1",
         "bash",
@@ -20931,7 +20931,7 @@ async fn session_artifacts_list_and_bounded_read() -> Result<()> {
         body.len() as u64,
         "line one",
     );
-    let escaping = crate::artifacts::record_tool_output_artifact_with_size(
+    let escaping = codewhale_runtime::artifacts::record_tool_output_artifact_with_size(
         &session_id,
         "call_2",
         "bash",
@@ -20940,7 +20940,7 @@ async fn session_artifacts_list_and_bounded_read() -> Result<()> {
         "nope",
     );
     fs::write(tmp.path().join("escape.txt"), "nope")?;
-    let missing = crate::artifacts::record_tool_output_artifact_with_size(
+    let missing = codewhale_runtime::artifacts::record_tool_output_artifact_with_size(
         &session_id,
         "call_3",
         "bash",
@@ -21065,16 +21065,16 @@ struct TestArtifactRoot {
 
 impl Drop for TestArtifactRoot {
     fn drop(&mut self) {
-        crate::artifacts::set_test_artifact_sessions_root(self.previous.take());
+        codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.previous.take());
     }
 }
 
 fn test_artifact_root(root: &Path) -> TestArtifactRoot {
-    let guard = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+    let guard = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     TestArtifactRoot {
-        previous: crate::artifacts::set_test_artifact_sessions_root(Some(root.to_path_buf())),
+        previous: codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(root.to_path_buf())),
         _guard: guard,
     }
 }

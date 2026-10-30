@@ -129,7 +129,7 @@ fn repeated_provider_id_ask_rejects_stale_answer_and_keeps_local_artifact_origin
                             let output = result.expect("approved shell fixture succeeds");
                             assert!(output.success, "{output:?}");
                             let metadata = output.metadata.as_ref().expect("over-budget output is archived");
-                            assert_eq!(metadata["artifact_id"], crate::artifacts::artifact_id_for_tool_call(&id));
+                            assert_eq!(metadata["artifact_id"], codewhale_runtime::artifacts::artifact_id_for_tool_call(&id));
                             let path = metadata["artifact_path"].as_str().unwrap().to_string();
                             assert_eq!(fs::read_to_string(&path).unwrap(), output.content);
                             assert!(!artifact_paths.contains(&path));
@@ -169,7 +169,7 @@ fn repeated_provider_id_ask_rejects_stale_answer_and_keeps_local_artifact_origin
                         .collect::<Vec<_>>();
                     assert_eq!(pairs.len(), 2);
                     assert!(matches!(pairs[0], ContentBlock::ToolUse { id, .. } if id == "reused-ask"));
-                    assert!(matches!(pairs[1], ContentBlock::ToolResult { tool_use_id, content, .. } if tool_use_id == "reused-ask" && content.contains(&crate::artifacts::artifact_id_for_tool_call(id))));
+                    assert!(matches!(pairs[1], ContentBlock::ToolResult { tool_use_id, content, .. } if tool_use_id == "reused-ask" && content.contains(&codewhale_runtime::artifacts::artifact_id_for_tool_call(id))));
                 }
                 handle.send(Op::Shutdown).await.unwrap();
                 task.await.unwrap();

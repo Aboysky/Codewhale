@@ -442,7 +442,7 @@ fn load_from(dir: &AnchoredDirectory, session: &str, id: &str) -> Result<Report,
 }
 
 fn directory_path(session: &str, create: bool) -> Result<PathBuf, ToolError> {
-    let path = crate::artifacts::session_artifact_absolute_path(
+    let path = codewhale_runtime::artifacts::session_artifact_absolute_path(
         session,
         Path::new("artifacts/issue-reports"),
     )
@@ -634,11 +634,11 @@ mod tests {
     }
     impl Fixture {
         fn new() -> Self {
-            let guard = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+            let guard = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
                 .lock()
                 .unwrap_or_else(|e| e.into_inner());
             let tmp = tempfile::tempdir().unwrap();
-            let prior = crate::artifacts::set_test_artifact_sessions_root(Some(
+            let prior = codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
                 tmp.path().join("sessions"),
             ));
             Self {
@@ -661,7 +661,7 @@ mod tests {
     }
     impl Drop for Fixture {
         fn drop(&mut self) {
-            crate::artifacts::set_test_artifact_sessions_root(self.prior.take());
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.prior.take());
         }
     }
 

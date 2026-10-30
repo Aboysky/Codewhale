@@ -13,11 +13,11 @@ use serde::{Deserialize, Serialize};
 
 pub const ARTIFACTS_DIR_NAME: &str = "artifacts";
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 static TEST_ARTIFACT_SESSIONS_ROOT: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
 
-#[cfg(test)]
-pub(crate) static TEST_ARTIFACT_SESSIONS_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+#[cfg(any(test, feature = "test-support"))]
+pub static TEST_ARTIFACT_SESSIONS_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -52,7 +52,7 @@ fn sanitize_id_component(input: &str) -> String {
         .collect()
 }
 
-pub(crate) fn is_valid_session_id(session_id: &str) -> bool {
+pub fn is_valid_session_id(session_id: &str) -> bool {
     !session_id.is_empty()
         && session_id
             .chars()
@@ -93,8 +93,8 @@ fn session_artifact_relative_path_with_extension(
 /// artifacts by a recorded reference resolve through this same function, so
 /// a configured Runtime `sessions_dir` can never point a read at a different
 /// tree than the writer used.
-pub(crate) fn artifact_sessions_root() -> Option<PathBuf> {
-    #[cfg(test)]
+pub fn artifact_sessions_root() -> Option<PathBuf> {
+    #[cfg(any(test, feature = "test-support"))]
     if let Some(root) = TEST_ARTIFACT_SESSIONS_ROOT
         .lock()
         .unwrap_or_else(|err| err.into_inner())
@@ -104,7 +104,7 @@ pub(crate) fn artifact_sessions_root() -> Option<PathBuf> {
     }
     // Artifacts live beside saved sessions, so an unsealed test gets the same
     // private directory `default_sessions_dir` hands it.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     if let Some(root) = crate::test_support::unsealed_state_dir("sessions") {
         return Some(root);
     }
@@ -114,8 +114,8 @@ pub(crate) fn artifact_sessions_root() -> Option<PathBuf> {
     codewhale_config::resolve_state_dir("sessions").ok()
 }
 
-#[cfg(test)]
-pub(crate) fn set_test_artifact_sessions_root(root: Option<PathBuf>) -> Option<PathBuf> {
+#[cfg(any(test, feature = "test-support"))]
+pub fn set_test_artifact_sessions_root(root: Option<PathBuf>) -> Option<PathBuf> {
     let mut guard = TEST_ARTIFACT_SESSIONS_ROOT
         .lock()
         .unwrap_or_else(|err| err.into_inner());
@@ -199,7 +199,7 @@ pub fn write_session_relative_immutable(
 
 /// The same confined session directory for mutable sidecars and immutable
 /// artifacts. The saved-session owner remains responsible for session state.
-pub(crate) fn open_session_relative(
+pub fn open_session_relative(
     session_id: &str,
     relative_path: &Path,
     create: bool,

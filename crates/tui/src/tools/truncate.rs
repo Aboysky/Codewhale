@@ -393,7 +393,7 @@ fn spillover_preview_footer(
 ) -> String {
     format!(
         "… {} of output omitted ({omitted_lines} lines) — full output at {recovery_path}; {}",
-        crate::artifacts::format_byte_size(omitted_bytes.try_into().unwrap_or(u64::MAX)),
+        codewhale_runtime::artifacts::format_byte_size(omitted_bytes.try_into().unwrap_or(u64::MAX)),
         spillover_recovery_instruction(retrieval_ref)
     )
 }
@@ -579,17 +579,17 @@ fn apply_spillover_inner(
 
     let mut artifact_path = None;
     if let Some(context) = artifact_context {
-        let artifact_id = crate::artifacts::artifact_id_for_tool_call(tool_id);
+        let artifact_id = codewhale_runtime::artifacts::artifact_id_for_tool_call(tool_id);
         // Publish immutably, like adaptive evidence: a turn's artifact
         // reference names these bytes by digest, so a later call that reuses
         // the id must fail closed (legacy footer) instead of rewriting them.
-        match crate::artifacts::write_session_artifact_immutable(
+        match codewhale_runtime::artifacts::write_session_artifact_immutable(
             context.session_id,
             &artifact_id,
             original_content.as_bytes(),
         ) {
             Ok((absolute_path, relative_path)) => {
-                let record = crate::artifacts::record_tool_output_artifact(
+                let record = codewhale_runtime::artifacts::record_tool_output_artifact(
                     context.session_id,
                     tool_id,
                     context.tool_name,
@@ -600,7 +600,7 @@ fn apply_spillover_inner(
                     head,
                     tail,
                     &original_content,
-                    &crate::artifacts::format_artifact_relative_path(&absolute_path),
+                    &codewhale_runtime::artifacts::format_artifact_relative_path(&absolute_path),
                     Some(artifact_id.as_str()),
                 );
                 artifact_path = Some((absolute_path, relative_path, record));
@@ -745,7 +745,7 @@ fn stamp_artifact_metadata(
     obj: &mut serde_json::Map<String, serde_json::Value>,
     absolute_path: &Path,
     relative_path: &Path,
-    record: &crate::artifacts::ArtifactRecord,
+    record: &codewhale_runtime::artifacts::ArtifactRecord,
 ) {
     let absolute = serde_json::Value::String(absolute_path.display().to_string());
     obj.insert("spillover_path".into(), absolute.clone());
@@ -757,7 +757,7 @@ fn stamp_artifact_metadata(
     );
     obj.insert(
         "artifact_relative_path".into(),
-        crate::artifacts::format_artifact_relative_path(relative_path).into(),
+        codewhale_runtime::artifacts::format_artifact_relative_path(relative_path).into(),
     );
     obj.insert("artifact_byte_size".into(), record.byte_size.into());
     obj.insert("artifact_preview".into(), record.preview.clone().into());
@@ -799,14 +799,14 @@ pub(crate) fn preserve_full_output_for_model_context(
     {
         return true;
     }
-    let artifact_id = crate::artifacts::artifact_id_for_tool_call(tool_id);
-    match crate::artifacts::write_session_artifact_immutable(
+    let artifact_id = codewhale_runtime::artifacts::artifact_id_for_tool_call(tool_id);
+    match codewhale_runtime::artifacts::write_session_artifact_immutable(
         session_id,
         &artifact_id,
         result.content.as_bytes(),
     ) {
         Ok((absolute_path, relative_path)) => {
-            let record = crate::artifacts::record_tool_output_artifact(
+            let record = codewhale_runtime::artifacts::record_tool_output_artifact(
                 session_id,
                 tool_id,
                 tool_name,
@@ -847,7 +847,7 @@ fn preview_footer(
         Some(path) => spillover_preview_footer(omitted_bytes, omitted_lines, path, retrieval_ref),
         None => format!(
             "… {} of output omitted ({omitted_lines} lines) — the full output could not be saved; {}",
-            crate::artifacts::format_byte_size(omitted_bytes.try_into().unwrap_or(u64::MAX)),
+            codewhale_runtime::artifacts::format_byte_size(omitted_bytes.try_into().unwrap_or(u64::MAX)),
             spillover_recovery_instruction(None)
         ),
     }
@@ -1016,8 +1016,8 @@ fn apply_adaptive_evidence_inner(
     let head_len = head.len();
     let tail_len = tail.len();
 
-    let artifact_id = crate::artifacts::artifact_id_for_tool_call(tool_id);
-    let relative_path = crate::artifacts::session_artifact_relative_path(&artifact_id);
+    let artifact_id = codewhale_runtime::artifacts::artifact_id_for_tool_call(tool_id);
+    let relative_path = codewhale_runtime::artifacts::session_artifact_relative_path(&artifact_id);
     let digest = codewhale_runtime::hashing::sha256_hex(original.as_bytes());
     let now_ms = unix_millis_now();
     let proposed_artifact = EvidenceArtifact {
@@ -1078,7 +1078,7 @@ fn apply_adaptive_evidence_inner(
     // retention, size, and digest checks above. A metadata-only interruption
     // is safe: the handle is never advertised and a retry can idempotently
     // publish the matching bytes.
-    let (absolute_path, relative_path) = match crate::artifacts::write_session_artifact_immutable(
+    let (absolute_path, relative_path) = match codewhale_runtime::artifacts::write_session_artifact_immutable(
         context.session_id,
         &artifact_id,
         original.as_bytes(),
@@ -1091,7 +1091,7 @@ fn apply_adaptive_evidence_inner(
         }
     };
 
-    let record = crate::artifacts::record_tool_output_artifact(
+    let record = codewhale_runtime::artifacts::record_tool_output_artifact(
         context.session_id,
         tool_id,
         context.tool_name,
@@ -1102,7 +1102,7 @@ fn apply_adaptive_evidence_inner(
         head,
         tail,
         &original,
-        &crate::artifacts::format_artifact_relative_path(&absolute_path),
+        &codewhale_runtime::artifacts::format_artifact_relative_path(&absolute_path),
         Some(artifact_id.as_str()),
     );
     let metadata = result.metadata.get_or_insert_with(|| serde_json::json!({}));
@@ -1115,7 +1115,7 @@ fn apply_adaptive_evidence_inner(
         object.insert("artifact_session_id".into(), context.session_id.into());
         object.insert(
             "artifact_relative_path".into(),
-            crate::artifacts::format_artifact_relative_path(&relative_path).into(),
+            codewhale_runtime::artifacts::format_artifact_relative_path(&relative_path).into(),
         );
         object.insert("artifact_byte_size".into(), artifact.size_bytes.into());
         object.insert("artifact_digest".into(), digest.into());
@@ -1164,7 +1164,7 @@ pub(crate) fn with_test_home<F, R>(home: &Path, f: F) -> R
 where
     F: FnOnce() -> R,
 {
-    let _artifact_guard = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+    let _artifact_guard = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
         .lock()
         .unwrap_or_else(|err| err.into_inner());
 
@@ -1176,7 +1176,7 @@ where
     impl Drop for StorageRootOverride {
         fn drop(&mut self) {
             set_test_spillover_root(self.prior_spillover.take());
-            crate::artifacts::set_test_artifact_sessions_root(self.prior_artifacts.take());
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.prior_artifacts.take());
         }
     }
 
@@ -1185,7 +1185,7 @@ where
     // artifacts.rs tests.
     let prior_spillover =
         set_test_spillover_root(Some(home.join(".codewhale").join(SPILLOVER_DIR_NAME)));
-    let prior_artifacts = crate::artifacts::set_test_artifact_sessions_root(Some(
+    let prior_artifacts = codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
         home.join(".codewhale").join("sessions"),
     ));
     let _restore = StorageRootOverride {
@@ -1518,7 +1518,7 @@ mod tests {
                 Some(tmp.path().join(".codewhale").join("tool_outputs").as_path())
             );
             assert_eq!(
-                crate::artifacts::session_artifact_absolute_path(
+                codewhale_runtime::artifacts::session_artifact_absolute_path(
                     "session-123",
                     &PathBuf::from("artifacts").join("art_call-big.txt")
                 )
@@ -2194,7 +2194,7 @@ mod tests {
             assert!(
                 result
                     .content
-                    .contains(&crate::artifacts::format_artifact_relative_path(&path))
+                    .contains(&codewhale_runtime::artifacts::format_artifact_relative_path(&path))
             );
             assert!(result.content.contains(SPILLOVER_RECOVERY_HINT));
             assert!(!result.content.contains(SPILLOVER_PREVIEW_HINT));

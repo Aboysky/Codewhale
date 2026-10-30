@@ -20084,7 +20084,7 @@ pub(crate) fn spill_subagent_final_report(
         return None;
     }
     let artifact_id = format!("art_sa_{}_report", result.agent_id);
-    crate::artifacts::write_session_artifact(session_id, &artifact_id, &raw)
+    codewhale_runtime::artifacts::write_session_artifact(session_id, &artifact_id, &raw)
         .ok()
         .map(|_| artifact_id)
 }

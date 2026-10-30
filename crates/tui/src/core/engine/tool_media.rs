@@ -82,7 +82,7 @@ fn publish_image(
         codewhale_runtime::hashing::sha256_hex(&identity)
     );
     let storage_path =
-        PathBuf::from(crate::artifacts::ARTIFACTS_DIR_NAME).join(format!("{handle}.image"));
+        PathBuf::from(codewhale_runtime::artifacts::ARTIFACTS_DIR_NAME).join(format!("{handle}.image"));
     let digest = codewhale_runtime::hashing::sha256_hex(&bytes);
     let now = unix_millis_now();
     let proposed = EvidenceArtifact {
@@ -121,7 +121,7 @@ fn publish_image(
         Err(error) if error.kind() == io::ErrorKind::NotFound => proposed,
         Err(error) => return Err(error),
     };
-    crate::artifacts::write_session_relative_immutable(session_id, &storage_path, &bytes)?;
+    codewhale_runtime::artifacts::write_session_relative_immutable(session_id, &storage_path, &bytes)?;
     if let Err(error) = publish_evidence_metadata(session_id, &artifact) {
         // Concurrent identical replays can propose different timestamps. Keep
         // the winner's immutable lifetime, never replace or extend it.
@@ -146,7 +146,7 @@ mod tests {
     struct ArtifactRoot(Option<PathBuf>);
     impl Drop for ArtifactRoot {
         fn drop(&mut self) {
-            crate::artifacts::set_test_artifact_sessions_root(self.0.take());
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.0.take());
         }
     }
 
@@ -173,7 +173,7 @@ mod tests {
     #[test]
     fn tool_media_publication_is_immutable_and_replay_preserves_manifest() {
         // Serialize the shared disk fixture before entering the async runtime.
-        let _guard = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+        let _guard = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
             .lock()
             .unwrap();
         tokio::runtime::Builder::new_current_thread()
@@ -185,7 +185,7 @@ mod tests {
 
     async fn check_tool_media_publication_is_immutable_and_replay_preserves_manifest() {
         let temp = tempfile::tempdir().unwrap();
-        let _root = ArtifactRoot(crate::artifacts::set_test_artifact_sessions_root(Some(
+        let _root = ArtifactRoot(codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
             temp.path().to_owned(),
         )));
         let first = project(
@@ -294,7 +294,7 @@ mod tests {
     #[test]
     fn tool_media_rejects_spoofed_mime_bytes_and_plugin_descriptors() {
         // Serialize the shared disk fixture before entering the async runtime.
-        let _guard = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+        let _guard = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
             .lock()
             .unwrap();
         tokio::runtime::Builder::new_current_thread()
@@ -306,7 +306,7 @@ mod tests {
 
     async fn check_tool_media_rejects_spoofed_mime_bytes_and_plugin_descriptors() {
         let temp = tempfile::tempdir().unwrap();
-        let _root = ArtifactRoot(crate::artifacts::set_test_artifact_sessions_root(Some(
+        let _root = ArtifactRoot(codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
             temp.path().to_owned(),
         )));
         let mime = project(

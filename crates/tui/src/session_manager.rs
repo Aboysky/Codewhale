@@ -7,7 +7,7 @@
 //! - Managing session lifecycle
 
 use crate::approval_log::{ApprovalReceipt, ApprovalReceiptStore, ApprovalReplay};
-use crate::artifacts::ArtifactRecord;
+use codewhale_runtime::artifacts::ArtifactRecord;
 use crate::model_routing::AutoRouteReceipt;
 use crate::project_context::find_git_root;
 use crate::tools::goal::{GoalPauseReason, GoalSnapshot};

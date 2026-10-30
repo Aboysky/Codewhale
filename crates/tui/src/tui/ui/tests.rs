@@ -22459,22 +22459,22 @@ fn spillover_pager_section_returns_notice_when_file_missing() {
 
 #[test]
 fn spillover_pager_uses_session_artifact_for_specialized_bash_cell() {
-    let _artifact_guard = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+    let _artifact_guard = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
         .lock()
         .unwrap_or_else(|error| error.into_inner());
     let dir = tempfile::tempdir().unwrap();
     let prior =
-        crate::artifacts::set_test_artifact_sessions_root(Some(dir.path().join("sessions")));
+        codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(dir.path().join("sessions")));
     struct RestoreArtifactRoot(Option<PathBuf>);
     impl Drop for RestoreArtifactRoot {
         fn drop(&mut self) {
-            crate::artifacts::set_test_artifact_sessions_root(self.0.take());
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.0.take());
         }
     }
     let _restore = RestoreArtifactRoot(prior);
     let session_id = "session-bash";
     let relative_path = PathBuf::from("artifacts/art_call-bash.txt");
-    let path = crate::artifacts::session_artifact_absolute_path(session_id, &relative_path)
+    let path = codewhale_runtime::artifacts::session_artifact_absolute_path(session_id, &relative_path)
         .expect("isolated artifact path");
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(&path, "BASH_EXACT_DEEP_SENTINEL\n").unwrap();
@@ -22507,9 +22507,9 @@ fn spillover_pager_uses_session_artifact_for_specialized_bash_cell() {
             output: Some("head\n\n… 23 B of output omitted — view full output in the tool details view\n\n[tail]\ntail".to_string()),
         },
     );
-    let artifact = crate::artifacts::ArtifactRecord {
+    let artifact = codewhale_runtime::artifacts::ArtifactRecord {
         id: "art_call-bash".to_string(),
-        kind: crate::artifacts::ArtifactKind::ToolOutput,
+        kind: codewhale_runtime::artifacts::ArtifactKind::ToolOutput,
         session_id: session_id.to_string(),
         tool_call_id: "call-bash".to_string(),
         tool_name: "Bash".to_string(),
@@ -22530,7 +22530,7 @@ fn spillover_pager_uses_session_artifact_for_specialized_bash_cell() {
     assert!(absolute.contains("retained output is unavailable"));
     assert!(!absolute.contains("BASH_EXACT_DEEP_SENTINEL"));
 
-    app.session_artifacts[0] = crate::artifacts::ArtifactRecord {
+    app.session_artifacts[0] = codewhale_runtime::artifacts::ArtifactRecord {
         session_id: "foreign-session".to_string(),
         storage_path: relative_path,
         ..artifact
@@ -23969,7 +23969,7 @@ fn spilled_tool_completion_records_session_artifact_metadata() {
 
     assert_eq!(app.session_artifacts.len(), 1);
     let artifact = &app.session_artifacts[0];
-    assert_eq!(artifact.kind, crate::artifacts::ArtifactKind::ToolOutput);
+    assert_eq!(artifact.kind, codewhale_runtime::artifacts::ArtifactKind::ToolOutput);
     assert_eq!(artifact.session_id, "session-123");
     assert_eq!(artifact.tool_call_id, "call-big");
     assert_eq!(artifact.tool_name, "exec_shell");
@@ -25794,9 +25794,9 @@ fn apply_loaded_session_restores_artifact_registry() {
         text_message("user", "hello"),
         text_message("assistant", "hi"),
     ]);
-    session.artifacts.push(crate::artifacts::ArtifactRecord {
+    session.artifacts.push(codewhale_runtime::artifacts::ArtifactRecord {
         id: "art_call_big".to_string(),
-        kind: crate::artifacts::ArtifactKind::ToolOutput,
+        kind: codewhale_runtime::artifacts::ArtifactKind::ToolOutput,
         session_id: "session-123".to_string(),
         tool_call_id: "call-big".to_string(),
         tool_name: "exec_shell".to_string(),

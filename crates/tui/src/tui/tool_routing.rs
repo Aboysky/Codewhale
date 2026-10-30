@@ -608,7 +608,7 @@ fn record_spillover_artifact_if_any(
         return;
     }
     app.session_artifacts
-        .push(crate::artifacts::record_tool_output_artifact_with_size(
+        .push(codewhale_runtime::artifacts::record_tool_output_artifact_with_size(
             session_id,
             id,
             name,

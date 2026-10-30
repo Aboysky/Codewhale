@@ -178,7 +178,7 @@ pub(crate) fn confined_session_artifact_path(raw: &str) -> Option<String> {
     display
         .split('/')
         .next()
-        .is_some_and(|first| first == crate::artifacts::ARTIFACTS_DIR_NAME)
+        .is_some_and(|first| first == codewhale_runtime::artifacts::ARTIFACTS_DIR_NAME)
         .then_some(display)
 }
 
@@ -318,7 +318,7 @@ pub(crate) fn artifact_refs_from_tool_metadata(
         metadata
             .get("artifact_session_id")
             .and_then(Value::as_str)
-            .filter(|id| crate::artifacts::is_valid_session_id(id)),
+            .filter(|id| codewhale_runtime::artifacts::is_valid_session_id(id)),
         metadata
             .get("artifact_relative_path")
             .and_then(Value::as_str)
@@ -356,14 +356,14 @@ pub(crate) fn artifact_refs_from_tool_metadata(
         let Some(session_id) = media
             .get("session_id")
             .and_then(Value::as_str)
-            .filter(|id| crate::artifacts::is_valid_session_id(id))
+            .filter(|id| codewhale_runtime::artifacts::is_valid_session_id(id))
         else {
             continue;
         };
         let mut reference = base(
             handle.to_owned(),
             TurnArtifactKind::Media,
-            format!("{}/{handle}.image", crate::artifacts::ARTIFACTS_DIR_NAME),
+            format!("{}/{handle}.image", codewhale_runtime::artifacts::ARTIFACTS_DIR_NAME),
             TurnArtifactSource::ToolMedia,
         );
         reference.session_id = Some(session_id.to_owned());

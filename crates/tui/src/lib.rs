@@ -20,7 +20,6 @@ use codewhale_dependencies::ExternalTool;
 mod acp_server;
 pub mod agent_roster;
 mod approval_log;
-mod artifacts;
 mod auto_reasoning;
 mod automation_manager;
 mod client;
@@ -119,7 +118,6 @@ mod telemetry_notice;
 mod test_support;
 mod todo_snapshot;
 mod tool_inspection;
-mod tool_output_receipts;
 mod tools;
 mod tui;
 /// Portable, dependency-free dot-whale core and conformance helpers.

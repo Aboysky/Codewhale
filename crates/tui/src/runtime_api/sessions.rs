@@ -1263,7 +1263,7 @@ pub(super) struct SessionArtifactSummary {
     session_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     content_type: Option<String>,
-    kind: crate::artifacts::ArtifactKind,
+    kind: codewhale_runtime::artifacts::ArtifactKind,
     tool_call_id: String,
     tool_name: String,
     created_at: chrono::DateTime<chrono::Utc>,
@@ -1298,7 +1298,7 @@ pub(super) struct SessionArtifactReadResponse {
     content: String,
 }
 
-fn artifact_summary(record: &crate::artifacts::ArtifactRecord) -> SessionArtifactSummary {
+fn artifact_summary(record: &codewhale_runtime::artifacts::ArtifactRecord) -> SessionArtifactSummary {
     SessionArtifactSummary {
         id: record.id.clone(),
         session_id: record.session_id.clone(),
@@ -1309,7 +1309,7 @@ fn artifact_summary(record: &crate::artifacts::ArtifactRecord) -> SessionArtifac
         created_at: record.created_at,
         byte_size: record.byte_size,
         preview: record.preview.clone(),
-        path: crate::artifacts::format_artifact_relative_path(&record.storage_path),
+        path: codewhale_runtime::artifacts::format_artifact_relative_path(&record.storage_path),
     }
 }
 
@@ -1405,7 +1405,7 @@ pub(super) fn resolve_session_artifact(
     artifact_id: &str,
     authority: ArtifactAuthority<'_>,
 ) -> Result<ResolvedSessionArtifact, ApiError> {
-    if !crate::artifacts::is_valid_session_id(id) {
+    if !codewhale_runtime::artifacts::is_valid_session_id(id) {
         return Err(ApiError::bad_request("invalid session id"));
     }
     // The reserved image namespace always requires its immutable manifest,
@@ -1529,7 +1529,7 @@ fn image_evidence_summary(
     let evidence = crate::tools::large_output_router::read_evidence_metadata_file(&file)
         .map_err(|error| super::workspace::map_fs_error(error, "evidence metadata"))?;
     let expected_path =
-        PathBuf::from(crate::artifacts::ARTIFACTS_DIR_NAME).join(format!("{artifact_id}.image"));
+        PathBuf::from(codewhale_runtime::artifacts::ARTIFACTS_DIR_NAME).join(format!("{artifact_id}.image"));
     if evidence.origin_session != id
         || evidence.handle != artifact_id
         || evidence.storage_path != expected_path
@@ -1565,13 +1565,13 @@ fn image_evidence_summary(
         id: artifact_id.to_owned(),
         session_id: id.to_owned(),
         content_type: Some(evidence.content_type.clone()),
-        kind: crate::artifacts::ArtifactKind::ToolOutput,
+        kind: codewhale_runtime::artifacts::ArtifactKind::ToolOutput,
         tool_call_id: evidence.call_id.clone(),
         tool_name: evidence.tool_name.clone(),
         created_at,
         byte_size: evidence.size_bytes,
         preview: String::new(),
-        path: crate::artifacts::format_artifact_relative_path(&evidence.storage_path),
+        path: codewhale_runtime::artifacts::format_artifact_relative_path(&evidence.storage_path),
     };
     Ok((summary, evidence))
 }

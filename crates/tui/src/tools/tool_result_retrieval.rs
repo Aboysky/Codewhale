@@ -348,9 +348,9 @@ fn resolve_spillover_reference(
     // `resolves_art_prefix_via_session_artifacts` exercises the real
     // path.
     let session_artifacts_root = if !session_id.is_empty() {
-        crate::artifacts::session_artifact_absolute_path(
+        codewhale_runtime::artifacts::session_artifact_absolute_path(
             session_id,
-            std::path::Path::new(crate::artifacts::ARTIFACTS_DIR_NAME),
+            std::path::Path::new(codewhale_runtime::artifacts::ARTIFACTS_DIR_NAME),
         )
     } else {
         None
@@ -846,8 +846,8 @@ mod tests {
         bytes: &[u8],
         expired: bool,
     ) -> crate::tools::large_output_router::EvidenceArtifact {
-        let relative = crate::artifacts::session_artifact_relative_path(handle);
-        crate::artifacts::write_session_relative_immutable(session_id, &relative, bytes).unwrap();
+        let relative = codewhale_runtime::artifacts::session_artifact_relative_path(handle);
+        codewhale_runtime::artifacts::write_session_relative_immutable(session_id, &relative, bytes).unwrap();
         let now = crate::tools::large_output_router::unix_millis_now();
         let artifact = crate::tools::large_output_router::EvidenceArtifact {
             handle: handle.to_string(),
@@ -921,17 +921,17 @@ mod tests {
     #[test]
     fn adaptive_evidence_binary_bytes_are_exact_and_bounded() {
         let _spill = test_lock();
-        let _artifact = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+        let _artifact = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
             .lock()
             .unwrap_or_else(|err| err.into_inner());
         let tmp = tempdir().unwrap();
         let _root = set_spillover_root(tmp.path().join("tool_outputs"));
         let prior =
-            crate::artifacts::set_test_artifact_sessions_root(Some(tmp.path().join("sessions")));
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(tmp.path().join("sessions")));
         struct Restore(Option<PathBuf>);
         impl Drop for Restore {
             fn drop(&mut self) {
-                crate::artifacts::set_test_artifact_sessions_root(self.0.take());
+                codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.0.take());
             }
         }
         let _restore = Restore(prior);
@@ -955,17 +955,17 @@ mod tests {
     #[test]
     fn adaptive_evidence_retrieves_after_restart_without_memory_state() {
         let _spill = test_lock();
-        let _artifact = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+        let _artifact = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
             .lock()
             .unwrap_or_else(|err| err.into_inner());
         let tmp = tempdir().unwrap();
         let _root = set_spillover_root(tmp.path().join("tool_outputs"));
         let prior =
-            crate::artifacts::set_test_artifact_sessions_root(Some(tmp.path().join("sessions")));
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(tmp.path().join("sessions")));
         struct Restore(Option<PathBuf>);
         impl Drop for Restore {
             fn drop(&mut self) {
-                crate::artifacts::set_test_artifact_sessions_root(self.0.take());
+                codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.0.take());
             }
         }
         let _restore = Restore(prior);
@@ -999,17 +999,17 @@ mod tests {
     #[test]
     fn adaptive_evidence_distinguishes_corrupt_expired_and_generation_mismatch() {
         let _spill = test_lock();
-        let _artifact = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+        let _artifact = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
             .lock()
             .unwrap_or_else(|err| err.into_inner());
         let tmp = tempdir().unwrap();
         let _root = set_spillover_root(tmp.path().join("tool_outputs"));
         let prior =
-            crate::artifacts::set_test_artifact_sessions_root(Some(tmp.path().join("sessions")));
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(tmp.path().join("sessions")));
         struct Restore(Option<PathBuf>);
         impl Drop for Restore {
             fn drop(&mut self) {
-                crate::artifacts::set_test_artifact_sessions_root(self.0.take());
+                codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.0.take());
             }
         }
         let _restore = Restore(prior);
@@ -1022,7 +1022,7 @@ mod tests {
 
         let artifact = publish_test_evidence("session-a", "art_call-corrupt", b"original", false);
         let absolute =
-            crate::artifacts::session_artifact_absolute_path("session-a", &artifact.storage_path)
+            codewhale_runtime::artifacts::session_artifact_absolute_path("session-a", &artifact.storage_path)
                 .unwrap();
         std::fs::write(absolute, b"changed").unwrap();
         let corrupt = execute_tool_in_session(json!({"ref": "art_call-corrupt"}), "session-a")
@@ -1229,14 +1229,14 @@ mod tests {
         let tmp = tempdir().unwrap();
         let _spill_guard = set_spillover_root(tmp.path().join("tool_outputs"));
         let _art_guard = {
-            let prior = crate::artifacts::set_test_artifact_sessions_root(Some(
+            let prior = codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
                 tmp.path().join("sessions"),
             ));
             scopeguard_for_test(prior)
         };
         let session_id = "session-abc";
         let body = "this is the canonical session artifact body, not a legacy file";
-        crate::artifacts::write_session_artifact(session_id, "art_call_real", body).unwrap();
+        codewhale_runtime::artifacts::write_session_artifact(session_id, "art_call_real", body).unwrap();
 
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -1264,7 +1264,7 @@ mod tests {
         let tmp = tempdir().unwrap();
         let _spill_guard = set_spillover_root(tmp.path().join("tool_outputs"));
         let _art_guard = {
-            let prior = crate::artifacts::set_test_artifact_sessions_root(Some(
+            let prior = codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
                 tmp.path().join("sessions"),
             ));
             scopeguard_for_test(prior)
@@ -1303,7 +1303,7 @@ mod tests {
     }
     impl Drop for ArtifactRootGuard {
         fn drop(&mut self) {
-            crate::artifacts::set_test_artifact_sessions_root(self.prior.take());
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.prior.take());
         }
     }
     fn scopeguard_for_test(prior: Option<PathBuf>) -> ArtifactRootGuard {

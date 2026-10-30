@@ -16,7 +16,7 @@ use codewhale_config::{AppMode, ProviderChain, route::RouteLimits};
 use codewhale_core::ContextReference;
 use codewhale_execpolicy::ApprovalMode;
 
-use crate::artifacts::ArtifactRecord;
+use codewhale_runtime::artifacts::ArtifactRecord;
 use crate::client::{CacheWarmupKey, PromptInspection};
 use crate::compaction::CompactionConfig;
 use crate::core::authority::{ModeSessionPrefs, base_policy_for_mode};

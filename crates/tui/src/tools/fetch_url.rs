@@ -244,7 +244,7 @@ impl ToolSpec for FetchUrlTool {
         )?;
         let artifact = artifact_write
             .as_ref()
-            .map(|write| crate::artifacts::format_artifact_relative_path(&write.relative_path));
+            .map(|write| codewhale_runtime::artifacts::format_artifact_relative_path(&write.relative_path));
 
         let citation = super::web::citations::register(
             &context.state_namespace,
@@ -409,7 +409,7 @@ fn render_extracted(
                 "bin"
             });
         let artifact = write_binary_artifact(url, extension, bytes, context)?;
-        let relative = crate::artifacts::format_artifact_relative_path(&artifact.relative_path);
+        let relative = codewhale_runtime::artifacts::format_artifact_relative_path(&artifact.relative_path);
         let label = if document.kind == DocumentKind::Pdf {
             "PDF"
         } else {
@@ -460,7 +460,7 @@ fn write_binary_artifact(
     context: &ToolContext,
 ) -> Result<ArtifactWrite, ToolError> {
     let artifact_id = fetch_artifact_id(url, bytes);
-    let (absolute_path, relative_path) = crate::artifacts::write_session_artifact_bytes(
+    let (absolute_path, relative_path) = codewhale_runtime::artifacts::write_session_artifact_bytes(
         &context.state_namespace,
         &artifact_id,
         extension,
@@ -492,7 +492,7 @@ fn artifact_metadata(write: ArtifactWrite) -> Value {
     json!({
         "spillover_path": write.absolute_path.display().to_string(),
         "artifact_session_id": write.session_id,
-        "artifact_relative_path": crate::artifacts::format_artifact_relative_path(&write.relative_path),
+        "artifact_relative_path": codewhale_runtime::artifacts::format_artifact_relative_path(&write.relative_path),
         "artifact_byte_size": write.byte_size,
         "artifact_preview": write.preview,
         // Every artifact this tool writes is retrievable evidence, so flag it
@@ -568,7 +568,7 @@ mod tests {
 
     impl Drop for ArtifactRootRestore {
         fn drop(&mut self) {
-            crate::artifacts::set_test_artifact_sessions_root(self.0.take());
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.0.take());
         }
     }
 
@@ -678,12 +678,12 @@ mod tests {
 
     #[test]
     fn route_budget_overflow_round_trips_through_session_artifact() {
-        let _lock = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+        let _lock = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         let tmp = tempfile::tempdir().unwrap();
         let prior =
-            crate::artifacts::set_test_artifact_sessions_root(Some(tmp.path().join("sessions")));
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(tmp.path().join("sessions")));
         let _restore = ArtifactRootRestore(prior);
         let context = ToolContext::new(".")
             .with_state_namespace("fetch-overflow")

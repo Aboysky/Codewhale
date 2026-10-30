@@ -84,9 +84,9 @@ fn save_preserves_artifact_registry() {
     let mut app = create_test_app_with_tmpdir(&tmpdir);
     let save_path = tmpdir.path().join("artifact_session.json");
     app.session_artifacts
-        .push(crate::artifacts::ArtifactRecord {
+        .push(codewhale_runtime::artifacts::ArtifactRecord {
             id: "art_call_big".to_string(),
-            kind: crate::artifacts::ArtifactKind::ToolOutput,
+            kind: codewhale_runtime::artifacts::ArtifactKind::ToolOutput,
             session_id: "artifact-session".to_string(),
             tool_call_id: "call-big".to_string(),
             tool_name: "exec_shell".to_string(),
@@ -751,9 +751,9 @@ fn load_defers_artifact_registry_restore_to_event_loop() {
     let mut saved_app = create_test_app_with_tmpdir(&tmpdir);
     saved_app
         .session_artifacts
-        .push(crate::artifacts::ArtifactRecord {
+        .push(codewhale_runtime::artifacts::ArtifactRecord {
             id: "art_call_big".to_string(),
-            kind: crate::artifacts::ArtifactKind::ToolOutput,
+            kind: codewhale_runtime::artifacts::ArtifactKind::ToolOutput,
             session_id: "artifact-session".to_string(),
             tool_call_id: "call-big".to_string(),
             tool_name: "exec_shell".to_string(),
@@ -767,9 +767,9 @@ fn load_defers_artifact_registry_restore_to_event_loop() {
 
     let mut app = create_test_app_with_tmpdir(&tmpdir);
     app.session_artifacts
-        .push(crate::artifacts::ArtifactRecord {
+        .push(codewhale_runtime::artifacts::ArtifactRecord {
             id: "art_stale".to_string(),
-            kind: crate::artifacts::ArtifactKind::ToolOutput,
+            kind: codewhale_runtime::artifacts::ArtifactKind::ToolOutput,
             session_id: "stale-session".to_string(),
             tool_call_id: "stale".to_string(),
             tool_name: "exec_shell".to_string(),

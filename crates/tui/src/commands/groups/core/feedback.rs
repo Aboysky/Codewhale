@@ -184,17 +184,17 @@ mod tests {
 
     #[test]
     fn agent_draft_command_review_and_edit_share_one_session_artifact() {
-        let _lock = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+        let _lock = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         let (mut app, tmp) = test_app();
         struct Restore(Option<std::path::PathBuf>);
         impl Drop for Restore {
             fn drop(&mut self) {
-                crate::artifacts::set_test_artifact_sessions_root(self.0.take());
+                codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.0.take());
             }
         }
-        let _restore = Restore(crate::artifacts::set_test_artifact_sessions_root(Some(
+        let _restore = Restore(codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
             tmp.path().join("sessions"),
         )));
         app.current_session_id = Some("session-a".into());

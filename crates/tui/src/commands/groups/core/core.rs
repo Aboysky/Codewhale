@@ -490,9 +490,9 @@ mod tests {
         app.tool_log.push("test".to_string());
         app.current_session_id = Some("existing-session".to_string());
         app.session_artifacts
-            .push(crate::artifacts::ArtifactRecord {
+            .push(codewhale_runtime::artifacts::ArtifactRecord {
                 id: "art_call_big".to_string(),
-                kind: crate::artifacts::ArtifactKind::ToolOutput,
+                kind: codewhale_runtime::artifacts::ArtifactKind::ToolOutput,
                 session_id: "existing-session".to_string(),
                 tool_call_id: "call-big".to_string(),
                 tool_name: "exec_shell".to_string(),

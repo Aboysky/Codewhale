@@ -304,7 +304,7 @@ mod tests {
     struct ArtifactRoot(Option<std::path::PathBuf>);
     impl Drop for ArtifactRoot {
         fn drop(&mut self) {
-            crate::artifacts::set_test_artifact_sessions_root(self.0.take());
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.0.take());
         }
     }
 
@@ -424,11 +424,11 @@ mod tests {
 
     #[test]
     fn session_checkpoint_reopens_in_the_actual_worker_without_reviving_an_approval() {
-        let _guard = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+        let _guard = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
             .lock()
             .unwrap();
         let root = tempfile::tempdir().unwrap();
-        let _restore = ArtifactRoot(crate::artifacts::set_test_artifact_sessions_root(Some(
+        let _restore = ArtifactRoot(codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
             root.path().to_owned(),
         )));
         let worker = Worker::start(Some("pet-worker-test".into())).unwrap();

@@ -567,16 +567,16 @@ async fn background_completion_after_a_turn_is_delivered_once_on_the_next_turn()
         tokio::time::sleep(Duration::from_millis(25)).await;
     }
 
-    let _artifact_lock = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+    let _artifact_lock = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
         .lock()
         .unwrap_or_else(|error| error.into_inner());
     struct ArtifactRootReset(Option<PathBuf>);
     impl Drop for ArtifactRootReset {
         fn drop(&mut self) {
-            crate::artifacts::set_test_artifact_sessions_root(self.0.take());
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.0.take());
         }
     }
-    let _artifact_root = ArtifactRootReset(crate::artifacts::set_test_artifact_sessions_root(
+    let _artifact_root = ArtifactRootReset(codewhale_runtime::artifacts::set_test_artifact_sessions_root(
         Some(tmp.path().join("sessions")),
     ));
 
@@ -596,9 +596,9 @@ async fn background_completion_after_a_turn_is_delivered_once_on_the_next_turn()
         .evidence_ref
         .as_deref()
         .expect("completion evidence handle");
-    let evidence_path = crate::artifacts::session_artifact_absolute_path(
+    let evidence_path = codewhale_runtime::artifacts::session_artifact_absolute_path(
         &engine.session.id,
-        &crate::artifacts::session_artifact_relative_path(evidence_ref),
+        &codewhale_runtime::artifacts::session_artifact_relative_path(evidence_ref),
     )
     .expect("session evidence path");
     let evidence: serde_json::Value = serde_json::from_slice(

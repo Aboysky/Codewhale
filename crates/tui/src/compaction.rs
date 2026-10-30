@@ -1410,7 +1410,7 @@ pub async fn compact_messages_safe(
         let bytes = serde_json::to_vec(&codewhale_config::persistence::redact_json_secrets(
             &serde_json::to_value(messages)?,
         ))?;
-        crate::artifacts::write_session_relative_immutable(
+        codewhale_runtime::artifacts::write_session_relative_immutable(
             session_id,
             &std::path::PathBuf::from("artifacts")
                 .join(format!("context-transfer-{checkpoint_id}.json")),
@@ -1523,7 +1523,7 @@ pub async fn compact_messages_safe(
                     let redacted = codewhale_config::persistence::redact_json_secrets(
                         &serde_json::Value::String(text),
                     );
-                    crate::artifacts::write_session_relative_immutable(
+                    codewhale_runtime::artifacts::write_session_relative_immutable(
                         session_id,
                         &std::path::PathBuf::from("artifacts")
                             .join(format!("context-transfer-{checkpoint_id}.md")),

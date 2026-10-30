@@ -518,7 +518,7 @@ fn document_id(path: &Path) -> Option<String> {
         return None;
     }
     let id = path.file_stem()?.to_str()?;
-    crate::artifacts::is_valid_session_id(id).then(|| id.to_string())
+    codewhale_runtime::artifacts::is_valid_session_id(id).then(|| id.to_string())
 }
 
 /// Store bindings and ids of every readable document and checkpoint. With
@@ -653,7 +653,7 @@ impl Run<'_> {
             let Some(owner_id) = owner.to_str() else {
                 continue;
             };
-            if !crate::artifacts::is_valid_session_id(owner_id) || !entry.path().is_dir() {
+            if !codewhale_runtime::artifacts::is_valid_session_id(owner_id) || !entry.path().is_dir() {
                 continue;
             }
             let Ok(children) = fs::read_dir(entry.path()) else {
@@ -896,7 +896,7 @@ impl Run<'_> {
             .flatten()
             .filter_map(|entry| {
                 let name = entry.file_name().to_str()?.to_string();
-                (crate::artifacts::is_valid_session_id(&name) && entry.path().is_dir())
+                (codewhale_runtime::artifacts::is_valid_session_id(&name) && entry.path().is_dir())
                     .then(|| (name, entry.path()))
             })
             .collect();

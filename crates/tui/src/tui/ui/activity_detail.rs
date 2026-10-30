@@ -289,7 +289,7 @@ pub(super) fn spillover_pager_section(app: &App, cell_index: usize) -> Option<St
         .tool_detail_record_for_cell(cell_index)
         .and_then(|detail| {
             app.session_artifacts.iter().find(|artifact| {
-                artifact.kind == crate::artifacts::ArtifactKind::ToolOutput
+                artifact.kind == codewhale_runtime::artifacts::ArtifactKind::ToolOutput
                     && artifact.tool_call_id == detail.tool_id
                     && current_session == Some(artifact.session_id.as_str())
             })
@@ -319,16 +319,16 @@ pub(super) fn spillover_pager_section(app: &App, cell_index: usize) -> Option<St
 // unavailable-output state is shown. This is not a persistence size limit.
 const MAX_SESSION_ARTIFACT_DISPLAY_BYTES: u64 = 64 * 1024 * 1024;
 
-fn read_owned_session_artifact(artifact: &crate::artifacts::ArtifactRecord) -> Option<String> {
+fn read_owned_session_artifact(artifact: &codewhale_runtime::artifacts::ArtifactRecord) -> Option<String> {
     use std::io::Read;
 
     if !artifact
         .storage_path
-        .starts_with(crate::artifacts::ARTIFACTS_DIR_NAME)
+        .starts_with(codewhale_runtime::artifacts::ARTIFACTS_DIR_NAME)
     {
         return None;
     }
-    let file = crate::artifacts::open_session_relative(
+    let file = codewhale_runtime::artifacts::open_session_relative(
         &artifact.session_id,
         &artifact.storage_path,
         false,
@@ -2178,18 +2178,18 @@ mod tests {
     struct PrivateArtifactRoot(Option<PathBuf>);
     impl PrivateArtifactRoot {
         fn set(path: PathBuf) -> Self {
-            Self(crate::artifacts::set_test_artifact_sessions_root(Some(
+            Self(codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(
                 path,
             )))
         }
     }
     impl Drop for PrivateArtifactRoot {
         fn drop(&mut self) {
-            crate::artifacts::set_test_artifact_sessions_root(self.0.take());
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.0.take());
         }
     }
-    fn owned_artifact_fixture() -> crate::artifacts::ArtifactRecord {
-        crate::artifacts::record_tool_output_artifact(
+    fn owned_artifact_fixture() -> codewhale_runtime::artifacts::ArtifactRecord {
+        codewhale_runtime::artifacts::record_tool_output_artifact(
             "session-a",
             "call-fixture",
             "bash",
@@ -2200,12 +2200,12 @@ mod tests {
 
     #[test]
     fn owned_artifact_pager_reads_regular_exact_session_output() {
-        let _guard = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+        let _guard = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
             .lock()
             .unwrap_or_else(|err| err.into_inner());
         let temp = tempfile::tempdir().unwrap();
         let _root = PrivateArtifactRoot::set(temp.path().join("sessions"));
-        crate::artifacts::write_session_artifact("session-a", "mutable", "exact pager output")
+        codewhale_runtime::artifacts::write_session_artifact("session-a", "mutable", "exact pager output")
             .unwrap();
         assert_eq!(
             read_owned_session_artifact(&owned_artifact_fixture()).as_deref(),
@@ -2219,7 +2219,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn owned_artifact_pager_refuses_linked_session_parent() {
-        let _guard = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+        let _guard = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
             .lock()
             .unwrap_or_else(|err| err.into_inner());
         let temp = tempfile::tempdir().unwrap();
@@ -2243,7 +2243,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn owned_artifact_pager_refuses_hardlinked_outside_bytes() {
-        let _guard = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+        let _guard = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
             .lock()
             .unwrap_or_else(|err| err.into_inner());
         let temp = tempfile::tempdir().unwrap();
@@ -2261,7 +2261,7 @@ mod tests {
 
     #[test]
     fn owned_artifact_pager_refuses_oversized_output_without_deleting_it() {
-        let _guard = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+        let _guard = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
             .lock()
             .unwrap_or_else(|err| err.into_inner());
         let temp = tempfile::tempdir().unwrap();

@@ -38,7 +38,7 @@ use liblzma::write::XzEncoder;
 use serde::Serialize;
 use tar::Builder;
 
-use crate::artifacts::{ARTIFACTS_DIR_NAME, is_valid_session_id};
+use codewhale_runtime::artifacts::{ARTIFACTS_DIR_NAME, is_valid_session_id};
 use crate::session_manager::{SavedSession, SessionMetadata};
 use codewhale_runtime::session_tree::SessionImportContainer;
 use codewhale_util::files::WorkspaceFile;

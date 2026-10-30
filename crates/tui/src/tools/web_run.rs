@@ -1462,7 +1462,7 @@ fn page_from_document(
             let extension = document.media_extension.unwrap_or("bin");
             let digest = codewhale_runtime::hashing::sha256_hex(&*payload.bytes);
             let artifact_id = format!("web_media_{}", &digest[..16]);
-            let (_absolute, relative) = crate::artifacts::write_session_artifact_bytes(
+            let (_absolute, relative) = codewhale_runtime::artifacts::write_session_artifact_bytes(
                 &context.state_namespace,
                 &artifact_id,
                 extension,
@@ -1473,7 +1473,7 @@ fn page_from_document(
                     "failed to preserve fetched media artifact: {error}"
                 ))
             })?;
-            let path = crate::artifacts::format_artifact_relative_path(&relative);
+            let path = codewhale_runtime::artifacts::format_artifact_relative_path(&relative);
             Ok(WebPage {
                 url: payload.url,
                 title: Some("Media artifact".to_string()),
@@ -1507,7 +1507,7 @@ fn bounded_web_run_result(
         json!({
             "spillover_path": artifact.absolute_path.display().to_string(),
             "artifact_session_id": artifact.session_id,
-            "artifact_relative_path": crate::artifacts::format_artifact_relative_path(&artifact.relative_path),
+            "artifact_relative_path": codewhale_runtime::artifacts::format_artifact_relative_path(&artifact.relative_path),
             "artifact_byte_size": artifact.byte_size,
             "artifact_preview": artifact.preview,
             // The overflow footer points at `retrieve_tool_result`; flag the
@@ -1877,7 +1877,7 @@ mod tests {
 
     impl Drop for ArtifactRootRestore {
         fn drop(&mut self) {
-            crate::artifacts::set_test_artifact_sessions_root(self.0.take());
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.0.take());
         }
     }
 
@@ -1936,12 +1936,12 @@ mod tests {
 
     #[test]
     fn oversized_web_run_output_round_trips_through_session_artifact() {
-        let _lock = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+        let _lock = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         let tmp = tempfile::tempdir().unwrap();
         let prior =
-            crate::artifacts::set_test_artifact_sessions_root(Some(tmp.path().join("sessions")));
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(tmp.path().join("sessions")));
         let _restore = ArtifactRootRestore(prior);
         let context = ToolContext::new(".")
             .with_state_namespace("web-run-overflow")

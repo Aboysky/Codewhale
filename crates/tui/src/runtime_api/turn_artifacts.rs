@@ -98,7 +98,7 @@ pub(super) async fn read_turn_artifact(
                     .session_id
                     .as_deref()
                     .ok_or_else(|| ApiError::internal("artifact reference has no session"))?;
-                let root = crate::artifacts::artifact_sessions_root()
+                let root = codewhale_runtime::artifacts::artifact_sessions_root()
                     .ok_or_else(|| ApiError::internal("session artifact root is unavailable"))?;
                 let resolved = resolve_session_artifact(
                     &root,

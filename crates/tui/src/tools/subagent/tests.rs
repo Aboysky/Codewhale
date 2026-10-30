@@ -19947,16 +19947,16 @@ fn with_spillover_root<F: FnOnce()>(root: &std::path::Path, f: F) {
         .lock()
         .unwrap_or_else(|err| err.into_inner());
     let prior = crate::tools::truncate::set_test_spillover_root(Some(root.to_path_buf()));
-    let _artifact_guard = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+    let _artifact_guard = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
         .lock()
         .unwrap_or_else(|err| err.into_inner());
     let prior_artifacts =
-        crate::artifacts::set_test_artifact_sessions_root(Some(root.join("sessions")));
+        codewhale_runtime::artifacts::set_test_artifact_sessions_root(Some(root.join("sessions")));
     struct Restore(Option<std::path::PathBuf>, Option<std::path::PathBuf>);
     impl Drop for Restore {
         fn drop(&mut self) {
             crate::tools::truncate::set_test_spillover_root(self.0.take());
-            crate::artifacts::set_test_artifact_sessions_root(self.1.take());
+            codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.1.take());
         }
     }
     let _restore = Restore(prior, prior_artifacts);
@@ -20201,7 +20201,7 @@ fn subagent_tool_results_spill_to_disk_and_stay_bounded_inline() {
         assert!(inline.contains("full output at"));
         assert!(inline.contains(codewhale_tools::names::SPILLOVER_RECOVERY_HINT));
         assert!(inline.contains("\n…\n"));
-        assert!(inline.contains(&crate::artifacts::format_artifact_relative_path(&path)));
+        assert!(inline.contains(&codewhale_runtime::artifacts::format_artifact_relative_path(&path)));
         assert!(!inline.contains("Exact evidence retained"));
         assert!(inline.contains("retrieve_tool_result"), "{inline}");
         // Full output remains recoverable from disk.

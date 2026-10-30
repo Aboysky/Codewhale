@@ -467,7 +467,7 @@ fn publish_offloaded_context(
     }))
     .map_err(|err| format!("Could not encode offloaded context; history unchanged: {err}"))?;
     let call_id = format!("purge_{}", uuid::Uuid::new_v4());
-    let handle = crate::artifacts::artifact_id_for_tool_call(&call_id);
+    let handle = codewhale_runtime::artifacts::artifact_id_for_tool_call(&call_id);
     let metadata = EvidenceArtifact {
         handle: handle.clone(),
         digest: codewhale_runtime::hashing::sha256_hex(&bytes),
@@ -483,11 +483,11 @@ fn publish_offloaded_context(
         created_at_unix_ms: unix_millis_now(),
         // This is the only full copy after offload: retain it with the session.
         retain_until_unix_ms: u64::MAX,
-        storage_path: crate::artifacts::session_artifact_relative_path(&handle),
+        storage_path: codewhale_runtime::artifacts::session_artifact_relative_path(&handle),
     };
     publish_evidence_metadata(session_id, &metadata)
         .and_then(|_| {
-            crate::artifacts::write_session_artifact_immutable(session_id, &handle, &bytes)
+            codewhale_runtime::artifacts::write_session_artifact_immutable(session_id, &handle, &bytes)
         })
         .map_err(|err| format!("Could not store offloaded context; history unchanged: {err}"))?;
     Ok(format!(

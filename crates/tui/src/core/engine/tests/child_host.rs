@@ -1268,14 +1268,14 @@ async fn captured_child_output_caps_preserve_utf8_error_kinds_metadata_and_raw_b
             _ => panic!("output projection changed typed error classification: {error:?}"),
         };
         assert!(content.starts_with("好好\n[truncated: true]\n"));
-        let artifact = crate::artifacts::artifact_id_for_tool_call(id);
+        let artifact = codewhale_runtime::artifacts::artifact_id_for_tool_call(id);
         assert!(content.ends_with(&format!(
             "omitted range recovery: retrieve_tool_result ref=\"{artifact}\""
         )));
         assert!(content.len() <= 6 + "\n[truncated: true]".len() + 80);
-        let relative = crate::artifacts::session_artifact_relative_path(&artifact);
+        let relative = codewhale_runtime::artifacts::session_artifact_relative_path(&artifact);
         let path =
-            crate::artifacts::session_artifact_absolute_path("origin-session", &relative).unwrap();
+            codewhale_runtime::artifacts::session_artifact_absolute_path("origin-session", &relative).unwrap();
         assert_eq!(std::fs::read_to_string(path).unwrap(), raw);
         let retrieved = crate::tools::tool_result_retrieval::RetrieveToolResultTool
             .execute(
@@ -1296,8 +1296,8 @@ async fn captured_child_output_caps_preserve_utf8_error_kinds_metadata_and_raw_b
     // An immutable-ID conflict is a real save failure, even for a tiny cap.
     // The existing evidence must survive and no false retrieval receipt may
     // describe the different, unsaved bytes.
-    let artifact = crate::artifacts::artifact_id_for_tool_call("save-failed-cap");
-    let (path, _) = crate::artifacts::write_session_artifact_immutable(
+    let artifact = codewhale_runtime::artifacts::artifact_id_for_tool_call("save-failed-cap");
+    let (path, _) = codewhale_runtime::artifacts::write_session_artifact_immutable(
         "origin-session",
         &artifact,
         b"prior immutable bytes",

@@ -1481,9 +1481,9 @@
             0,
             None,
         );
-        session.artifacts.push(crate::artifacts::ArtifactRecord {
+        session.artifacts.push(codewhale_runtime::artifacts::ArtifactRecord {
             id: "art_call_big".to_string(),
-            kind: crate::artifacts::ArtifactKind::ToolOutput,
+            kind: codewhale_runtime::artifacts::ArtifactKind::ToolOutput,
             session_id: session.metadata.id.clone(),
             tool_call_id: "call-big".to_string(),
             tool_name: "exec_shell".to_string(),

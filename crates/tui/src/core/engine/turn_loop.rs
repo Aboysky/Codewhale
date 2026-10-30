@@ -1199,9 +1199,9 @@ impl Engine {
             .map(|mut completion| {
                 let tool_call_id =
                     format!("background-shell-completion-{}", completion.event.task_id);
-                let artifact_id = crate::artifacts::artifact_id_for_tool_call(&tool_call_id);
+                let artifact_id = codewhale_runtime::artifacts::artifact_id_for_tool_call(&tool_call_id);
                 let bytes = completion.artifact_bytes();
-                match crate::artifacts::write_session_artifact_immutable(
+                match codewhale_runtime::artifacts::write_session_artifact_immutable(
                     &self.session.id,
                     &artifact_id,
                     &bytes,
@@ -7433,16 +7433,16 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
 
-        let _artifact_lock = crate::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
+        let _artifact_lock = codewhale_runtime::artifacts::TEST_ARTIFACT_SESSIONS_GUARD
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         struct ArtifactRootReset(Option<PathBuf>);
         impl Drop for ArtifactRootReset {
             fn drop(&mut self) {
-                crate::artifacts::set_test_artifact_sessions_root(self.0.take());
+                codewhale_runtime::artifacts::set_test_artifact_sessions_root(self.0.take());
             }
         }
-        let _artifact_root = ArtifactRootReset(crate::artifacts::set_test_artifact_sessions_root(
+        let _artifact_root = ArtifactRootReset(codewhale_runtime::artifacts::set_test_artifact_sessions_root(
             Some(tmp.path().join("sessions")),
         ));
 

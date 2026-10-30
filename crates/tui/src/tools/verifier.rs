@@ -1438,7 +1438,7 @@ impl GateCapture {
             tail: std::collections::VecDeque::new(),
             total: 0,
             session_id: session_id.to_string(),
-            artifact_id: crate::artifacts::artifact_id_for_tool_call(&format!(
+            artifact_id: codewhale_runtime::artifacts::artifact_id_for_tool_call(&format!(
                 "gate_{gate_name}_{stream}_{}",
                 &id[..12]
             )),
@@ -1492,8 +1492,8 @@ impl GateCapture {
     }
 
     async fn open_log(&self) -> Option<tokio::fs::File> {
-        let relative = crate::artifacts::session_artifact_relative_path(&self.artifact_id);
-        let path = crate::artifacts::session_artifact_absolute_path(&self.session_id, &relative)?;
+        let relative = codewhale_runtime::artifacts::session_artifact_relative_path(&self.artifact_id);
+        let path = codewhale_runtime::artifacts::session_artifact_absolute_path(&self.session_id, &relative)?;
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent).await.ok()?;
         }
@@ -1624,9 +1624,9 @@ mod tests {
             assert!(captured.text.ends_with("LAST LINE: test result: FAILED\n"));
             let reference = captured.log_ref.expect("full log ref");
             assert!(captured.text.contains(&reference));
-            let path = crate::artifacts::session_artifact_absolute_path(
+            let path = codewhale_runtime::artifacts::session_artifact_absolute_path(
                 "session-6508",
-                &crate::artifacts::session_artifact_relative_path(&reference),
+                &codewhale_runtime::artifacts::session_artifact_relative_path(&reference),
             )
             .expect("artifact path");
             let log = fs::read(path).expect("full log");
