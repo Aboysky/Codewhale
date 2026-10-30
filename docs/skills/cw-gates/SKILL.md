@@ -21,14 +21,18 @@ Stage 3 of the loop: [cw-orient](../cw-orient/SKILL.md) →
 - Before a dogfood build — never install an ungated binary.
 - When asked to "run the gates" or to prove a change is safe.
 
-For release work specifically, use
-[codew-release-qa-sweep](../codew-release-qa-sweep/SKILL.md) instead — it adds
-the version-drift gate and the manual TUI QA targets on top of this ladder.
+For release work, follow `docs/RELEASE_CHECKLIST.md`; it adds the
+version-drift gate and the exhaustive release validation on top of this ladder,
+and [cw-dogfood](../cw-dogfood/SKILL.md) owns the manual TUI QA targets.
 
 ## Workflow
 
 Climb only as far as the risk requires. Say where you stopped and what you
 skipped.
+
+Native Rust builds go through `scripts/dev-test.sh` or `scripts/dev-cargo.sh`,
+which take the machine's build slot (`scripts/build-lock.py`; at most two
+native builds per machine). Raw `cargo` bypasses the lock.
 
 ### Rung 1 — always, and cheap
 
@@ -55,7 +59,7 @@ It uses `cargo nextest run` when nextest is on PATH (`.config/nextest.toml`);
 `--tests` are disjoint — choose the target that owns the behavior rather than
 running both by reflex.
 
-`cargo test --no-run` answers a compile question without executing unrelated
+`scripts/dev-cargo.sh test --no-run` answers a compile question without executing unrelated
 cases. `cargo test --doc` covers doc examples, and is only worth running when
 those examples changed.
 
@@ -82,13 +86,13 @@ told why. Lock in a win with `python3 scripts/check-dead-code-budget.py --update
 ### Rung 4 — cross-cutting or release risk only
 
 ```bash
-cargo clippy --workspace --all-targets --all-features --locked -- \
+scripts/dev-cargo.sh clippy --workspace --all-targets --all-features --locked -- \
   -D warnings \
   -A clippy::uninlined_format_args \
   -A clippy::too_many_arguments \
   -A clippy::unnecessary_map_or
-cargo nextest run --workspace --all-features --locked --profile ci
-cargo test --workspace --all-features --locked --doc
+scripts/dev-cargo.sh nextest run --workspace --all-features --locked --profile ci
+scripts/dev-cargo.sh test --workspace --all-features --locked --doc
 git diff --exit-code -- Cargo.lock                 # lockfile drift guard
 ```
 
@@ -99,7 +103,7 @@ locally so there is no weaker subset.)
 ### Rung 5 — website, when `web/` changed
 
 ```bash
-cd web && npm ci && npm test && npm run check
+npm test && npm run check:web
 ```
 
 ## Claiming a test passed
