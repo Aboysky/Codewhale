@@ -235,7 +235,11 @@ async fn an_undeliverable_user_input_request_fails_fast() {
         .await
         .unwrap();
         let regular = std::mem::replace(&mut engine.tx_event, full);
-        engine.config.user_input_timeout = timed_out.then_some(Duration::from_millis(10));
+        // The probe below must be able to elapse before the user-input timer.
+        // A 2 ms probe against a 10 ms timer left only 8 ms of headroom, which
+        // Windows' ~15.6 ms timer granularity exceeds, so the timer won and the
+        // "still waiting" assertion inverted. Keep a gap no scheduler can eat.
+        engine.config.user_input_timeout = timed_out.then_some(Duration::from_millis(200));
         let withdrawal = CancellationToken::new();
         let invocation_clock = std::sync::Mutex::new(crate::tools::codemode::PauseClock::new());
         {
@@ -247,7 +251,7 @@ async fn an_undeliverable_user_input_request_fails_fast() {
             );
             tokio::pin!(wait);
             assert!(
-                tokio::time::timeout(Duration::from_millis(2), &mut wait)
+                tokio::time::timeout(Duration::from_millis(50), &mut wait)
                     .await
                     .is_err()
             );
