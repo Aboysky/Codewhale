@@ -63,6 +63,19 @@ running both by reflex.
 cases. `cargo test --doc` covers doc examples, and is only worth running when
 those examples changed.
 
+CI builds with `-D warnings`, so a deleted last caller (an unused import, a
+variant or helper nothing constructs) is a red `main` even though a plain
+build only warns. After removing or rewiring a call site, check the library
+the way CI does before you push:
+
+```bash
+RUSTFLAGS="-D warnings" scripts/dev-cargo.sh check -p <crate> --lib --locked
+```
+
+Changing `RUSTFLAGS` rebuilds every dependency, so keep that value for the
+whole session. The test-only half of an unused item is invisible to this
+check; use `--tests` as well when you touched helpers that tests still call.
+
 ### Rung 3 — the budgets and drift checks CI enforces
 
 Run the ones your change can move. Each fails the build in CI:
