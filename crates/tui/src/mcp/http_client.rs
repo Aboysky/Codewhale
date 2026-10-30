@@ -276,6 +276,15 @@ impl McpHttpClient {
             let prepared = self.prepare_mcp_request(fresh, json_body).await?;
             validate()?;
             let mut prepared = prepared.build()?;
+            for name in [&reqwest::header::ACCEPT, &reqwest::header::CONTENT_TYPE] {
+                let mut values = prepared.headers().get_all(name).iter();
+                let first = values.next().cloned();
+                if values.next().is_some()
+                    && let Some(first) = first
+                {
+                    prepared.headers_mut().insert(name, first);
+                }
+            }
             if !event_stream {
                 prepared.timeout_mut().get_or_insert(self.read_timeout);
             }
