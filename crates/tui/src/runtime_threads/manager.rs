@@ -470,7 +470,29 @@ pub(super) fn projected_user_text(message: &Message) -> Option<String> {
         .filter(|text| !text.is_empty())
         .collect::<Vec<_>>()
         .join("\n");
-    (!text.is_empty()).then_some(text)
+    let text = strip_turn_metadata_envelope(&text);
+    (!text.is_empty()).then_some(text.to_string())
+}
+
+/// Remove one complete `<turn_meta>…</turn_meta>` envelope from either end.
+///
+/// The saved document and the record reconstruction reach the same prompt in
+/// two shapes — `[<turn_meta>, prompt]` and `[prompt, <turn_meta>]` — and only
+/// the leading shape is stripped per block above. Leaving the trailing envelope
+/// in made every record-side prompt longer than its transcript twin, so the
+/// boundary search that compares the two never matched and refused a restore it
+/// could have placed exactly. The envelope is engine metadata, never prompt
+/// text, so neither side may carry it into the comparison.
+fn strip_turn_metadata_envelope(text: &str) -> &str {
+    let text = crate::session_manager::extract_user_prompt(text);
+    let trimmed = text.trim_end();
+    if !trimmed.ends_with("</turn_meta>") {
+        return text;
+    }
+    match trimmed.rfind("<turn_meta>") {
+        Some(open) => text[..open].trim_end(),
+        None => text,
+    }
 }
 
 pub(super) fn projected_user_texts(messages: &[Message]) -> Vec<String> {
