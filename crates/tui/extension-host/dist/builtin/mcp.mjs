@@ -24928,11 +24928,11 @@ var HttpBrokerTransport = class {
     }
     const reply = await this.rpc.request("net/fetch", { owner: this.owner, session_id: this.session, url: url2, method, headers, ...admitted ?? {} }, signal);
     if (reply.legacy_handshake === true) {
-      if (!admitted || !("method" in admitted.frame) || admitted.frame.method !== "server/discover" || reply.response_id !== void 0 || ![404, 405, 406, 415].includes(reply.status)) throw new Error("MCP handshake refusal unavailable");
+      if (!admitted || !("method" in admitted.frame) || admitted.frame.method !== "server/discover" || reply.response_id !== void 0 || ![400, 404, 405, 406, 415].includes(reply.status)) throw new Error("MCP handshake refusal unavailable");
       this.legacyHandshake = true;
     }
     if (reply.legacy_grant !== void 0) {
-      if (!admitted || this.legacy || this.negotiation || reply.response_id !== void 0 || ![404, 405, 406, 415, 501].includes(reply.status) || typeof reply.legacy_grant.ticket !== "string" || !reply.legacy_grant.ticket) throw new Error("MCP negotiation unavailable");
+      if (!admitted || this.legacy || this.negotiation || reply.response_id !== void 0 || ![400, 404, 405, 406, 415, 501].includes(reply.status) || typeof reply.legacy_grant.ticket !== "string" || !reply.legacy_grant.ticket) throw new Error("MCP negotiation unavailable");
       this.negotiation = reply.legacy_grant;
       throw new Error("Rust admitted legacy MCP negotiation");
     }

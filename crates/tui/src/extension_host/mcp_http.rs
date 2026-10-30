@@ -543,7 +543,8 @@ async fn fetch(
                 .frame
                 .as_ref()
                 .is_some_and(|frame| frame["method"] == "server/discover")
-            && matches!(status, 404 | 405 | 406 | 415)
+            && (matches!(status, 404 | 405 | 406 | 415)
+                || (status == 400 && crate::mcp::wire::is_json_rpc_error_body(&excerpt)))
         {
             session.legacy_allowed.store(true, Ordering::SeqCst);
             guard.armed = false;
@@ -567,7 +568,8 @@ async fn fetch(
             && original
                 .as_ref()
                 .is_some_and(|operation| operation.target["method"] == "initialize")
-            && is_streamable_http_incompatible_status(reqwest::StatusCode::from_u16(status)?)
+            && (is_streamable_http_incompatible_status(reqwest::StatusCode::from_u16(status)?)
+                || (status == 400 && crate::mcp::wire::is_json_rpc_error_body(&excerpt)))
         {
             let operation = original.context("transport refusal has no semantic operation")?;
             let grant = renegotiate(

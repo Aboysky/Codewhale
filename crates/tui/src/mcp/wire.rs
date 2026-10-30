@@ -138,6 +138,13 @@ pub(crate) fn sse_field_value<'a>(line: &'a str, field: &str) -> Option<&'a str>
     Some(value.strip_prefix(' ').unwrap_or(value))
 }
 
+pub(crate) fn is_json_rpc_error_body(body_excerpt: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(body_excerpt.trim())
+        .ok()
+        .and_then(|value| value.get("error")?.get("code")?.as_i64())
+        .is_some()
+}
+
 pub(crate) fn is_streamable_http_incompatible_status(status: reqwest::StatusCode) -> bool {
     matches!(
         status,
