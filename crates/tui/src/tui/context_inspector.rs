@@ -1300,6 +1300,15 @@ mod tests {
         app.model = "auto".to_string();
         app.auto_model = true;
         app.last_effective_model = Some("deepseek-v4-pro".to_string());
+        app.last_effective_budget = Some((
+            codewhale_config::ProviderKind::Deepseek,
+            "deepseek-v4-pro".to_string(),
+            None,
+            crate::route_runtime::ContextWindowResolution {
+                tokens: 1_000_000,
+                source: crate::route_runtime::ContextWindowSource::Catalog,
+            },
+        ));
 
         let text = build_context_inspector_text(&app, Locale::En);
         assert!(text.contains("Model: auto"), "{text}");

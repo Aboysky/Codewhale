@@ -347,6 +347,10 @@ mod tests {
 
         // A user override reads as a statement of fact, not as advice to set
         // something that is already set.
+        app.active_context_window = Some(crate::route_runtime::ContextWindowResolution {
+            tokens: 262_144,
+            source: crate::route_runtime::ContextWindowSource::Configured,
+        });
         app.active_context_window_source = crate::route_runtime::ContextWindowSource::Configured;
         let msg = status(&mut app).message.expect("status message");
         let row = msg

@@ -5035,6 +5035,10 @@ context_window = 262144
             context_tokens: Some(262_144),
             ..Default::default()
         });
+        app.active_context_window = Some(crate::route_runtime::ContextWindowResolution {
+            tokens: 262_144,
+            source: crate::route_runtime::ContextWindowSource::Configured,
+        });
         app.active_context_window_source = crate::route_runtime::ContextWindowSource::Configured;
 
         let result = config_command(&mut app, Some("context_window"));
