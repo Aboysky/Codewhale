@@ -257,7 +257,7 @@ struct RuntimeWorkspaceScope {
     /// driving engine per workspace, across stores and clients
     /// (`workspace_lease`). Watch-only observers never reach scope admission.
     /// Underscored because it is held for its `Drop` side effect, never read.
-    _drive_lease: Option<crate::workspace_lease::SharedWorkspaceDriveLease>,
+    _drive_lease: Option<codewhale_runtime::workspace_lease::SharedWorkspaceDriveLease>,
 }
 
 impl RuntimeWorkspaceScope {
@@ -320,9 +320,10 @@ struct WorkspaceDriveLeaseRefusal {
 
 impl WorkspaceDriveLeaseRefusal {
     fn named_holder(workspace: &FsPath) -> Option<Self> {
-        let holder = crate::workspace_lease::WorkspaceDriveLease::read_holder(workspace)
-            .ok()
-            .flatten()?;
+        let holder =
+            codewhale_runtime::workspace_lease::WorkspaceDriveLease::read_holder(workspace)
+                .ok()
+                .flatten()?;
         let held_for = holder.held_for();
         Some(Self {
             message: format!(
@@ -403,17 +404,18 @@ impl RuntimeWorkspaceScopes {
                 })
                 .map(|label| label.replace(['\n', '='], " "));
             let store_root = owner.owner.session_store_binding().data_dir;
-            let drive_lease = crate::workspace_lease::SharedWorkspaceDriveLease::acquire(
-                &lexical,
-                client.as_deref(),
-                Some(&store_root),
-            )
-            .map_err(|error| {
-                anyhow::anyhow!(
-                    "workspace drive lease check failed for {}: {error:#}",
-                    lexical.display()
+            let drive_lease =
+                codewhale_runtime::workspace_lease::SharedWorkspaceDriveLease::acquire(
+                    &lexical,
+                    client.as_deref(),
+                    Some(&store_root),
                 )
-            })?;
+                .map_err(|error| {
+                    anyhow::anyhow!(
+                        "workspace drive lease check failed for {}: {error:#}",
+                        lexical.display()
+                    )
+                })?;
             let Some(drive_lease) = drive_lease else {
                 let refusal = WorkspaceDriveLeaseRefusal::named_holder(&lexical)
                     .unwrap_or_else(WorkspaceDriveLeaseRefusal::unreadable);

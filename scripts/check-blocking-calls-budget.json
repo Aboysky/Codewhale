@@ -160,6 +160,9 @@
     "path_canonicalize": 1,
     "std_fs": 1
   },
+  "crates/runtime/src/workspace_lease.rs": {
+    "path_canonicalize": 1
+  },
   "crates/runtime/src/workspace_trust.rs": {
     "path_canonicalize": 2,
     "std_fs": 2
@@ -521,9 +524,6 @@
   },
   "crates/tui/src/voice.rs": {
     "std_fs": 3
-  },
-  "crates/tui/src/workspace_lease.rs": {
-    "path_canonicalize": 1
   },
   "crates/util/src/files.rs": {
     "path_canonicalize": 2,

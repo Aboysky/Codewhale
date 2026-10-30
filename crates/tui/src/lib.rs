@@ -126,7 +126,6 @@ mod vision;
 mod voice;
 pub mod whats_new;
 mod work_graph;
-mod workspace_lease;
 
 use crate::eval::{EvalHarness, EvalHarnessConfig, ScenarioStepKind};
 use crate::llm_client::LlmClient;

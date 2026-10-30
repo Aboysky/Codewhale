@@ -77,4 +77,5 @@ pub mod config_persistence;
 pub mod oauth;
 
 pub mod settings;
+pub mod workspace_lease;
 pub mod workspace_trust;
