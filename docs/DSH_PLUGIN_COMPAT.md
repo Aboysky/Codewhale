@@ -25,6 +25,25 @@ For the separate launcher that runs your own installed `dsh`, see
 | Update and rollback walkthrough | existing update/revoke/remove paths | Not verified |
 | Desktop app preview → install → trust → enable | App plugin settings | Built; not walked through live |
 
+## What a plugin may inject, and what it may never provide
+
+The compatibility table has two lists and they answer different questions, so a
+name appearing in both is not a contradiction:
+
+- `provided_services` is what a plugin may **inject** — the host offers it.
+  Enforced at `crates/tui/extension-host/src/root.ts:715`, which fails activation
+  when a plugin injects a name that is not on the list.
+- `refused_services` is what a plugin may **not provide** — the Codewhale core
+  owns that authority. Enforced at `root.ts:225`, which refuses a plugin that
+  calls `provide` for one of those names. The single exception is the host's own
+  shim of that name, provided once by the root itself.
+
+So `tools` is injectable and unprovidable: a plugin uses the Engine's tool
+registry through the host shim and can never install a second one. `events`,
+`logger`, `reflect` and `registry` are Cordis framework built-ins supplied by
+the host root rather than Codewhale shims. `loader` maps to the reviewed loader
+and is injectable without being advertised as a provided service.
+
 ## Headless services
 
 | DSH service | In Codewhale | Status |
