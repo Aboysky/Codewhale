@@ -11009,6 +11009,7 @@ pub mod preview;
 use crate::compaction::estimate_input_tokens_conservative;
 #[cfg(test)]
 pub(crate) use context::compact_tool_result_for_context;
+#[cfg(test)]
 pub(crate) use context::compact_tool_result_for_route;
 pub(crate) use context::compact_tool_result_for_route_with_window;
 /// Public so external hosts/wrappers can reuse the engine's input-budget math
@@ -11016,10 +11017,12 @@ pub(crate) use context::compact_tool_result_for_route_with_window;
 pub use context::context_input_budget_for_route;
 #[cfg(test)]
 use context::route_context_budget_for_provider;
+#[cfg(test)]
+use context::route_context_budget_for_route;
 use context::{
     MAX_CONTEXT_RECOVERY_ATTEMPTS, context_overflow_exhausted_message,
     extract_compaction_summary_prompt, is_context_length_error_message,
-    is_image_input_rejection_message, route_context_budget_for_route, summarize_text,
+    is_image_input_rejection_message, summarize_text,
 };
 #[cfg(test)]
 use context::{

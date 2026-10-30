@@ -599,6 +599,7 @@ pub(crate) fn compact_tool_result_for_context(
     compact_tool_result_for_route(ProviderKind::Deepseek, model, None, tool_name, output)
 }
 
+#[cfg(test)]
 pub(crate) fn compact_tool_result_for_route(
     provider: ProviderKind,
     model: &str,
@@ -641,6 +642,7 @@ pub(crate) fn compact_tool_result_for_route_with_window(
 /// Structured summaries (`run_tests`, `run_verifiers`, gate results,
 /// sub-agent snapshots) keep their shape, scale their detail with the same
 /// budget, and follow the same rule whenever they leave something out.
+#[cfg(test)]
 pub(crate) fn tool_result_context_view(
     provider: ProviderKind,
     model: &str,

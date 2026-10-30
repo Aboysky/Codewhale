@@ -141,6 +141,7 @@ fn route_inline_char_budget_with_raise(window_tokens: Option<u32>, raise: Option
 }
 
 /// [`route_inline_char_budget`] for a resolved provider/model route.
+#[cfg(test)]
 #[must_use]
 pub(crate) fn route_inline_char_budget_for_route(
     provider: ProviderKind,
