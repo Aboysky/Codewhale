@@ -2,6 +2,7 @@
 
 mod config_bundles;
 mod credential_handoff;
+#[cfg(not(target_env = "ohos"))]
 mod hashing;
 mod metrics;
 #[cfg(not(target_env = "ohos"))]
