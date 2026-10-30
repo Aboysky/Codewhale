@@ -3761,10 +3761,17 @@ impl Engine {
             let host_managed_turns = self.host_managed_turns();
             // #6184: supervise the turn heartbeat from outside the turn future,
             // so a wedged await still produces a log line, a stall record and a
-            // status event. The watchdog exits once the event channel closes.
+            // status event — and now cancels the turn instead of leaving it
+            // wedged. The watchdog exits once the event channel closes.
+            let stall_cancel = self
+                .shared_cancel_token
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone();
             let stall_watchdog = turn_heartbeat::spawn_turn_stall_watchdog(
                 Arc::clone(&self.turn_heartbeat),
                 self.tx_event.clone(),
+                stall_cancel,
             );
             let _stall_watchdog_guard = turn_heartbeat::AbortOnDrop(stall_watchdog);
             if let Err(error) = self

@@ -71,8 +71,9 @@ impl Engine {
             &mut progress.active_tool_names,
         )
         .await;
-        // Parked: per-tool timeouts, approvals, and the UI tool-hang
-        // watchdog own a tool batch's bound.
+        // Per-tool timeouts own a running tool, but the batch also covers the
+        // engine's own post-tool bookkeeping, which no per-tool timeout sees.
+        // The ceiling keeps that window owned by the heartbeat.
         self.turn_heartbeat.enter(
             super::turn_heartbeat::TurnPhase::Tools,
             Some(
@@ -82,7 +83,7 @@ impl Engine {
                     .collect::<Vec<_>>()
                     .join(", "),
             ),
-            None,
+            Some(super::turn_heartbeat::TOOLS_PHASE_BOUND),
         );
         let PlannedToolCalls {
             plans,

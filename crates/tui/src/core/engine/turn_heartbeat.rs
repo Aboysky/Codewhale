@@ -23,6 +23,7 @@ use std::time::Duration;
 use codewhale_runtime::stall_report::{StallReport, report_stall};
 use tokio::sync::mpsc;
 use tokio::time::Instant;
+use tokio_util::sync::CancellationToken;
 
 use crate::core::events::Event;
 
@@ -32,6 +33,15 @@ pub(crate) const STALL_WATCHDOG_TICK: Duration = Duration::from_secs(5);
 /// MCP refresh, post-stream bookkeeping). None of it waits on a provider, so a
 /// few minutes of silence here is a wedge, not a slow model.
 pub(crate) const PREPARING_PHASE_BOUND: Duration = Duration::from_secs(180);
+/// Ceiling for a tool batch, including everything the engine does after a tool
+/// returns and before it parks the batch. The phase used to carry no bound at
+/// all ("per-tool timeouts own it"), which left exactly that post-tool window
+/// owned by nobody: a turn wedged there produced no stall record, no status
+/// line and no cancellation for 56 minutes, and the UI watchdog declined to
+/// fire because the engine still looked like the owner. A generous ceiling is
+/// enough — a tool that outlives its own timeout is already an error, and a
+/// legitimate long build stays far below this.
+pub(crate) const TOOLS_PHASE_BOUND: Duration = Duration::from_secs(1800);
 /// Grace added on top of a wait's own timeout. The inner timeout should fire
 /// first; the heartbeat only reports when that timeout itself failed to.
 pub(crate) const STALL_BOUND_GRACE: Duration = Duration::from_secs(30);
@@ -260,13 +270,15 @@ impl Drop for AbortOnDrop {
 pub(crate) fn spawn_turn_stall_watchdog(
     heartbeat: Arc<TurnHeartbeat>,
     tx_event: mpsc::Sender<Event>,
+    cancel: CancellationToken,
 ) -> tokio::task::JoinHandle<()> {
-    spawn_turn_stall_watchdog_every(heartbeat, tx_event, STALL_WATCHDOG_TICK)
+    spawn_turn_stall_watchdog_every(heartbeat, tx_event, cancel, STALL_WATCHDOG_TICK)
 }
 
 fn spawn_turn_stall_watchdog_every(
     heartbeat: Arc<TurnHeartbeat>,
     tx_event: mpsc::Sender<Event>,
+    cancel: CancellationToken,
     tick: Duration,
 ) -> tokio::task::JoinHandle<()> {
     #[cfg(any(test, all(feature = "test-thread-scoped-state", debug_assertions)))]
@@ -290,6 +302,11 @@ fn spawn_turn_stall_watchdog_every(
                 // Never block the watchdog on a full mailbox: a wedged
                 // consumer is exactly the case it exists to survive.
                 let _ = tx_event.try_send(Event::status(line));
+                // Reporting alone left a wedged turn running forever, which is
+                // the failure this watchdog exists to prevent: the status line
+                // scrolls and the turn still never ends. Cancelling turns the
+                // wedge into a finished turn with a stated reason.
+                cancel.cancel();
             }
         }
     })
@@ -377,7 +394,13 @@ mod tests {
         heartbeat.set_provider_request("resp_123");
         let (tx, mut rx) = mpsc::channel(4);
         let started = std::time::Instant::now();
-        let watchdog = spawn_turn_stall_watchdog_every(Arc::clone(&heartbeat), tx, tick);
+        let cancel = CancellationToken::new();
+        let watchdog = spawn_turn_stall_watchdog_every(
+            Arc::clone(&heartbeat),
+            tx,
+            cancel.clone(),
+            tick,
+        );
 
         let event = tokio::time::timeout(Duration::from_secs(10), rx.recv())
             .await
@@ -393,6 +416,10 @@ mod tests {
             "{message}"
         );
         assert!(message.contains("Esc to cancel and retry"), "{message}");
+        assert!(
+            cancel.is_cancelled(),
+            "a reported stall must end the turn, not only describe it"
+        );
         assert!(message.contains("Stall record:"), "{message}");
 
         let records: Vec<_> = std::fs::read_dir(dir.path())
