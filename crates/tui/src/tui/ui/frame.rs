@@ -1219,13 +1219,16 @@ pub(crate) fn build_app_system_prompt_with_goal(
 
 fn record_window_reroot(
     session_id: Option<&str>,
+    reason: &str,
+    cause: &str,
     previous_window: usize,
     window: usize,
     journal_entries: usize,
 ) {
     let details = serde_json::json!({
         "session_id": session_id,
-        "reason": "first_message_changed",
+        "reason": reason,
+        "cause": cause,
         "previous_window": previous_window,
         "window": window,
         "journal_entries": journal_entries,
@@ -1261,12 +1264,25 @@ pub(crate) fn build_session_snapshot(
             tracing::warn!(%error, "kept archived journal entries in memory");
         }
     }
+    let journal_entries_before = app.session_journal.entries.len();
+    let cause = app.window_reroot_cause.take();
     let rebranch = app
         .session_journal
         .rebranch_active_messages_stamped(&app.api_messages, &app.api_message_stamps);
-    if rebranch.replaced_from_root() && !app.api_messages.is_empty() {
+    let reroot_reason = if rebranch.replaced_from_root() {
+        Some("first_message_changed")
+    } else if rebranch.previous_active == 0 && journal_entries_before > 0 {
+        Some("active_path_empty")
+    } else {
+        None
+    };
+    if let Some(reason) = reroot_reason
+        && !app.api_messages.is_empty()
+    {
         record_window_reroot(
             app.current_session_id.as_deref(),
+            reason,
+            cause.unwrap_or("unattributed"),
             rebranch.previous_active,
             app.api_messages.len(),
             app.session_journal.entries.len(),

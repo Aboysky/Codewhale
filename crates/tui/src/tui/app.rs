@@ -1611,6 +1611,9 @@ pub struct App {
     /// length-mismatched site degrades to save-time stamps, never to a
     /// dropped message.
     pub api_message_stamps: Vec<DateTime<Utc>>,
+    /// Why the live window's first message last changed, kept until the next
+    /// snapshot reports it in `session.window.rerooted`.
+    pub(crate) window_reroot_cause: Option<&'static str>,
     /// Full saved history, including inactive branches. API messages remain
     /// the active projection; snapshots reconcile it without rebuilding IDs.
     pub session_journal: codewhale_runtime::session_tree::SessionJournal,
@@ -5473,6 +5476,9 @@ impl App {
             .resize_with(messages.len(), Utc::now);
         self.session_turn_outcomes
             .retain(|outcome| outcome.after_message_count <= unchanged);
+        if unchanged == 0 && !self.api_messages.is_empty() && !messages.is_empty() {
+            self.window_reroot_cause = Some("engine_projection");
+        }
         self.api_messages = messages;
         unchanged
     }
@@ -5530,6 +5536,7 @@ impl App {
         self.api_message_stamps = stamps;
         self.api_message_stamps
             .resize_with(messages.len(), Utc::now);
+        self.window_reroot_cause = Some("session_restore");
         self.api_messages = Arc::new(messages);
     }
 

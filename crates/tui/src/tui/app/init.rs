@@ -812,6 +812,7 @@ impl App {
             next_history_revision: 1,
             api_messages: Arc::new(Vec::new()),
             api_message_stamps: Vec::new(),
+            window_reroot_cause: None,
             session_journal: codewhale_runtime::session_tree::SessionJournal::new(),
             completed_assistant_outputs: Vec::new(),
             pending_plan_handoff: None,
